@@ -18,8 +18,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["chrome", "wxt/browser"]
+    "types": ["chrome"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", ".wxt/types/**/*.d.ts"],
-  "exclude": ["node_modules", "dist"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["node_modules", "dist", "src/entrypoints"]
 }
