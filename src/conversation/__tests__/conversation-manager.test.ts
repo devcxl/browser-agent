@@ -211,6 +211,7 @@ describe('ConversationManager', () => {
       timestamp: 3000,
       toolCalls: [
         {
+          id: 'call_1',
           name: 'getWeather',
           params: { city: 'Beijing' },
           result: 'Sunny',
@@ -221,11 +222,62 @@ describe('ConversationManager', () => {
 
     expect(db.putMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        toolCallName: 'getWeather',
-        toolCallParams: '{"city":"Beijing"}',
-        toolCallResult: 'Sunny',
+        toolCalls: '[{"id":"call_1","name":"getWeather","params":{"city":"Beijing"},"result":"Sunny"}]',
+        toolCallId: undefined,
       }),
     );
+  });
+
+  // #10b (Slice B)
+  it('addMessage() 支持 role:tool 消息持久化（含 toolCallId）', async () => {
+    const conv = mockConv({ id: 'c1' });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+
+    const msg: StoredMessage = {
+      id: 'm-tool',
+      role: 'tool',
+      content: '{"temperature":25}',
+      toolCallId: 'call_real_1',
+      timestamp: 4000,
+    };
+    await mgr.addMessage('c1', msg);
+
+    expect(db.putMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'm-tool',
+        role: 'tool',
+        content: '{"temperature":25}',
+        toolCallId: 'call_real_1',
+        toolCalls: undefined,
+      }),
+    );
+  });
+
+  // #10c (Slice F)
+  it('dbMsgToStored 兼容旧数据（无 toolCalls/toolCallId 字段）', async () => {
+    const conv = mockConv({ id: 'c1' });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    // 模拟旧格式消息
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([
+      {
+        id: 'old-msg',
+        conversationId: 'c1',
+        role: 'assistant',
+        content: '旧消息',
+        toolCalls: undefined,
+        toolCallId: undefined,
+        timestamp: 100,
+      },
+    ]);
+
+    const result = await mgr.get('c1');
+    expect(result).toBeDefined();
+    expect(result!.messages).toHaveLength(1);
+    expect(result!.messages[0]!.role).toBe('assistant');
+    expect(result!.messages[0]!.content).toBe('旧消息');
+    // 旧消息的 toolCalls 应该是 undefined（不抛异常）
+    expect(result!.messages[0]!.toolCalls).toBeUndefined();
+    expect(result!.messages[0]!.toolCallId).toBeUndefined();
   });
 
   // #11

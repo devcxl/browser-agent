@@ -753,4 +753,120 @@ describe('AgentLoop', () => {
       expect(output.toolCalls[0]!.confirmed).toBe(false);
     });
   });
+
+  // ── Issue #50 specific tests ──
+
+  describe('Issue #50 (context pollution)', () => {
+    // (Slice C)
+    it('assistant 消息存储时 toolCalls 包含真实 id', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          data: [{ id: 1, title: 'Example' }],
+        } satisfies ToolResult),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_abc_123', 'tabs_query', {})),
+        stopResponse('查询完成。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+      );
+
+      await loop.run(defaultInput);
+
+      // 验证 addMessage 被调用 3 次：user + tool + assistant
+      expect(conversationManager.addMessage).toHaveBeenCalledTimes(3);
+
+      // 第 2 次是 tool 响应持久化
+      const toolCall = vi.mocked(conversationManager.addMessage).mock.calls[1];
+      expect(toolCall[1].role).toBe('tool');
+      expect(toolCall[1].toolCallId).toBe('call_abc_123');
+
+      // 第 3 次是 assistant 消息持久化，toolCalls 包含真实 id
+      const asstCall = vi.mocked(conversationManager.addMessage).mock.calls[2];
+      expect(asstCall[1].role).toBe('assistant');
+      expect(asstCall[1].toolCalls).toBeDefined();
+      expect(asstCall[1].toolCalls![0]!.id).toBe('call_abc_123');
+    });
+
+    // (Slice E)
+    it('当前轮 user 消息不重复（build 后 messages 中仅出现一次）', async () => {
+      // 模拟 DB 中已有历史 user 消息 + 刚存储的当前 user 消息
+      const currentUserMsg: StoredMessage = {
+        id: 'current-user',
+        role: 'user',
+        content: '查询当前标签页',
+        timestamp: 200,
+      };
+      const historyMessages: StoredMessage[] = [
+        {
+          id: 'prev-user',
+          role: 'user',
+          content: '之前的对话',
+          timestamp: 100,
+        },
+        currentUserMsg,
+      ];
+      vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+      const toolDef: ToolDefinition = {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          data: [],
+        } satisfies ToolResult),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const llmClient = createMockLlmClient([
+        stopResponse('这是对当前问题的回复。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+      );
+
+      await loop.run(defaultInput);
+
+      // 验证：addMessage 被调用了 2 次（user + assistant），没有 tool 消息
+      expect(conversationManager.addMessage).toHaveBeenCalledTimes(2);
+
+      // 验证：LLM 收到的 messages 中当前 user 消息只出现一次（没有重复 push）
+      const llmChat = vi.mocked(llmClient.chat);
+      const messagesArg = llmChat.mock.calls[0]![0]!.messages;
+
+      const userMessages = messagesArg.filter((m) => m.role === 'user');
+      // 历史中有 1 条 "之前的对话"，1 条当前 "查询当前标签页"
+      expect(userMessages).toHaveLength(2);
+      // 没有重复：当前消息应该只出现一次
+      expect(userMessages.filter((m) => m.content === '查询当前标签页')).toHaveLength(1);
+    });
+  });
 });

@@ -68,7 +68,6 @@ export class AgentLoop implements IAgentRuntime {
         input.conversationId,
         input.browserContext,
       );
-      messages.push({ role: 'user', content: input.userMessage });
 
       // 3. Agent loop
       let round = 0;
@@ -120,10 +119,18 @@ export class AgentLoop implements IAgentRuntime {
               params = JSON.parse(tc.function.arguments);
             } catch {
               if (invalidRetries < MAX_INVALID_TOOL_RETRIES) {
-                messages.push({
-                  role: 'tool',
+                const errMsg = {
+                  role: 'tool' as const,
                   tool_call_id: tc.id,
                   content: `Error: Invalid JSON: ${tc.function.arguments}`,
+                };
+                messages.push(errMsg);
+                await this.conversationManager.addMessage(input.conversationId, {
+                  id: crypto.randomUUID(),
+                  role: 'tool',
+                  content: errMsg.content,
+                  toolCallId: tc.id,
+                  timestamp: Date.now(),
                 });
                 invalidRetries++;
                 continue;
@@ -136,10 +143,18 @@ export class AgentLoop implements IAgentRuntime {
             const tool = this.toolRegistry.getTool(tc.function.name);
             if (!tool) {
               if (invalidRetries < MAX_INVALID_TOOL_RETRIES) {
-                messages.push({
-                  role: 'tool',
+                const errMsg = {
+                  role: 'tool' as const,
                   tool_call_id: tc.id,
                   content: `Error: Unknown tool "${tc.function.name}"`,
+                };
+                messages.push(errMsg);
+                await this.conversationManager.addMessage(input.conversationId, {
+                  id: crypto.randomUUID(),
+                  role: 'tool',
+                  content: errMsg.content,
+                  toolCallId: tc.id,
+                  timestamp: Date.now(),
                 });
                 invalidRetries++;
                 continue;
@@ -170,11 +185,20 @@ export class AgentLoop implements IAgentRuntime {
                 riskLevel: check.riskLevel,
                 confirmed: false,
                 timestamp: Date.now(),
+                toolCallId: tc.id,
               });
-              messages.push({
-                role: 'tool',
+              const toolMsg = {
+                role: 'tool' as const,
                 tool_call_id: tc.id,
                 content: `Blocked: ${check.reason}`,
+              };
+              messages.push(toolMsg);
+              await this.conversationManager.addMessage(input.conversationId, {
+                id: crypto.randomUUID(),
+                role: 'tool',
+                content: toolMsg.content,
+                toolCallId: tc.id,
+                timestamp: Date.now(),
               });
               this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
               continue;
@@ -205,11 +229,20 @@ export class AgentLoop implements IAgentRuntime {
                   riskLevel: check.riskLevel,
                   confirmed: false,
                   timestamp: Date.now(),
+                  toolCallId: tc.id,
                 });
-                messages.push({
-                  role: 'tool',
+                const cancelMsg = {
+                  role: 'tool' as const,
                   tool_call_id: tc.id,
                   content: '用户取消确认，跳过执行。',
+                };
+                messages.push(cancelMsg);
+                await this.conversationManager.addMessage(input.conversationId, {
+                  id: crypto.randomUUID(),
+                  role: 'tool',
+                  content: cancelMsg.content,
+                  toolCallId: tc.id,
+                  timestamp: Date.now(),
                 });
                 this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
                 continue;
@@ -230,12 +263,21 @@ export class AgentLoop implements IAgentRuntime {
               riskLevel: check.riskLevel,
               confirmed: check.requiresConfirmation,
               timestamp: Date.now(),
+              toolCallId: tc.id,
             });
 
-            messages.push({
-              role: 'tool',
+            const toolMsg = {
+              role: 'tool' as const,
               tool_call_id: tc.id,
               content: JSON.stringify(filteredResult),
+            };
+            messages.push(toolMsg);
+            await this.conversationManager.addMessage(input.conversationId, {
+              id: crypto.randomUUID(),
+              role: 'tool',
+              content: toolMsg.content,
+              toolCallId: tc.id,
+              timestamp: Date.now(),
             });
 
             this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
@@ -264,6 +306,7 @@ export class AgentLoop implements IAgentRuntime {
         role: 'assistant',
         content: finalMessage,
         toolCalls: toolCalls.map((tc) => ({
+          id: tc.toolCallId ?? `call_${crypto.randomUUID()}`,
           name: tc.toolName,
           params: tc.params,
           result: tc.result.success ? 'success' : tc.result.error,

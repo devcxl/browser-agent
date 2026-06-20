@@ -59,7 +59,7 @@ describe('Storage types', () => {
   describe('DB_NAME and DB_VERSION', () => {
     it('should have correct values', () => {
       expect(DB_NAME).toBe('browser-agent-db');
-      expect(DB_VERSION).toBe(1);
+      expect(DB_VERSION).toBe(2);
     });
   });
 

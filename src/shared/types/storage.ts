@@ -50,7 +50,7 @@ export interface UserPreferences {
 
 /** IndexedDB 数据库名 */
 export const DB_NAME = 'browser-agent-db';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 /** conversations 表 */
 export interface DbConversation {
@@ -69,9 +69,10 @@ export interface DbMessage {
   conversationId: string;
   role: 'user' | 'assistant' | 'tool';
   content: string;
-  toolCallName?: string;
-  toolCallParams?: string;  // JSON string
-  toolCallResult?: string;  // 摘要
+  /** 工具调用信息 JSON 数组（仅 assistant 消息可能包含） */
+  toolCalls?: string;  // JSON string: Array<{id: string, name: string, arguments: string, result?: string}>
+  /** 工具调用 ID（仅 tool 消息包含） */
+  toolCallId?: string;
   timestamp: number;
 }
 

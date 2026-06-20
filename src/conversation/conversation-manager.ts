@@ -16,23 +16,16 @@ function dbMsgToStored(msg: {
   id: string;
   role: string;
   content: string;
-  toolCallName?: string;
-  toolCallParams?: string;
-  toolCallResult?: string;
+  toolCalls?: string | null;
+  toolCallId?: string | null;
   timestamp: number;
 }): StoredMessage {
   return {
     id: msg.id,
     role: msg.role as StoredMessage['role'],
     content: msg.content,
-    toolCalls: msg.toolCallName
-      ? [
-          {
-            name: msg.toolCallName,
-            params: msg.toolCallParams ? JSON.parse(msg.toolCallParams) : {},
-            result: msg.toolCallResult ?? undefined,
-          },
-        ]
+    toolCalls: msg.toolCalls
+      ? (JSON.parse(msg.toolCalls) as StoredMessage['toolCalls'])
       : undefined,
     timestamp: msg.timestamp,
   };
@@ -127,11 +120,10 @@ export class ConversationManager implements IConversationManager {
       conversationId,
       role: message.role,
       content: message.content,
-      toolCallName: message.toolCalls?.[0]?.name,
-      toolCallParams: message.toolCalls?.[0]?.params
-        ? JSON.stringify(message.toolCalls[0].params)
+      toolCalls: message.toolCalls?.length
+        ? JSON.stringify(message.toolCalls)
         : undefined,
-      toolCallResult: message.toolCalls?.[0]?.result,
+      toolCallId: message.toolCallId,
       timestamp: message.timestamp,
     });
 

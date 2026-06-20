@@ -41,6 +41,8 @@ export interface ToolCallRecord {
   riskLevel: RiskLevel;
   confirmed: boolean;
   timestamp: number;
+  /** 原始 tool_call ID（LLM 返回） */
+  toolCallId?: string;
 }
 
 // ==================== Agent Runtime 接口 ====================
