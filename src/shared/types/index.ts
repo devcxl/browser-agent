@@ -71,6 +71,14 @@ export type {
 } from './conversation';
 
 export type {
+  AgentConfig,
+  AgentRunInput,
+  AgentRunOutput,
+  ToolCallRecord,
+  IAgentRuntime,
+} from './agent';
+
+export type {
   StorageSchema,
   AgentSettings,
   ExpertModeSettings,
