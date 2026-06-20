@@ -219,3 +219,13 @@ export interface TabGroupUpdateProperties {
   title?: string;
   color?: TabGroupColor;
 }
+
+// ==================== Notifications ====================
+
+export interface NotificationsCreateOptions {
+  type?: string;
+  iconUrl?: string;
+  title: string;
+  message: string;
+  priority?: number;
+}

@@ -184,6 +184,25 @@ describe('FirefoxAdapter', () => {
     });
   });
 
+  // ── Notifications ────────────────────────────────
+
+  describe('notifications', () => {
+    it('create 正确转发到 browser.notifications.create', async () => {
+      mockBrowser.notifications = {
+        create: vi.fn().mockResolvedValue('notif-ff'),
+      };
+      const result = await adapter.notifications.create({ title: 'Test', message: 'Hello' });
+      expect(mockBrowser.notifications.create).toHaveBeenCalledWith({ title: 'Test', message: 'Hello' });
+      expect(result).toBe('notif-ff');
+    });
+
+    it('create 在 notifications API 不可用时 reject', async () => {
+      // 不设置 notifications mock，模拟 API 不存在
+      const result = adapter.notifications.create({ title: 'Test', message: 'Hello' });
+      await expect(result).rejects.toThrow('notifications API not available');
+    });
+  });
+
   // ── Events ───────────────────────────────────────
 
   describe('addListener', () => {

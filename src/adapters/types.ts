@@ -10,6 +10,7 @@ import type {
   WindowUpdateInfo,
   TabGroupQueryInfo,
   TabGroupUpdateProperties,
+  NotificationsCreateOptions,
 } from '@/shared/types';
 
 // ==================== IBrowserAdapter ====================
@@ -74,6 +75,12 @@ export interface IBrowserAdapter {
 
   /** 添加事件监听器，返回取消监听的函数 */
   addListener(event: BrowserEvent, callback: (...args: any[]) => void): () => void;
+
+  // ── Notifications ───────────────────────────────────
+
+  notifications: {
+    create(options: NotificationsCreateOptions): Promise<string>;
+  };
 }
 
 // ==================== 浏览器事件枚举 ====================
