@@ -47,6 +47,7 @@ function ChatLayout() {
     maxToolRounds: 15,
     maxContextMessages: 40,
     systemPrompt: '',
+    reasoningEffort: 'medium',
   });
   const [expertMode, setExpertMode] = useState<ExpertModeSettings>({
     enabled: false,
@@ -62,6 +63,7 @@ function ChatLayout() {
         maxToolRounds: saved.maxToolRounds,
         maxContextMessages: saved.maxContextMessages,
         systemPrompt: saved.systemPrompt,
+        reasoningEffort: saved.reasoningEffort ?? 'medium',
       });
       setExpertMode(await store.get('expertModeSettings'));
     })();
@@ -78,6 +80,7 @@ function ChatLayout() {
       maxToolRounds: s.maxToolRounds,
       systemPrompt: s.systemPrompt,
       maxContextMessages: s.maxContextMessages,
+      reasoningEffort: s.reasoningEffort,
       summaryThreshold: {
         messageCount: 30,
         estimatedTokens: 12000,
@@ -94,13 +97,13 @@ function ChatLayout() {
     (text: string) => {
       if (!conversations.activeId) {
         conversations.create().then((id) => {
-          agent.run(id, text, providers[0]!);
+          agent.run(id, text, providers[0]!, agentSettings.reasoningEffort);
         });
         return;
       }
-      agent.run(conversations.activeId, text, providers[0]!);
+      agent.run(conversations.activeId, text, providers[0]!, agentSettings.reasoningEffort);
     },
-    [conversations, agent, providers],
+    [conversations, agent, providers, agentSettings.reasoningEffort],
   );
 
   const handleTestConnection = useCallback(
