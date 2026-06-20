@@ -41,6 +41,7 @@ export class LlmClient implements ILlmClient {
           stream: false,
           temperature: request.temperature,
           max_tokens: request.max_tokens,
+          reasoning_effort: request.reasoning_effort,
         }),
         signal,
       });
@@ -61,6 +62,7 @@ export class LlmClient implements ILlmClient {
     request: ChatCompletionRequest,
     onChunk: (chunk: StreamChunk) => void,
     externalSignal?: AbortSignal,
+    onReasoning?: (content: string) => void,
   ): Promise<void> {
     const { signal, clear } = this.createTimeoutSignal(externalSignal);
     try {
@@ -74,6 +76,7 @@ export class LlmClient implements ILlmClient {
           stream: true,
           temperature: request.temperature,
           max_tokens: request.max_tokens,
+          reasoning_effort: request.reasoning_effort,
         }),
         signal,
       });
@@ -108,7 +111,13 @@ export class LlmClient implements ILlmClient {
             if (data === '[DONE]') return;
 
             try {
-              onChunk(JSON.parse(data) as StreamChunk);
+              const chunk = JSON.parse(data) as StreamChunk;
+              // 提取 reasoning_content 并通过独立回调传递
+              const reasoning = chunk.choices?.[0]?.delta?.reasoning_content;
+              if (reasoning && onReasoning) {
+                onReasoning(reasoning);
+              }
+              onChunk(chunk);
             } catch {
               // skip malformed JSON
             }
