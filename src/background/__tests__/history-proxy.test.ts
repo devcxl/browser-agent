@@ -55,6 +55,13 @@ describe('HistoryProxy', () => {
     expect(result).toEqual({ success: true });
   });
 
+  it('delete with empty params should throw', async () => {
+    const adapter = createMockAdapter();
+    const proxy = new HistoryProxy(adapter);
+
+    await expect(proxy.delete({})).rejects.toThrow('history.delete requires either url or both startTime and endTime');
+  });
+
   it('deleteAll should delegate to adapter.history.deleteAll', async () => {
     const adapter = createMockAdapter();
     const proxy = new HistoryProxy(adapter);
