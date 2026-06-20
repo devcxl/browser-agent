@@ -166,6 +166,41 @@ describe('Database', () => {
     expect(msgs).toHaveLength(5);
   });
 
+  // #9b getMessagesByConversation 按 timestamp 升序返回（修复乱序 bug）
+  it('should return messages ordered by timestamp ascending', async () => {
+    const db = Database.getInstance();
+    // 故意让主键字典序与时间序相反，暴露 byConversation 索引乱序问题
+    // 主键 z,y,x 对应时间 1,2,3（升序）
+    await db.putMessage(
+      makeMsg('conv-order', { id: 'z', role: 'user', content: 'first', timestamp: 1000 }),
+    );
+    await db.putMessage(
+      makeMsg('conv-order', { id: 'y', role: 'assistant', content: 'second', timestamp: 2000 }),
+    );
+    await db.putMessage(
+      makeMsg('conv-order', { id: 'x', role: 'tool', content: 'third', timestamp: 3000 }),
+    );
+
+    const msgs = await db.getMessagesByConversation('conv-order');
+    expect(msgs).toHaveLength(3);
+    // 必须按时间升序：first → second → third
+    expect(msgs.map((m) => m.content)).toEqual(['first', 'second', 'third']);
+  });
+
+  // #9c getMessagesByConversation 不同会话不串数据 + 各自时间升序
+  it('should isolate messages by conversation and keep time order', async () => {
+    const db = Database.getInstance();
+    await db.putMessage(makeMsg('conv-a', { id: 'a1', timestamp: 100 }));
+    await db.putMessage(makeMsg('conv-b', { id: 'b1', timestamp: 50 }));
+    await db.putMessage(makeMsg('conv-a', { id: 'a2', timestamp: 300 }));
+    await db.putMessage(makeMsg('conv-b', { id: 'b2', timestamp: 200 }));
+
+    const aMsgs = await db.getMessagesByConversation('conv-a');
+    const bMsgs = await db.getMessagesByConversation('conv-b');
+    expect(aMsgs.map((m) => m.id)).toEqual(['a1', 'a2']);
+    expect(bMsgs.map((m) => m.id)).toEqual(['b1', 'b2']);
+  });
+
   // #10 getRecentMessages
   it('should return recent N messages in reverse order', async () => {
     const db = Database.getInstance();

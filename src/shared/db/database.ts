@@ -100,7 +100,14 @@ export class Database {
     conversationId: string,
   ): Promise<BrowserAgentDB['messages']['value'][]> {
     const db = await this.getDB();
-    return db.getAllFromIndex(StoreNames.MESSAGES, 'byConversation', conversationId);
+    // 用 byConversationAndTime 复合索引保证按 timestamp 升序返回。
+    // 不能用 byConversation 单字段索引——它不包含 timestamp，
+    // 同 conversationId 下顺序由主键决定（随机 UUID 字典序），导致刷新后乱序。
+    return db.getAllFromIndex(
+      StoreNames.MESSAGES,
+      'byConversationAndTime',
+      IDBKeyRange.bound([conversationId, 0], [conversationId, Number.MAX_SAFE_INTEGER]),
+    );
   }
 
   async getRecentMessages(
