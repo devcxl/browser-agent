@@ -22,7 +22,7 @@ const markdownComponents = {
       href={isSafeUrl(href) ? href : undefined}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-accent underline"
+      className="text-primary underline"
       {...props}
     >
       {children}
@@ -39,7 +39,7 @@ const markdownComponents = {
     }
     return (
       <code
-        className="px-1 py-0.5 rounded-sm bg-surface-card text-ink text-[0.85em]"
+        className="px-1 py-0.5 rounded-md bg-surface-soft text-ink text-[0.85em]"
         {...props}
       >
         {children}
@@ -47,7 +47,7 @@ const markdownComponents = {
     );
   },
   pre: ({ children }: React.HTMLAttributes<HTMLElement>) => (
-    <pre className="my-2 p-2.5 rounded-sm bg-surface-dark text-canvas text-xs overflow-x-auto">
+    <pre className="my-2 p-2.5 rounded-md bg-surface-dark text-on-dark text-xs overflow-x-auto">
       {children}
     </pre>
   ),
@@ -56,7 +56,6 @@ const markdownComponents = {
 export function MessageBubble({ message }: Props) {
   const [showReasoning, setShowReasoning] = useState(false);
 
-  // 流式过程中自动展开思考面板
   const isStreaming = message.status === 'streaming';
   const hasReasoning = message.role === 'assistant' && !!message.reasoningContent;
   useEffect(() => {
@@ -68,7 +67,7 @@ export function MessageBubble({ message }: Props) {
   if (message.role === 'tool') {
     return (
       <div className="flex justify-center my-1">
-        <div className="bg-surface-soft border border-hairline rounded-sm px-3 py-1.5 text-xs text-mute max-w-[80%]">
+        <div className="bg-surface-soft border border-hairline rounded-md px-3 py-1.5 text-xs text-mute max-w-[80%]">
           <span className="font-medium">{message.content}</span>
         </div>
       </div>
@@ -81,13 +80,12 @@ export function MessageBubble({ message }: Props) {
     <div className={cn('flex mb-3', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
-          'max-w-[80%] rounded-sm px-4 py-2.5',
+          'max-w-[80%] px-4 py-2.5',
           isUser
-            ? 'bg-ink text-canvas rounded-br-sm'
-            : 'bg-surface-soft text-ink rounded-bl-sm',
+            ? 'bg-primary text-on-primary rounded-2xl rounded-br-md'
+            : 'bg-surface-card text-ink rounded-2xl rounded-bl-md border border-hairline',
         )}
       >
-        {/* 思考内容（推理过程） */}
         {hasReasoning && (
           <div className="mb-2">
             <button
@@ -99,14 +97,13 @@ export function MessageBubble({ message }: Props) {
               <span>{showReasoning ? '收起思考过程' : '查看思考过程'}</span>
             </button>
             {showReasoning && (
-              <div className="mt-1.5 p-2.5 bg-yellow-50 border border-warning/20 rounded-sm text-xs text-yellow-800 whitespace-pre-wrap break-words leading-relaxed">
+              <div className="mt-1.5 p-2.5 bg-yellow-50 border border-warning/20 rounded-md text-xs text-yellow-800 whitespace-pre-wrap break-words leading-relaxed">
                 {message.reasoningContent}
               </div>
             )}
           </div>
         )}
 
-        {/* 主要消息内容 */}
         <div className="text-sm leading-relaxed">
           {isUser ? (
             <div className="whitespace-pre-wrap break-words">{message.content}</div>
@@ -124,7 +121,7 @@ export function MessageBubble({ message }: Props) {
         <div
           className={cn(
             'text-[10px] mt-1',
-            isUser ? 'text-ash' : 'text-mute',
+            isUser ? 'text-on-dark-soft' : 'text-mute',
           )}
         >
           {formatTime(message.timestamp)}

@@ -12,7 +12,7 @@ export function ToolCallCard({ call }: Props) {
   const statusIcon = () => {
     switch (call.status) {
       case 'running':
-        return <span className="inline-block w-3 h-3 border-2 border-accent border-t-transparent rounded-full animate-spin" />;
+        return <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />;
       case 'success':
         return <span className="text-success text-sm">✓</span>;
       case 'error':
@@ -25,7 +25,7 @@ export function ToolCallCard({ call }: Props) {
   return (
     <div
       className={cn(
-        'border rounded-sm text-xs overflow-hidden',
+        'border rounded-md text-xs overflow-hidden',
         isHighRisk ? 'border-orange-400' : 'border-hairline',
       )}
     >
