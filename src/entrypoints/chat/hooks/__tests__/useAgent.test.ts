@@ -2,14 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { ToolCallRecord } from '@/shared/types/agent';
 
-// Mock AgentLoop module
+// Mock AgentLoop module - capture hooks passed to constructor
+let capturedHooks: any = null;
 const mockRun = vi.fn();
 const mockAbort = vi.fn();
 vi.mock('@/agent/agent-loop', () => ({
-  AgentLoop: vi.fn().mockImplementation(() => ({
-    run: mockRun,
-    abort: mockAbort,
-  })),
+  AgentLoop: vi.fn().mockImplementation((...args: any[]) => {
+    capturedHooks = args[5]; // hooks is 6th constructor arg
+    return {
+      run: mockRun,
+      abort: mockAbort,
+    };
+  }),
 }));
 
 vi.mock('@/provider', () => ({
@@ -88,6 +92,7 @@ import type { UIMessage, ConfirmRequest } from '../../types';
 describe('useAgent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedHooks = null;
     mockRun.mockReset();
     mockRun.mockResolvedValue({ finalMessage: '完成', toolCalls: [] });
     mockAbort.mockReset();
@@ -238,5 +243,110 @@ describe('useAgent', () => {
 
     expect(result.current.status).toBe('idle');
     expect(result.current.error).toBe('网络错误');
+  });
+
+  it('confirm 流程：onConfirm hook 被调用后 resolveConfirm 返回 true', async () => {
+    // Make AgentLoop's run call the onConfirm hook to simulate high-risk tool
+    mockRun.mockImplementation(async (input: any) => {
+      if (capturedHooks?.onConfirm) {
+        const confirmed = await capturedHooks.onConfirm({
+          toolName: 'tabs_close',
+          params: { tabId: 1 },
+          affectedObjects: [{ type: 'tab', id: '1', title: 'Test', url: 'https://test.com', reason: '关闭标签页' }],
+          warnings: ['关闭标签页可能导致未保存数据丢失'],
+        });
+        if (!confirmed) {
+          return { finalMessage: '用户取消', toolCalls: [] };
+        }
+      }
+      return { finalMessage: '操作已确认并执行', toolCalls: [] };
+    });
+
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+    const onConfirm = vi.fn();
+    result.current.setCallbacks({ onMessage, onConfirm });
+
+    // Start the run - it will hit the onConfirm hook inside AgentLoop
+    let runPromise: Promise<void>;
+    await act(async () => {
+      runPromise = result.current.run('conv-1', '关闭标签页', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'key',
+        model: 'gpt-4o',
+        isLocalTrusted: false,
+      });
+    });
+
+    // The run should have completed because resolveConfirm was NOT yet called
+    // onConfirm callback should have been triggered
+    expect(onConfirm).toHaveBeenCalled();
+    expect(result.current.status).toBe('waitingConfirmation');
+    const confirmReq = onConfirm.mock.calls[0][0];
+    expect(confirmReq.toolName).toBe('tabs_close');
+    expect(confirmReq.affectedObjects[0].type).toBe('tab');
+    expect(confirmReq.warnings[0]).toContain('未保存数据');
+
+    // Now resolve the confirmation
+    await act(async () => {
+      result.current.resolveConfirm(true);
+    });
+
+    // Wait for run to complete
+    await act(async () => {
+      await runPromise!;
+    });
+
+    // Final status should be idle (run completed)
+    expect(result.current.status).toBe('idle');
+  });
+
+  it('confirm 流程：拒绝后 AgentLoop 收到 false 并返回取消消息', async () => {
+    mockRun.mockImplementation(async (input: any) => {
+      if (capturedHooks?.onConfirm) {
+        const confirmed = await capturedHooks.onConfirm({
+          toolName: 'tabs_close',
+          params: { tabId: 1 },
+          affectedObjects: [],
+          warnings: [],
+        });
+        if (!confirmed) {
+          return { finalMessage: '用户取消', toolCalls: [] };
+        }
+      }
+      return { finalMessage: '执行成功', toolCalls: [] };
+    });
+
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+    const onConfirm = vi.fn();
+    result.current.setCallbacks({ onMessage, onConfirm });
+
+    let runPromise: Promise<void>;
+    await act(async () => {
+      runPromise = result.current.run('conv-1', '关闭标签页', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'key',
+        model: 'gpt-4o',
+        isLocalTrusted: false,
+      });
+    });
+
+    expect(result.current.status).toBe('waitingConfirmation');
+
+    // Reject the confirmation
+    await act(async () => {
+      result.current.resolveConfirm(false);
+    });
+
+    await act(async () => {
+      await runPromise!;
+    });
+
+    expect(result.current.status).toBe('idle');
   });
 });
