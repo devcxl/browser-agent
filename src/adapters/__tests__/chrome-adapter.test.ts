@@ -226,6 +226,35 @@ describe('ChromeAdapter', () => {
     });
   });
 
+  // ── History ──────────────────────────────────────
+
+  describe('history', () => {
+    it('search 正确转发到 chrome.history.search', async () => {
+      mockChrome.history.search.mockResolvedValue([
+        { id: '1', url: 'https://example.com', title: 'Example', lastVisitTime: 1000, visitCount: 5, typedCount: 0 },
+      ]);
+      const result = await adapter.history.search({ text: 'test', maxResults: 10 });
+      expect(mockChrome.history.search).toHaveBeenCalledWith({ text: 'test', maxResults: 10 });
+      expect(result).toHaveLength(1);
+      expect(result[0]?.url).toBe('https://example.com');
+    });
+
+    it('deleteUrl 正确转发到 chrome.history.deleteUrl', async () => {
+      await adapter.history.deleteUrl('https://example.com');
+      expect(mockChrome.history.deleteUrl).toHaveBeenCalledWith({ url: 'https://example.com' });
+    });
+
+    it('deleteRange 正确转发到 chrome.history.deleteRange', async () => {
+      await adapter.history.deleteRange({ startTime: 1000, endTime: 2000 });
+      expect(mockChrome.history.deleteRange).toHaveBeenCalledWith({ startTime: 1000, endTime: 2000 });
+    });
+
+    it('deleteAll 正确转发到 chrome.history.deleteAll', async () => {
+      await adapter.history.deleteAll();
+      expect(mockChrome.history.deleteAll).toHaveBeenCalled();
+    });
+  });
+
   // ── Events ───────────────────────────────────────
 
   describe('addListener', () => {
