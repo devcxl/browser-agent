@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { UIMessage } from '../types';
 import { cn, formatTime } from '../utils';
 import { ToolCallCard } from './ToolCallCard';
@@ -9,6 +9,15 @@ interface Props {
 
 export function MessageBubble({ message }: Props) {
   const [showReasoning, setShowReasoning] = useState(false);
+
+  // 流式过程中自动展开思考面板
+  const isStreaming = message.status === 'streaming';
+  const hasReasoning = !!message.reasoningContent;
+  useEffect(() => {
+    if (isStreaming && hasReasoning) {
+      setShowReasoning(true);
+    }
+  }, [isStreaming, hasReasoning]);
 
   if (message.role === 'tool') {
     return (
@@ -21,8 +30,6 @@ export function MessageBubble({ message }: Props) {
   }
 
   const isUser = message.role === 'user';
-  const isStreaming = message.status === 'streaming';
-  const hasReasoning = !!message.reasoningContent;
 
   return (
     <div className={cn('flex mb-3', isUser ? 'justify-end' : 'justify-start')}>
