@@ -13,6 +13,7 @@ interface Props {
   onNew: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onOpenSettings: () => void;
 }
 
 export function ConversationSidebar({
@@ -26,6 +27,7 @@ export function ConversationSidebar({
   onNew,
   onRename,
   onDelete,
+  onOpenSettings,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -44,12 +46,12 @@ export function ConversationSidebar({
 
   if (collapsed) {
     return (
-      <div className="border-r border-gray-200 bg-gray-50 w-10 flex flex-col items-center py-2">
+      <div className="border-r border-hairline bg-surface-soft w-10 flex flex-col items-center py-2">
         <button
           type="button"
           data-testid="conversation-sidebar-toggle"
           onClick={onToggleCollapse}
-          className="text-gray-400 hover:text-gray-600 text-sm"
+          className="text-mute hover:text-ink text-sm"
         >
           ▶
         </button>
@@ -60,24 +62,24 @@ export function ConversationSidebar({
   return (
     <div
       data-testid="conversation-sidebar"
-      className="w-[260px] border-r border-gray-200 bg-gray-50 flex flex-col"
+      className="w-[260px] border-r border-hairline bg-surface-soft flex flex-col"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-200">
-        <span className="text-sm font-semibold text-gray-900">会话</span>
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-hairline">
+        <span className="text-sm font-semibold text-ink">会话</span>
         <div className="flex items-center gap-1">
           <button
             type="button"
             data-testid="new-conversation-button"
             onClick={onNew}
-            className="px-2 py-1 text-xs rounded bg-blue-500 text-white hover:bg-blue-600"
+            className="px-2 py-1 text-xs rounded-sm bg-ink text-canvas hover:bg-ink-deep"
           >
             + 新建
           </button>
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="text-gray-400 hover:text-gray-600 text-xs"
+            className="text-mute hover:text-ink text-xs"
           >
             ◀
           </button>
@@ -87,19 +89,19 @@ export function ConversationSidebar({
       {/* List */}
       <div className="flex-1 overflow-y-auto">
         {loading && (
-          <div className="flex items-center justify-center py-8 text-gray-400 text-xs">
+          <div className="flex items-center justify-center py-8 text-mute text-xs">
             加载中...
           </div>
         )}
 
         {error && (
-          <div className="mx-2 mt-2 text-xs text-red-500 bg-red-50 rounded px-2 py-1">
+          <div className="mx-2 mt-2 text-xs text-danger bg-red-50 rounded-sm px-2 py-1">
             {error}
           </div>
         )}
 
         {!loading && conversations.length === 0 && (
-          <div className="text-center py-8 text-gray-400 text-xs">暂无会话</div>
+          <div className="text-center py-8 text-mute text-xs">暂无会话</div>
         )}
 
         {!loading &&
@@ -108,8 +110,8 @@ export function ConversationSidebar({
               key={conv.id}
               data-testid="conversation-item"
               className={cn(
-                'px-3 py-2 border-b border-gray-100 cursor-pointer hover:bg-gray-100 group',
-                activeId === conv.id && 'bg-blue-50 border-l-2 border-l-blue-500',
+                'px-3 py-2 border-b border-hairline cursor-pointer hover:bg-surface-soft group',
+                activeId === conv.id && 'bg-surface-soft border-l-2 border-l-ink',
               )}
               onClick={() => onSelect(conv.id)}
             >
@@ -123,14 +125,14 @@ export function ConversationSidebar({
                     if (e.key === 'Enter') confirmRename();
                     if (e.key === 'Escape') setEditingId(null);
                   }}
-                  className="w-full px-1 py-0.5 text-xs border border-blue-300 rounded"
+                  className="w-full px-1 py-0.5 text-xs border border-ink rounded-sm"
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
                 <>
-                  <div className="text-sm text-gray-800 truncate">{conv.title}</div>
+                  <div className="text-sm text-ink truncate">{conv.title}</div>
                   <div className="flex items-center justify-between mt-0.5">
-                    <span className="text-[10px] text-gray-400">
+                    <span className="text-[10px] text-mute">
                       {formatDateTime(conv.updatedAt)}
                     </span>
                     <div className="hidden group-hover:flex gap-1">
@@ -140,7 +142,7 @@ export function ConversationSidebar({
                           e.stopPropagation();
                           startRename(conv.id, conv.title);
                         }}
-                        className="text-[10px] text-gray-400 hover:text-blue-500"
+                        className="text-[10px] text-mute hover:text-accent"
                       >
                         重命名
                       </button>
@@ -150,7 +152,7 @@ export function ConversationSidebar({
                           e.stopPropagation();
                           onDelete(conv.id);
                         }}
-                        className="text-[10px] text-gray-400 hover:text-red-500"
+                        className="text-[10px] text-mute hover:text-danger"
                       >
                         删除
                       </button>
@@ -160,6 +162,18 @@ export function ConversationSidebar({
               )}
             </div>
           ))}
+      </div>
+
+      {/* Settings */}
+      <div className="border-t border-hairline px-3 py-2">
+        <button
+          type="button"
+          data-testid="settings-button"
+          onClick={onOpenSettings}
+          className="w-full text-xs text-mute hover:text-ink transition-colors text-left"
+        >
+          [+] 设置
+        </button>
       </div>
     </div>
   );

@@ -34,8 +34,8 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning }: Props) {
   }, [text]);
 
   return (
-    <div className="border-t border-gray-200 bg-white px-4 py-3">
-      <div className="flex items-end gap-2 max-w-3xl mx-auto">
+    <div className="border-t border-hairline bg-canvas px-4 py-3">
+      <div className="flex items-end gap-3">
         <textarea
           ref={textareaRef}
           data-testid="message-input"
@@ -46,9 +46,11 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning }: Props) {
           placeholder={disabled ? 'Agent 运行中...' : '输入消息... (Enter 发送, Shift+Enter 换行)'}
           rows={1}
           className={cn(
-            'flex-1 resize-none rounded-xl border border-gray-300 px-3 py-2 text-sm',
-            'focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent',
-            'placeholder:text-gray-400 disabled:bg-gray-50 disabled:text-gray-400',
+            'flex-1 resize-none rounded-sm bg-surface-soft text-ink text-sm p-3',
+            'border border-hairline',
+            'placeholder:text-mute',
+            'focus:outline-none focus:bg-canvas focus:border-ink',
+            'disabled:bg-surface-card disabled:text-ash',
           )}
         />
         {isRunning ? (
@@ -56,7 +58,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning }: Props) {
             type="button"
             data-testid="abort-button"
             onClick={onAbort}
-            className="px-4 py-2 rounded-xl bg-red-500 text-white text-sm font-medium hover:bg-red-600 transition-colors shrink-0"
+            className="px-5 py-2 rounded-sm bg-danger text-canvas text-sm font-medium hover:bg-danger-hover shrink-0"
           >
             中止
           </button>
@@ -67,10 +69,10 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning }: Props) {
             onClick={handleSend}
             disabled={!text.trim() || disabled}
             className={cn(
-              'px-4 py-2 rounded-xl text-sm font-medium transition-colors shrink-0',
+              'px-5 py-2 rounded-sm text-sm font-medium shrink-0',
               text.trim() && !disabled
-                ? 'bg-blue-500 text-white hover:bg-blue-600'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed',
+                ? 'bg-ink text-canvas hover:bg-ink-deep'
+                : 'bg-surface-card text-ash cursor-not-allowed',
             )}
           >
             发送

@@ -16,16 +16,16 @@ const store = ConfigStore.getInstance();
 function AgentStatusIndicator() {
   const { agent } = useChat();
   const colors: Record<string, string> = {
-    idle: 'bg-gray-400',
-    running: 'bg-yellow-400 animate-pulse',
-    streaming: 'bg-green-400 animate-pulse',
+    idle: 'bg-ash',
+    running: 'bg-warning animate-pulse',
+    streaming: 'bg-success animate-pulse',
     waitingConfirmation: 'bg-orange-400',
   };
 
   return (
     <div className="flex items-center gap-1.5">
       <span className={`inline-block w-2 h-2 rounded-full ${colors[agent.status]}`} />
-      <span className="text-xs text-gray-500">
+      <span className="text-xs text-mute">
         {agent.status === 'idle' && '就绪'}
         {agent.status === 'running' && '运行中...'}
         {agent.status === 'streaming' && '输出中...'}
@@ -120,21 +120,16 @@ function ChatLayout() {
   }, [conversations]);
 
   return (
-    <div className="h-full flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col bg-canvas">
       {/* Header */}
-      <header className="h-10 border-b border-gray-200 bg-white flex items-center justify-between px-4 shrink-0">
+      <header className="h-10 border-b border-hairline bg-canvas flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            data-testid="settings-button"
-            onClick={() => setShowSettings(true)}
-            className="text-xs text-gray-500 hover:text-gray-700"
-          >
-            ⚙ 设置
-          </button>
+          <span className="text-sm font-semibold text-ink tracking-wide">
+            BrowserAgent
+          </span>
         </div>
         <AgentStatusIndicator />
-        <div className="w-10" /> {/* spacer */}
+        <div className="w-10" />
       </header>
 
       {/* Main */}
@@ -150,12 +145,13 @@ function ChatLayout() {
           onNew={handleNewConversation}
           onRename={conversations.rename}
           onDelete={conversations.remove}
+          onOpenSettings={() => setShowSettings(true)}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
           {messagesLoading && (
-            <div className="flex items-center justify-center py-2 text-sm text-gray-400">
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <div className="flex items-center justify-center py-2 text-sm text-mute">
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-mute" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
@@ -163,7 +159,7 @@ function ChatLayout() {
             </div>
           )}
           {messagesError && (
-            <div className="mx-4 mt-2 px-3 py-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded">
+            <div className="mx-4 mt-2 px-3 py-2 text-sm text-danger bg-red-50 border border-danger/20 rounded-sm">
               加载失败: {messagesError}
             </div>
           )}
