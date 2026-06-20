@@ -1,4 +1,5 @@
 import { defineConfig } from 'wxt';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
@@ -7,7 +8,8 @@ export default defineConfig({
 
   manifest: ({ browser }) => ({
     name: 'Browser Agent',
-    description: 'AI-powered browser agent extension',
+    description: 'AI-powered browser agent extension - manage tabs, bookmarks, history, and more with natural language',
+    version: '0.1.0',
     permissions: [
       'tabs',
       'windows',
@@ -28,11 +30,23 @@ export default defineConfig({
       : { browser_action: { default_title: 'Browser Agent' } }),
   }),
 
+  hooks: {
+    'build:manifestGenerated': (wxt, manifest) => {
+      if (wxt.config.browser === 'firefox') {
+        manifest.browser_specific_settings = {
+          gecko: {
+            id: 'browser-agent@example.com',
+            strict_min_version: '128.0',
+          },
+        };
+      }
+    },
+  },
+
   vite: () => ({
     resolve: {
-      alias: {
-        '@': '/src',
-      },
+      alias: { '@': '/src' },
     },
+    plugins: [tailwindcss()],
   }),
 });

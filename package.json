@@ -18,7 +18,11 @@
     "format": "prettier --write 'src/**/*.{ts,tsx,css,json}'",
     "test": "vitest",
     "test:run": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:all": "bash scripts/build-all.sh",
+    "verify:manifest": "bash scripts/verify-manifest.sh",
+    "check:size": "bash scripts/check-size.sh",
+    "pre-release": "npm run test:run && npm run build:all && npm run check:size && npm run verify:manifest"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
