@@ -54,8 +54,8 @@ export function initBackground(): {
 
   // 监听 Chat Page 连接
   const onConnectHandler = (port: { onMessage: { addListener: (fn: any) => void }; onDisconnect: { addListener: (fn: any) => void }; postMessage: (msg: unknown) => void; name: string }) => {
-    // 只处理 Chat Page 的连接
-    if (port.name !== 'chat-page') return;
+    // 只处理 Chat Agent 的连接
+    if (port.name !== 'chat-agent') return;
 
     connectedPorts.add(port as any);
 
