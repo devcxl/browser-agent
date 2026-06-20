@@ -1,0 +1,186 @@
+import { describe, it, expect, vi } from 'vitest';
+import type { Mock } from 'vitest';
+import { ContextBuilder } from '../context-builder';
+import type { AgentConfig } from '@/shared/types/agent';
+import type { IToolRegistry, ToolDefinition } from '@/registry/types';
+import type { IConversationManager, StoredMessage, Conversation } from '@/shared/types/conversation';
+import type { LowSensitivityContext } from '@/shared/types/browser';
+
+function createMockToolRegistry(tools: ToolDefinition[]): IToolRegistry {
+  const map = new Map(tools.map((t) => [t.name, t]));
+  return {
+    getAllTools: vi.fn().mockReturnValue(tools),
+    getTool: vi.fn().mockImplementation((name: string) => map.get(name)),
+    register: vi.fn(),
+    registerAll: vi.fn(),
+    getToolsByCategory: vi.fn().mockReturnValue([]),
+    toOpenAISchema: vi.fn().mockReturnValue([]),
+    unregisterCategory: vi.fn(),
+  };
+}
+
+function createMockConversationManager(): IConversationManager {
+  return {
+    create: vi.fn(),
+    get: vi.fn(),
+    list: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    addMessage: vi.fn(),
+    getRecentMessages: vi.fn(),
+    generateSummary: vi.fn(),
+    needsSummary: vi.fn(),
+  };
+}
+
+const defaultConfig: AgentConfig = {
+  maxToolRounds: 15,
+  systemPrompt: 'You are a browser assistant.',
+  maxContextMessages: 20,
+  summaryThreshold: { messageCount: 30, estimatedTokens: 12_000, toolCallCount: 50 },
+};
+
+const defaultBrowserContext: LowSensitivityContext = {
+  currentWindow: {
+    tabs: [
+      { id: 1, title: 'Tab 1', url: 'https://example.com', active: true, pinned: false, groupId: -1 },
+    ],
+  },
+  allWindows: [{ id: 1, focused: true, tabCount: 1 }],
+  tabGroups: [],
+  activeTab: { id: 1, title: 'Tab 1', url: 'https://example.com', windowId: 1 },
+};
+
+describe('ContextBuilder', () => {
+  it('正常构建上下文（messages[0] 为 system prompt 含工具列表）', async () => {
+    const tools: ToolDefinition[] = [
+      {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn(),
+      },
+    ];
+    const toolRegistry = createMockToolRegistry(tools);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue([]);
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    expect(messages).toHaveLength(2); // system + tools + browser context
+    const first = messages[0]!;
+    expect(first.role).toBe('system');
+    expect(first.content).toContain('You are a browser assistant.');
+    expect(first.content).toContain('## Available Tools');
+    expect(first.content).toContain('tabs_query');
+    expect(first.content).toContain('查询标签页');
+  });
+
+  it('有会话摘要', async () => {
+    const tools: ToolDefinition[] = [];
+    const toolRegistry = createMockToolRegistry(tools);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue({
+      id: 'conv-1',
+      title: 'test',
+      createdAt: 0,
+      updatedAt: 0,
+      messages: [],
+      summary: '用户已完成了标签页查询',
+      sensitiveDataGranted: false,
+    } satisfies Conversation);
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue([]);
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const summaryMsg = messages.find(
+      (m) => m.content?.startsWith('## Conversation Summary'),
+    );
+    expect(summaryMsg).toBeDefined();
+    expect(summaryMsg!.content).toContain('用户已完成了标签页查询');
+  });
+
+  it('有浏览器上下文', async () => {
+    const tools: ToolDefinition[] = [];
+    const toolRegistry = createMockToolRegistry(tools);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue([]);
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const ctxMsg = messages.find((m) => m.content?.startsWith('## Current Browser Context'));
+    expect(ctxMsg).toBeDefined();
+    expect(ctxMsg!.content).toContain('https://example.com');
+    expect(ctxMsg!.content).toContain('Tab 1');
+  });
+
+  it('有历史消息', async () => {
+    const tools: ToolDefinition[] = [];
+    const toolRegistry = createMockToolRegistry(tools);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+
+    const historyMessages: StoredMessage[] = [
+      { id: 'm1', role: 'user', content: '打开新标签页', timestamp: 100 },
+      { id: 'm2', role: 'assistant', content: '已打开', timestamp: 200 },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const userMsg = messages.find((m) => m.content === '打开新标签页');
+    const asstMsg = messages.find((m) => m.content === '已打开');
+    expect(userMsg).toBeDefined();
+    expect(userMsg!.role).toBe('user');
+    expect(asstMsg).toBeDefined();
+    expect(asstMsg!.role).toBe('assistant');
+  });
+
+  it('工具列表正确', async () => {
+    const tools: ToolDefinition[] = [
+      {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn(),
+      },
+      {
+        name: 'tabs_create',
+        description: '创建标签页',
+        schema: { type: 'object', properties: { url: { type: 'string' } } },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn(),
+      },
+    ];
+    const toolRegistry = createMockToolRegistry(tools);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue([]);
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const first = messages[0]!;
+    expect(first.content).toContain('- **tabs_query**');
+    expect(first.content).toContain('- **tabs_create**');
+    expect(first.content).toContain('查询标签页');
+    expect(first.content).toContain('创建标签页');
+  });
+});
