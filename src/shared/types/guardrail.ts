@@ -1,4 +1,5 @@
 import type { RiskLevel, SensitivityLevel } from './tool';
+import type { ToolResult } from './tool';
 
 // ==================== Guardrail Context ====================
 
@@ -47,4 +48,16 @@ export interface IGuardrail {
     params: Record<string, unknown>,
     context: GuardrailContext,
   ): Promise<GuardrailCheck>;
+
+  /**
+   * 根据敏感级别和上下文过滤工具执行结果
+   * @param tool 工具定义（只需 resultSensitivity 字段）
+   * @param result 原始执行结果
+   * @param context 当前上下文
+   */
+  filterResultForRemote(
+    tool: { resultSensitivity: SensitivityLevel },
+    result: ToolResult,
+    context: GuardrailContext,
+  ): ToolResult;
 }
