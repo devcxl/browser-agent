@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { UIMessage } from '../types';
-import { cn, formatTime } from '../utils';
-import { ToolCallCard } from './ToolCallCard';
+import type { UIMessage, ToolCallDisplay } from '../types';
+import { cn, formatTime, riskColor, truncate } from '../utils';
 
 interface Props {
   message: UIMessage;
@@ -65,6 +64,9 @@ export function MessageBubble({ message }: Props) {
   }, [isStreaming, hasReasoning]);
 
   if (message.role === 'tool') {
+    if (message.toolCallDisplay) {
+      return <ToolBubble call={message.toolCallDisplay} />;
+    }
     return (
       <div className="flex justify-center my-1">
         <div className="bg-surface-soft border border-hairline rounded-md px-3 py-1.5 text-xs text-mute max-w-[80%]">
@@ -114,7 +116,7 @@ export function MessageBubble({ message }: Props) {
               </ReactMarkdown>
             </div>
           )}
-          {isStreaming && (
+          {isStreaming && message.content && (
             <span className="inline-block w-1.5 h-4 bg-ink ml-0.5 animate-pulse" />
           )}
         </div>
@@ -126,11 +128,58 @@ export function MessageBubble({ message }: Props) {
         >
           {formatTime(message.timestamp)}
         </div>
-        {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mt-2 space-y-1.5">
-            {message.toolCalls.map((tc) => (
-              <ToolCallCard key={tc.id} call={tc} />
-            ))}
+      </div>
+    </div>
+  );
+}
+
+function ToolBubble({ call }: { call: ToolCallDisplay }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const isHighRisk = call.riskLevel === 'high' || call.riskLevel === 'critical';
+
+  return (
+    <div className="flex justify-start mb-3">
+      <div className={cn(
+        'max-w-[80%] bg-surface-card rounded-2xl rounded-bl-md border overflow-hidden',
+        isHighRisk ? 'border-orange-400' : 'border-hairline',
+      )}>
+        <button
+          type="button"
+          onClick={() => setExpanded(!expanded)}
+          className="flex items-center gap-2 w-full px-4 py-2.5 text-left hover:bg-surface-soft transition-colors"
+        >
+          <span className="text-xs text-mute">{expanded ? '▼' : '▶'}</span>
+          <span className="text-sm font-medium text-ink flex-1">
+            {call.name}
+          </span>
+          <span className={cn('text-[10px] font-medium', riskColor(call.riskLevel).split(' ')[0])}>
+            {call.riskLevel}
+          </span>
+          {call.status === 'running' && (
+            <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          )}
+          {call.status === 'success' && <span className="text-success text-sm">✓</span>}
+          {call.status === 'error' && <span className="text-danger text-sm">✕</span>}
+        </button>
+        {expanded && (
+          <div className="px-4 pb-3 pt-1 bg-surface-soft border-t border-hairline space-y-1.5 text-xs">
+            <div>
+              <span className="font-medium text-mute">参数: </span>
+              <code className="text-body break-all">
+                {truncate(JSON.stringify(call.params), 200)}
+              </code>
+            </div>
+            {call.result && (
+              <div>
+                <span className="font-medium text-mute">结果: </span>
+                <code className="text-body break-all">
+                  {call.result.success
+                    ? truncate(JSON.stringify(call.result.data ?? 'ok'), 200)
+                    : call.result.error}
+                </code>
+              </div>
+            )}
           </div>
         )}
       </div>

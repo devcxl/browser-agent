@@ -43,6 +43,8 @@ export function riskColor(level: RiskLevel): string {
       return 'text-orange-600 border-orange-400';
     case 'critical':
       return 'text-red-600 border-red-400';
+    default:
+      return 'text-gray-600 border-gray-300';
   }
 }
 
@@ -58,30 +60,90 @@ export function uid(): string {
 }
 
 /**
- * 将 StoredMessage 转换为 UIMessage
+ * 将 DB 中的 StoredMessage[] 转换为 UI 层的 UIMessage[]
  *
- * 历史消息的 toolCalls 一律按已确认、低风险、成功状态处理。
- * result 是 string 摘要，无法还原为 ToolResult，故设为 undefined。
+ * 核心转换规则：
+ * - user 消息 → 原样通过
+ * - assistant(tool_calls) 消息 → 拆分：文本内容（如有）独立气泡，每个 tool_call 独立 tool 气泡
+ * - assistant(纯文本) 消息 → 原样通过
+ * - tool 消息 → 跳过（结果已配对到对应的 tool call 中）
  */
-export function storedMessageToUIMessage(msg: StoredMessage): UIMessage {
-  const toolCalls: ToolCallDisplay[] | undefined = msg.toolCalls?.length
-    ? msg.toolCalls.map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        params: tc.params,
-        result: undefined,
-        status: 'success' as const,
-        riskLevel: 'low' as RiskLevel,
-        confirmed: true,
-      }))
-    : undefined;
+export function storedMessagesToUIMessages(messages: StoredMessage[]): UIMessage[] {
+  const result: UIMessage[] = [];
 
-  return {
-    id: msg.id,
-    role: msg.role,
-    content: msg.content,
-    timestamp: msg.timestamp,
-    status: 'complete',
-    toolCalls,
-  };
+  // 第一趟：建立 toolCallId → tool result JSON 的映射
+  const toolResults = new Map<string, string>();
+  for (const msg of messages) {
+    if (msg.role === 'tool' && msg.toolCallId) {
+      toolResults.set(msg.toolCallId, msg.content);
+    }
+  }
+
+  for (const msg of messages) {
+    if (msg.role === 'tool') continue;
+
+    if (msg.role === 'user') {
+      result.push({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp,
+        status: 'complete',
+      });
+      continue;
+    }
+
+    // assistant
+    if (msg.toolCalls && msg.toolCalls.length > 0) {
+      // 如有文本内容，先输出纯文本气泡
+      if (msg.content) {
+        result.push({
+          id: msg.id + '_text',
+          role: 'assistant',
+          content: msg.content,
+          timestamp: msg.timestamp,
+          status: 'complete',
+        });
+      }
+
+      for (const tc of msg.toolCalls) {
+        const rawResult = toolResults.get(tc.id);
+        let parsedResult: ToolCallDisplay['result'];
+        if (rawResult) {
+          try {
+            parsedResult = JSON.parse(rawResult);
+          } catch {
+            parsedResult = { success: false, error: rawResult };
+          }
+        }
+
+        result.push({
+          id: tc.id,
+          role: 'tool',
+          content: tc.name,
+          toolCallDisplay: {
+            id: tc.id,
+            name: tc.name,
+            params: tc.params,
+            result: parsedResult,
+            status: parsedResult?.success ? 'success' : 'error',
+            riskLevel: 'low' as RiskLevel,
+            confirmed: true,
+          },
+          timestamp: msg.timestamp,
+          status: 'complete',
+        });
+      }
+    } else if (msg.content) {
+      result.push({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        timestamp: msg.timestamp,
+        status: 'complete',
+      });
+    }
+  }
+
+  return result;
 }

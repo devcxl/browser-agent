@@ -5,7 +5,7 @@ import { useAgent } from './hooks/useAgent';
 import { useBrowserState } from './hooks/useBrowserState';
 import { ConversationManager } from '@/conversation';
 import { Database } from '@/shared/db/database';
-import { storedMessageToUIMessage } from './utils';
+import { storedMessagesToUIMessages } from './utils';
 
 const db = Database.getInstance();
 const manager = new ConversationManager(db);
@@ -92,7 +92,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const conv = await manager.get(activeId);
         if (cancelled) return;
         if (conv) {
-          setMessages(conv.messages.map(storedMessageToUIMessage));
+          setMessages(storedMessagesToUIMessages(conv.messages));
         } else {
           setMessages([]);
         }

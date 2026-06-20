@@ -17,7 +17,7 @@ export interface UIMessage {
   role: 'user' | 'assistant' | 'tool';
   content: string;
   reasoningContent?: string;
-  toolCalls?: ToolCallDisplay[];
+  toolCallDisplay?: ToolCallDisplay;
   timestamp: number;
   status?: 'streaming' | 'complete' | 'error';
 }

@@ -50,7 +50,7 @@ export function ChatView({ messages }: Props) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto px-4 py-3 scroll-smooth"
+      className="flex-1 overflow-y-auto px-4 py-3 scroll-smooth flex flex-col"
     >
       {useVirtual ? (
         <div style={{ paddingTop, paddingBottom }}>
@@ -61,8 +61,8 @@ export function ChatView({ messages }: Props) {
       ) : (
         <>
           {messages.length === 0 && (
-            <div className="flex items-center justify-center h-full text-mute text-sm">
-               开始对话，发送消息给 Browser Agent
+            <div className="flex-1 flex items-center justify-center text-mute text-sm">
+                开始对话，发送消息给 Browser Agent
             </div>
           )}
           {messages.map((msg) => (

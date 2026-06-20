@@ -132,7 +132,6 @@ export function useAgent() {
         content: '',
         timestamp: Date.now(),
         status: 'streaming',
-        toolCalls: [],
       };
       cbRef.current.onMessage?.({ ...assistantMsg });
 
@@ -151,6 +150,20 @@ export function useAgent() {
 
         const hooks: AgentLoopHooks = {
           onStreamChunk: (chunk: string) => {
+            // 如果上次助理消息已结束（被 tool call 拆分），新建一个
+            if (assistantMsg.status === 'complete') {
+              cbRef.current.onMessage?.({
+                ...assistantMsg,
+                status: 'complete',
+                toolCallDisplay: undefined,
+              });
+              assistantMsg.id = uid();
+              assistantMsg.content = '';
+              assistantMsg.reasoningContent = undefined;
+              assistantMsg.toolCallDisplay = undefined;
+              assistantMsg.status = 'streaming';
+              assistantMsg.timestamp = Date.now();
+            }
             assistantMsg.content += chunk;
             cbRef.current.onMessage?.({ ...assistantMsg });
           },
@@ -159,9 +172,27 @@ export function useAgent() {
             cbRef.current.onMessage?.({ ...assistantMsg });
           },
           onToolCall: (record: ToolCallRecord) => {
-            if (!assistantMsg.toolCalls) assistantMsg.toolCalls = [];
-            assistantMsg.toolCalls.push(recordToDisplay(record));
-            cbRef.current.onMessage?.({ ...assistantMsg });
+            // 当前 assistant 消息如有文本则先终结
+            if (assistantMsg.content) {
+              cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined });
+            }
+            // 输出 tool 消息气泡
+            const tc = recordToDisplay(record);
+            cbRef.current.onMessage?.({
+              id: uid(),
+              role: 'tool',
+              content: record.toolName,
+              toolCallDisplay: tc,
+              timestamp: Date.now(),
+              status: tc.status,
+            });
+            // 重置 assistant 消息准备接收下一轮文本
+            assistantMsg.id = uid();
+            assistantMsg.content = '';
+            assistantMsg.reasoningContent = undefined;
+            assistantMsg.toolCallDisplay = undefined;
+            assistantMsg.status = 'streaming';
+            assistantMsg.timestamp = Date.now();
           },
           onConfirm: async (request) => {
             return new Promise<boolean>((resolve) => {
@@ -211,10 +242,16 @@ export function useAgent() {
           assistantMsg.content = output.finalMessage;
         }
         if (output.toolCalls.length > 0) {
-          if (!assistantMsg.toolCalls) assistantMsg.toolCalls = [];
           // hooks 已通过 onToolCall 推送了所有工具调用，此处仅做二次兜底
           for (const tc of output.toolCalls) {
-            assistantMsg.toolCalls.push(recordToDisplay(tc));
+            cbRef.current.onMessage?.({
+              id: uid(),
+              role: 'tool',
+              content: tc.toolName,
+              toolCallDisplay: recordToDisplay(tc),
+              timestamp: Date.now(),
+              status: recordToDisplay(tc).status,
+            });
           }
         }
         assistantMsg.status = 'complete';

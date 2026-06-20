@@ -1,97 +1,147 @@
 import { describe, it, expect } from 'vitest';
 import type { StoredMessage } from '@/shared/types';
-import { storedMessageToUIMessage } from '../utils';
+import { storedMessagesToUIMessages } from '../utils';
 
-describe('storedMessageToUIMessage', () => {
+describe('storedMessagesToUIMessages', () => {
   it('converts user message', () => {
-    const stored: StoredMessage = {
-      id: 'msg-1',
-      role: 'user',
-      content: 'hello',
-      timestamp: 1000,
-    };
-    const ui = storedMessageToUIMessage(stored);
-    expect(ui.id).toBe('msg-1');
-    expect(ui.role).toBe('user');
-    expect(ui.content).toBe('hello');
-    expect(ui.timestamp).toBe(1000);
-    expect(ui.status).toBe('complete');
-    expect(ui.toolCalls).toBeUndefined();
+    const stored: StoredMessage[] = [
+      { id: 'msg-1', role: 'user', content: 'hello', timestamp: 1000 },
+    ];
+    const result = storedMessagesToUIMessages(stored);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('msg-1');
+    expect(result[0]!.role).toBe('user');
+    expect(result[0]!.content).toBe('hello');
+    expect(result[0]!.status).toBe('complete');
   });
 
-  it('converts assistant message with tool calls', () => {
-    const stored: StoredMessage = {
-      id: 'msg-2',
-      role: 'assistant',
-      content: 'let me check',
-      timestamp: 2000,
-      toolCalls: [
-        { id: 'tc-1', name: 'tabs_query', params: { url: 'example.com' }, result: 'found 2 tabs' },
-      ],
-    };
-    const ui = storedMessageToUIMessage(stored);
-    expect(ui.role).toBe('assistant');
-    expect(ui.status).toBe('complete');
-    expect(ui.toolCalls).toHaveLength(1);
-    expect(ui.toolCalls![0]!.id).toBe('tc-1');
-    expect(ui.toolCalls![0]!.name).toBe('tabs_query');
-    expect(ui.toolCalls![0]!.params).toEqual({ url: 'example.com' });
-    // result 是 string，无法还原为 ToolResult，应为 undefined
-    expect(ui.toolCalls![0]!.result).toBeUndefined();
-    expect(ui.toolCalls![0]!.status).toBe('success');
-    expect(ui.toolCalls![0]!.riskLevel).toBe('low');
-    expect(ui.toolCalls![0]!.confirmed).toBe(true);
+  it('splits assistant(tool_calls) with text into text + tool bubbles', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'msg-2',
+        role: 'assistant',
+        content: 'let me check',
+        timestamp: 2000,
+        toolCalls: [
+          { id: 'tc-1', name: 'tabs_query', params: { url: 'example.com' }, result: 'found 2 tabs' },
+        ],
+      },
+      { id: 'tool-1', role: 'tool', content: '{"success":true,"data":[1,2]}', toolCallId: 'tc-1', timestamp: 2001 },
+    ];
+    const result = storedMessagesToUIMessages(stored);
+    expect(result).toHaveLength(2);
+
+    expect(result[0]!.id).toBe('msg-2_text');
+    expect(result[0]!.role).toBe('assistant');
+    expect(result[0]!.content).toBe('let me check');
+
+    expect(result[1]!.id).toBe('tc-1');
+    expect(result[1]!.role).toBe('tool');
+    expect(result[1]!.toolCallDisplay).toBeDefined();
+    expect(result[1]!.toolCallDisplay!.name).toBe('tabs_query');
+    expect(result[1]!.toolCallDisplay!.result).toEqual({ success: true, data: [1, 2] });
+    expect(result[1]!.toolCallDisplay!.status).toBe('success');
   });
 
-  it('converts assistant message without tool calls', () => {
-    const stored: StoredMessage = {
-      id: 'msg-3',
-      role: 'assistant',
-      content: 'plain response',
-      timestamp: 3000,
-    };
-    const ui = storedMessageToUIMessage(stored);
-    expect(ui.role).toBe('assistant');
-    expect(ui.toolCalls).toBeUndefined();
-    expect(ui.status).toBe('complete');
+  it('handles assistant(tool_calls) without text content', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'msg-3',
+        role: 'assistant',
+        content: '',
+        timestamp: 3000,
+        toolCalls: [
+          { id: 'tc-2', name: 'close_tab', params: { id: 5 }, result: 'closed' },
+        ],
+      },
+      { id: 'tool-2', role: 'tool', content: '{"success":false,"error":"not found"}', toolCallId: 'tc-2', timestamp: 3001 },
+    ];
+    const result = storedMessagesToUIMessages(stored);
+    // 纯 tool_calls 无文本的 assistant 不生成文本气泡，只生成 tool 气泡
+    expect(result).toHaveLength(1);
+    expect(result[0]!.role).toBe('tool');
+    expect(result[0]!.toolCallDisplay!.result).toEqual({ success: false, error: 'not found' });
+    expect(result[0]!.toolCallDisplay!.status).toBe('error');
   });
 
-  it('converts tool role message', () => {
-    const stored: StoredMessage = {
-      id: 'msg-4',
-      role: 'tool',
-      content: '{"result": "done"}',
-      toolCallId: 'tc-1',
-      timestamp: 4000,
-    };
-    const ui = storedMessageToUIMessage(stored);
-    expect(ui.role).toBe('tool');
-    expect(ui.content).toBe('{"result": "done"}');
-    expect(ui.status).toBe('complete');
-    // UIMessage 没有 toolCallId 字段，但不应该报错
+  it('converts plain assistant message', () => {
+    const stored: StoredMessage[] = [
+      { id: 'msg-4', role: 'assistant', content: 'plain response', timestamp: 4000 },
+    ];
+    const result = storedMessagesToUIMessages(stored);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.role).toBe('assistant');
+    expect(result[0]!.content).toBe('plain response');
   });
 
-  it('handles empty toolCalls array', () => {
-    const stored: StoredMessage = {
-      id: 'msg-5',
-      role: 'assistant',
-      content: '',
-      timestamp: 5000,
-      toolCalls: [],
-    };
-    const ui = storedMessageToUIMessage(stored);
-    // 空数组应转为 undefined，避免渲染空 toolCalls
-    expect(ui.toolCalls).toBeUndefined();
+  it('skips tool messages (results paired into tool calls)', () => {
+    const stored: StoredMessage[] = [
+      { id: 'tool-3', role: 'tool', content: '{"result":"done"}', toolCallId: 'tc-3', timestamp: 5000 },
+    ];
+    const result = storedMessagesToUIMessages(stored);
+    expect(result).toHaveLength(0);
   });
 
-  it('preserves reasoningContent as undefined', () => {
-    const stored: StoredMessage = {
-      id: 'msg-6',
-      role: 'assistant',
-      content: 'no reasoning',
-      timestamp: 6000,
-    };
-    const ui = storedMessageToUIMessage(stored);
-    expect(ui.reasoningContent).toBeUndefined();
+  it('handles tool result that is not valid JSON', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'msg-5',
+        role: 'assistant',
+        content: '',
+        timestamp: 6000,
+        toolCalls: [
+          { id: 'tc-4', name: 'unknown', params: {}, result: 'raw text' },
+        ],
+      },
+      { id: 'tool-4', role: 'tool', content: 'plain error message', toolCallId: 'tc-4', timestamp: 6001 },
+    ];
+    const result = storedMessagesToUIMessages(stored);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.toolCallDisplay!.result).toEqual({ success: false, error: 'plain error message' });
+    expect(result[0]!.toolCallDisplay!.status).toBe('error');
+  });
+
+  it('empty toolCalls array is ignored', () => {
+    const stored: StoredMessage[] = [
+      { id: 'msg-6', role: 'assistant', content: 'no tools', timestamp: 7000, toolCalls: [] },
+    ];
+    const result = storedMessagesToUIMessages(stored);
+    expect(result).toHaveLength(1);
+    expect(result[0]!.role).toBe('assistant');
+    expect(result[0]!.toolCallDisplay).toBeUndefined();
+  });
+
+  it('full conversation with user, tool_calls, and final assistant', () => {
+    const stored: StoredMessage[] = [
+      { id: 'u1', role: 'user', content: '帮我打开标签页', timestamp: 1000 },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 2000,
+        toolCalls: [{ id: 'tc1', name: 'tabs_query', params: {}, result: '...' }],
+      },
+      { id: 't1', role: 'tool', content: '{"success":true,"data":[1]}', toolCallId: 'tc1', timestamp: 2001 },
+      {
+        id: 'a2',
+        role: 'assistant',
+        content: '',
+        timestamp: 3000,
+        toolCalls: [{ id: 'tc2', name: 'close_tab', params: { id: 1 }, result: '...' }],
+      },
+      { id: 't2', role: 'tool', content: '{"success":true}', toolCallId: 'tc2', timestamp: 3001 },
+      { id: 'a3', role: 'assistant', content: '已完成操作', timestamp: 4000 },
+    ];
+    const result = storedMessagesToUIMessages(stored);
+    expect(result).toHaveLength(5);
+    expect(result[0]!.role).toBe('user');
+    expect(result[1]!.role).toBe('assistant');
+    expect(result[1]!.content).toBe('好的');
+    expect(result[2]!.role).toBe('tool');
+    expect(result[2]!.toolCallDisplay!.name).toBe('tabs_query');
+    expect(result[3]!.role).toBe('tool');
+    expect(result[3]!.toolCallDisplay!.name).toBe('close_tab');
+    expect(result[4]!.role).toBe('assistant');
+    expect(result[4]!.content).toBe('已完成操作');
   });
 });

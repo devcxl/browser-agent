@@ -52,9 +52,29 @@ describe('MessageBubble', () => {
     expect(cursor).toBeDefined();
   });
 
-  it('renders tool message in compact style', () => {
+  it('renders tool message with toolCallDisplay using ToolCallCard', () => {
     const msg: UIMessage = {
       id: '4',
+      role: 'tool',
+      content: 'tabs_query',
+      timestamp: Date.now(),
+      toolCallDisplay: {
+        id: 'tc-1',
+        name: 'tabs_query',
+        params: { url: 'example.com' },
+        status: 'success',
+        riskLevel: 'low',
+        confirmed: true,
+      },
+    };
+
+    render(<MessageBubble message={msg} />);
+    expect(screen.getByText('tabs_query')).toBeDefined();
+  });
+
+  it('renders tool message without toolCallDisplay in compact style', () => {
+    const msg: UIMessage = {
+      id: '5',
       role: 'tool',
       content: 'Tool executed',
       timestamp: Date.now(),
