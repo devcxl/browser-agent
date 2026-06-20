@@ -70,8 +70,8 @@ describe('BrowserEventHub', () => {
 
     hub.start();
 
-    // Firefox events: 7 tabs + 3 windows = 10 (no tabGroups)
-    expect(adapter.addListener).toHaveBeenCalledTimes(10);
+    // Firefox now also supports tabGroups events: 7 tabs + 3 windows + 2 tabGroups = 12
+    expect(adapter.addListener).toHaveBeenCalledTimes(12);
   });
 
   it('should debounce multiple events within 500ms', () => {

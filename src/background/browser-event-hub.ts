@@ -34,15 +34,9 @@ export class BrowserEventHub {
       BrowserEvent.WINDOW_CREATED,
       BrowserEvent.WINDOW_REMOVED,
       BrowserEvent.WINDOW_FOCUS_CHANGED,
+      BrowserEvent.TAB_GROUP_UPDATED,
+      BrowserEvent.TAB_GROUP_MOVED,
     ];
-
-    // Chrome 专有 tabGroups 事件
-    if (this.adapter.browserType === 'chrome') {
-      events.push(
-        BrowserEvent.TAB_GROUP_UPDATED,
-        BrowserEvent.TAB_GROUP_MOVED,
-      );
-    }
 
     for (const event of events) {
       const cleanup = this.adapter.addListener(event, () => this.scheduleSync());
@@ -74,9 +68,7 @@ export class BrowserEventHub {
       const [tabs, windows, tabGroups] = await Promise.all([
         this.adapter.tabs.query({}),
         this.adapter.windows.getAll(),
-        this.adapter.browserType === 'chrome'
-          ? this.adapter.tabGroups.query({})
-          : Promise.resolve([]),
+        this.adapter.tabGroups.query({}),
       ]);
 
       const state: BrowserState = {
