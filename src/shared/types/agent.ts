@@ -1,4 +1,4 @@
-import type { ProviderConfig, ILlmClient } from './llm';
+import type { ProviderConfig, ILlmClient, ReasoningEffort } from './llm';
 import type { LowSensitivityContext } from './browser';
 import type { RiskLevel, ToolResult } from './tool';
 
@@ -8,6 +8,7 @@ export interface AgentConfig {
   maxToolRounds: number;
   systemPrompt: string;
   maxContextMessages: number;
+  reasoningEffort?: ReasoningEffort;
   summaryThreshold: {
     messageCount: number;
     estimatedTokens: number;

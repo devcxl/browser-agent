@@ -9,6 +9,7 @@ const DEFAULTS: StorageSchema = {
     maxToolRounds: 15,
     systemPrompt: '',
     maxContextMessages: 40,
+    reasoningEffort: 'medium',
     summaryThreshold: {
       messageCount: 30,
       estimatedTokens: 12000,

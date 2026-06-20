@@ -16,6 +16,7 @@ const MAX_INVALID_TOOL_RETRIES = 3;
 
 export interface AgentLoopHooks {
   onStreamChunk?: (chunk: string) => void;
+  onReasoningChunk?: (chunk: string) => void;
   onToolCall?: (record: ToolCallRecord) => void;
   onConfirm?: (request: {
     toolName: string;
@@ -84,7 +85,12 @@ export class AgentLoop implements IAgentRuntime {
 
         try {
           response = await llmClient.chat(
-            { model: input.providerConfig.model, messages, tools },
+            {
+              model: input.providerConfig.model,
+              messages,
+              tools,
+              reasoning_effort: this.config.reasoningEffort,
+            },
             this.abortController.signal,
           );
         } catch (err) {
@@ -99,6 +105,12 @@ export class AgentLoop implements IAgentRuntime {
         if (!choice) {
           finalMessage = 'LLM 未返回有效响应。';
           break;
+        }
+
+        // 提取 reasoning_content（非流式响应中有些模型也会返回）
+        const reasoning = choice.message.reasoning_content;
+        if (reasoning && this.hooks?.onReasoningChunk) {
+          this.hooks.onReasoningChunk(reasoning);
         }
 
         if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {

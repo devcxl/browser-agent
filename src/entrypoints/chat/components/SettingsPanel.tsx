@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ProviderConfig } from '@/shared/types';
+import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import type { AgentSettings, ExpertModeSettings, ProviderFormData } from '../types';
 import { cn } from '../utils';
 
@@ -273,6 +273,24 @@ export function SettingsPanel({
                   min={1}
                   max={200}
                 />
+              </label>
+              <label className="block">
+                <span className="text-sm text-gray-600">思考强度</span>
+                <select
+                  value={agentSettings.reasoningEffort}
+                  onChange={(e) =>
+                    onSaveAgentSettings({ ...agentSettings, reasoningEffort: e.target.value as ReasoningEffort })
+                  }
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                >
+                  <option value="low">Low（低）</option>
+                  <option value="medium">Medium（中）</option>
+                  <option value="high">High（高）</option>
+                  <option value="max">Max（最大）</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  控制 LLM 推理深度，越高越慢但越深入。仅支持 DeepSeek、OpenAI o1/o3 等推理模型。
+                </p>
               </label>
               <label className="block">
                 <span className="text-sm text-gray-600">系统提示词</span>

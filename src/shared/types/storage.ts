@@ -1,4 +1,5 @@
 import type { ProviderConfig } from './llm';
+import type { ReasoningEffort } from './llm';
 
 // ==================== chrome.storage.local 存储 Schema ====================
 
@@ -21,6 +22,8 @@ export interface AgentSettings {
   systemPrompt: string;
   /** 上下文窗口最大消息数，默认 40 */
   maxContextMessages: number;
+  /** 思考强度，默认 medium */
+  reasoningEffort: ReasoningEffort;
   /** 摘要触发阈值 */
   summaryThreshold: {
     messageCount: number;    // 默认 30

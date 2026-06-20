@@ -1,5 +1,9 @@
 import type { OpenAIToolSchema } from './tool';
 
+// ==================== Reasoning Effort ====================
+
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max';
+
 // ==================== Provider Config ====================
 
 export interface ProviderConfig {
@@ -49,6 +53,7 @@ export interface ChatCompletionRequest {
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
+  reasoning_effort?: ReasoningEffort;
 }
 
 export interface ChatCompletionResponse {
@@ -57,6 +62,7 @@ export interface ChatCompletionResponse {
     message: {
       role: 'assistant';
       content: string | null;
+      reasoning_content?: string;
       tool_calls?: ToolCallDelta[];
     };
     finish_reason: 'stop' | 'tool_calls' | 'length';
@@ -76,6 +82,7 @@ export interface StreamChunk {
     delta: {
       role?: 'assistant';
       content?: string;
+      reasoning_content?: string;
       tool_calls?: Array<{
         index: number;
         id?: string;
@@ -100,6 +107,7 @@ export interface ILlmClient {
     request: ChatCompletionRequest,
     onChunk: (chunk: StreamChunk) => void,
     signal?: AbortSignal,
+    onReasoning?: (content: string) => void,
   ): Promise<void>;
   /** 健康检查 */
   checkHealth(config: ProviderConfig): Promise<boolean>;

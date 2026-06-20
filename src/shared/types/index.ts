@@ -56,6 +56,7 @@ export type {
 
 export type {
   ProviderConfig,
+  ReasoningEffort,
   ToolCallDelta,
   ChatMessage,
   ChatCompletionRequest,

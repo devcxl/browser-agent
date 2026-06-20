@@ -1,4 +1,4 @@
-import type { RiskLevel, PreflightResult, ToolResult } from '@/shared/types';
+import type { RiskLevel, PreflightResult, ToolResult, ReasoningEffort } from '@/shared/types';
 
 export type AgentStatus = 'idle' | 'running' | 'streaming' | 'waitingConfirmation';
 
@@ -16,6 +16,7 @@ export interface UIMessage {
   id: string;
   role: 'user' | 'assistant' | 'tool';
   content: string;
+  reasoningContent?: string;
   toolCalls?: ToolCallDisplay[];
   timestamp: number;
   status?: 'streaming' | 'complete' | 'error';
@@ -31,6 +32,7 @@ export interface AgentSettings {
   maxToolRounds: number;
   maxContextMessages: number;
   systemPrompt: string;
+  reasoningEffort: ReasoningEffort;
 }
 
 export interface ExpertModeSettings {

@@ -1,6 +1,7 @@
 export { LlmClient } from './llm-client';
 export type {
   ProviderConfig,
+  ReasoningEffort,
   ChatMessage,
   ChatCompletionRequest,
   ChatCompletionResponse,

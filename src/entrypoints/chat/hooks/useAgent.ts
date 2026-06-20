@@ -112,6 +112,7 @@ export function useAgent() {
       conversationId: string,
       userMessage: string,
       providerConfig: ProviderConfig,
+      reasoningEffort?: import('@/shared/types').ReasoningEffort,
     ) => {
       setStatus('running');
       setError(null);
@@ -144,12 +145,17 @@ export function useAgent() {
           maxToolRounds: 15,
           systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
           maxContextMessages: 40,
+          reasoningEffort,
           summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
         };
 
         const hooks: AgentLoopHooks = {
           onStreamChunk: (chunk: string) => {
             assistantMsg.content += chunk;
+            cbRef.current.onMessage?.({ ...assistantMsg });
+          },
+          onReasoningChunk: (chunk: string) => {
+            assistantMsg.reasoningContent = (assistantMsg.reasoningContent ?? '') + chunk;
             cbRef.current.onMessage?.({ ...assistantMsg });
           },
           onToolCall: (record: ToolCallRecord) => {
