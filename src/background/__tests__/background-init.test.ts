@@ -50,6 +50,9 @@ describe('Background initialization', () => {
         update: vi.fn(),
         move: vi.fn(),
       },
+      notifications: {
+        create: vi.fn().mockResolvedValue('notif-mock'),
+      },
       addListener: vi.fn().mockReturnValue(() => {}),
     };
 
@@ -78,5 +81,21 @@ describe('Background initialization', () => {
     destroy();
 
     expect(browser.runtime.onConnect.removeListener).toHaveBeenCalled();
+  });
+
+  it('should handle notifications.create RPC method', async () => {
+    const { router, destroy } = initBackground();
+
+    const response = await router.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'notifications.create',
+      params: { title: 'Test', message: 'Hello' },
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(response.result).toBe('notif-mock');
+
+    destroy();
   });
 });

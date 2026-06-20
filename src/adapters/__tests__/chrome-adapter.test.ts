@@ -52,6 +52,11 @@ function createMockChrome() {
       onUpdated: mockEvent,
       onMoved: mockEvent,
     },
+    notifications: {
+      create: vi.fn().mockImplementation((_id, _options, cb) => {
+        cb('notif-42');
+      }),
+    },
   };
 }
 
@@ -202,6 +207,16 @@ describe('ChromeAdapter', () => {
     it('move 正确转发到 chrome.tabGroups.move', async () => {
       await adapter.tabGroups.move(1, { index: 0 });
       expect(mockChrome.tabGroups.move).toHaveBeenCalledWith(1, { index: 0 });
+    });
+  });
+
+  // ── Notifications ────────────────────────────────
+
+  describe('notifications', () => {
+    it('create 正确转发到 chrome.notifications.create', async () => {
+      const result = await adapter.notifications.create({ title: 'Test', message: 'Hello' });
+      expect(mockChrome.notifications.create).toHaveBeenCalledWith('', { title: 'Test', message: 'Hello' }, expect.any(Function));
+      expect(result).toBe('notif-42');
     });
   });
 
