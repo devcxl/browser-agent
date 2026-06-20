@@ -869,4 +869,113 @@ describe('AgentLoop', () => {
       expect(userMessages.filter((m) => m.content === '查询当前标签页')).toHaveLength(1);
     });
   });
+
+  // === Scenario: tool_calls 消息序列协议 ===
+  describe('tool_calls 消息序列（OpenAI 协议）', () => {
+    it('tool_call 后，LLM 下一轮收到的 messages 包含 assistant(tool_calls) 包裹，位于 tool(result) 之前', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({ success: true, data: [] }),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_1', 'tabs_query', {})),
+        stopResponse('查询完成。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+      );
+
+      await loop.run(defaultInput);
+
+      // 第二轮 LLM 调用（index 1）的 messages 应包含：
+      // ... assistant(tool_calls: call_1) → tool(tool_call_id: call_1)
+      const llmChat = vi.mocked(llmClient.chat);
+      const secondRoundMessages = llmChat.mock.calls[1]![0]!.messages;
+
+      const assistantToolCall = secondRoundMessages.find(
+        (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0,
+      );
+      const toolResult = secondRoundMessages.find(
+        (m) => m.role === 'tool' && m.tool_call_id === 'call_1',
+      );
+
+      // 两者都应存在
+      expect(assistantToolCall).toBeDefined();
+      expect(toolResult).toBeDefined();
+
+      // assistant(tool_calls) 必须在 tool(result) 之前
+      const asstIdx = secondRoundMessages.indexOf(assistantToolCall!);
+      const toolIdx = secondRoundMessages.indexOf(toolResult!);
+      expect(asstIdx).toBeLessThan(toolIdx);
+
+      // assistant 的 tool_calls id 与 tool 消息的 tool_call_id 匹配
+      expect(assistantToolCall!.tool_calls![0]!.id).toBe('call_1');
+    });
+
+    it('连续两个 tool_call（同一轮 assistant）共用一个 assistant 包裹', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({ success: true, data: [] }),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      // 第一轮返回两个 tool_call
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(
+          toolCallDelta('call_1', 'tabs_query', {}),
+          toolCallDelta('call_2', 'tabs_query', {}),
+        ),
+        stopResponse('完成。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+      );
+
+      await loop.run(defaultInput);
+
+      const llmChat = vi.mocked(llmClient.chat);
+      const secondRoundMessages = llmChat.mock.calls[1]![0]!.messages;
+
+      // 只应有一个 assistant(tool_calls) 消息，包含两个 tool_call
+      const assistantToolCalls = secondRoundMessages.filter(
+        (m) => m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0,
+      );
+      expect(assistantToolCalls).toHaveLength(1);
+      expect(assistantToolCalls[0]!.tool_calls).toHaveLength(2);
+
+      // 两个 tool result 都在 assistant 之后
+      const toolMsgs = secondRoundMessages.filter((m) => m.role === 'tool');
+      expect(toolMsgs).toHaveLength(2);
+      const asstIdx = secondRoundMessages.indexOf(assistantToolCalls[0]!);
+      for (const tm of toolMsgs) {
+        expect(secondRoundMessages.indexOf(tm)).toBeGreaterThan(asstIdx);
+      }
+    });
+  });
 });

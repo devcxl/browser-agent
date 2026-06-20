@@ -113,6 +113,13 @@ export class AgentLoop implements IAgentRuntime {
         }
 
         if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
+          // 按 OpenAI 协议：tool(result) 消息前必须有对应的 assistant(tool_calls) 消息
+          messages.push({
+            role: 'assistant',
+            content: choice.message.content ?? null,
+            tool_calls: choice.message.tool_calls,
+          });
+
           for (const tc of choice.message.tool_calls) {
             let params: Record<string, unknown>;
             try {
