@@ -117,8 +117,7 @@ function ChatLayout() {
 
   const handleNewConversation = useCallback(async () => {
     await conversations.create();
-    agent.setCallbacks({ onMessage: messages.push ? undefined : undefined });
-  }, [conversations, agent]);
+  }, [conversations]);
 
   return (
     <div className="h-full flex flex-col bg-gray-50">

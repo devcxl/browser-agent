@@ -111,7 +111,7 @@ describe('ChatContext message loading', () => {
     }, { timeout: 5000 });
 
     // Wait a tick for the restore effect and message loading effect
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(screen.getByTestId('messages-loading').textContent).toBe('false');
     }, { timeout: 5000 });
 
