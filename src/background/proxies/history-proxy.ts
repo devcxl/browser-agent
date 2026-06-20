@@ -1,13 +1,14 @@
 import type { IBrowserAdapter } from '@/adapters/types';
+import type { HistorySearchParams, HistoryDeleteParams } from '@/shared/types';
 
 export class HistoryProxy {
   constructor(private adapter: IBrowserAdapter) {}
 
-  async search(params: { text: string; startTime?: number; endTime?: number; maxResults?: number }) {
+  async search(params: HistorySearchParams) {
     return this.adapter.history.search(params);
   }
 
-  async delete(params: { url?: string; startTime?: number; endTime?: number }) {
+  async delete(params: HistoryDeleteParams) {
     if (params.url) {
       await this.adapter.history.deleteUrl(params.url);
     } else if (params.startTime !== undefined && params.endTime !== undefined) {
@@ -15,6 +16,8 @@ export class HistoryProxy {
         startTime: params.startTime,
         endTime: params.endTime,
       });
+    } else {
+      throw new Error('history.delete requires either url or both startTime and endTime');
     }
     return { success: true };
   }
