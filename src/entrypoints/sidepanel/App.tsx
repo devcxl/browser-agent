@@ -159,7 +159,7 @@ function ChatLayout() {
             </div>
           )}
           {messagesError && (
-            <div className="mx-4 mt-2 px-3 py-2 text-sm text-danger bg-red-50 border border-danger/20 rounded-sm">
+             <div className="mx-4 mt-2 px-3 py-2 text-sm text-danger bg-red-50 border border-danger/20 rounded-md">
               加载失败: {messagesError}
             </div>
           )}

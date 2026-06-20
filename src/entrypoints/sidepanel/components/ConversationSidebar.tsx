@@ -72,7 +72,7 @@ export function ConversationSidebar({
             type="button"
             data-testid="new-conversation-button"
             onClick={onNew}
-            className="px-2 py-1 text-xs rounded-sm bg-ink text-canvas hover:bg-ink-deep"
+            className="px-2 py-1 text-xs rounded-full bg-primary text-on-primary hover:bg-primary-active"
           >
             + 新建
           </button>
@@ -95,7 +95,7 @@ export function ConversationSidebar({
         )}
 
         {error && (
-          <div className="mx-2 mt-2 text-xs text-danger bg-red-50 rounded-sm px-2 py-1">
+          <div className="mx-2 mt-2 text-xs text-danger bg-red-50 rounded-md px-2 py-1">
             {error}
           </div>
         )}
@@ -111,7 +111,7 @@ export function ConversationSidebar({
               data-testid="conversation-item"
               className={cn(
                 'px-3 py-2 border-b border-hairline cursor-pointer hover:bg-surface-soft group',
-                activeId === conv.id && 'bg-surface-soft border-l-2 border-l-ink',
+                activeId === conv.id && 'bg-surface-soft border-l-2 border-l-primary',
               )}
               onClick={() => onSelect(conv.id)}
             >
@@ -125,7 +125,7 @@ export function ConversationSidebar({
                     if (e.key === 'Enter') confirmRename();
                     if (e.key === 'Escape') setEditingId(null);
                   }}
-                  className="w-full px-1 py-0.5 text-xs border border-ink rounded-sm"
+                  className="w-full px-1 py-0.5 text-xs border border-primary rounded-md"
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
@@ -142,7 +142,7 @@ export function ConversationSidebar({
                           e.stopPropagation();
                           startRename(conv.id, conv.title);
                         }}
-                        className="text-[10px] text-mute hover:text-accent"
+                        className="text-[10px] text-mute hover:text-primary"
                       >
                         重命名
                       </button>
