@@ -26,7 +26,7 @@ export class CapabilityDetector {
       // 核心能力 — 双浏览器必备
       tabs: true,
       windows: true,
-      tabGroups: isChrome,
+      tabGroups: this.checkApi('tabGroups'),
       bookmarks: true,
       history: true,
       downloads: true,

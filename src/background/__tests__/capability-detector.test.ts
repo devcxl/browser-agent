@@ -30,6 +30,7 @@ const ALL_APIS: Record<string, any> = {
   notifications: {},
   contextMenus: {},
   alarms: {},
+  tabGroups: {},
   proxy: {},
   privacy: {},
   management: {},
@@ -89,10 +90,10 @@ describe('CapabilityDetector', () => {
       setBrowser(ALL_APIS);
     });
 
-    it('tabGroups / sidePanel / clipboard 为 false', () => {
+    it('sidePanel / clipboard 为 false，tabGroups 运行时检测', () => {
       const detector = new CapabilityDetector(adapter);
       const caps = detector.detect();
-      expect(caps.tabGroups).toBe(false);
+      expect(caps.tabGroups).toBe(true);
       expect(caps.sidePanel).toBe(false);
       expect(caps.clipboard).toBe(false);
     });
@@ -110,7 +111,7 @@ describe('CapabilityDetector', () => {
   describe('缓存', () => {
     it('缓存生效：首次检测后修改 adapter，仍返回缓存结果', () => {
       adapter = createMockAdapter('chrome');
-      setBrowser({ sessions: {} });
+      setBrowser({ sessions: {}, tabGroups: {} });
 
       const detector = new CapabilityDetector(adapter);
       const first = detector.detect();
@@ -123,14 +124,15 @@ describe('CapabilityDetector', () => {
 
     it('invalidateCache 后重新检测', () => {
       adapter = createMockAdapter('chrome');
-      setBrowser({ sessions: {} });
+      setBrowser({ sessions: {}, tabGroups: {} });
 
       const detector = new CapabilityDetector(adapter);
       const first = detector.detect();
       expect(first.tabGroups).toBe(true);
 
       detector.invalidateCache();
-      (adapter as any).browserType = 'firefox';
+      // 移除 tabGroups API 模拟不支持
+      setBrowser({ sessions: {} });
       const second = detector.detect();
       expect(second.tabGroups).toBe(false);
     });
