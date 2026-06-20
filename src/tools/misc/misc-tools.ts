@@ -3,18 +3,25 @@ import type { IJsonRpcClient, ToolDefinition, PreflightResult } from '@/shared/t
 export function createClipboardReadTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
     name: 'clipboard_read',
-    description: '读取剪贴板内容。可读取敏感信息，需用户确认。',
+    description: '读取剪贴板内容。可读取敏感信息，需用户确认。需指定目标标签页 ID。',
     category: 'clipboard',
     riskLevel: 'high',
     confirmationRequired: true,
     resultSensitivity: 'sensitive',
     schema: {
       type: 'object',
-      properties: {},
+      properties: {
+        tabId: { type: 'number', description: '目标标签页 ID（clipboard 操作需在 content script 上下文执行）' },
+      },
+      required: ['tabId'],
     },
     requireContentScript: true,
-    execute: async () => {
-      const data = await rpc.request('clipboard.read', {});
+    execute: async (params) => {
+      const data = await rpc.request('content.execute', {
+        tabId: params.tabId,
+        method: 'clipboard.read',
+        params: {},
+      });
       return { success: true, data };
     },
   };
@@ -23,7 +30,7 @@ export function createClipboardReadTool(rpc: IJsonRpcClient): ToolDefinition {
 export function createClipboardWriteTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
     name: 'clipboard_write',
-    description: '写入文本到剪贴板',
+    description: '写入文本到剪贴板。需指定目标标签页 ID。',
     category: 'clipboard',
     riskLevel: 'low',
     confirmationRequired: false,
@@ -31,13 +38,18 @@ export function createClipboardWriteTool(rpc: IJsonRpcClient): ToolDefinition {
     schema: {
       type: 'object',
       properties: {
+        tabId: { type: 'number', description: '目标标签页 ID' },
         text: { type: 'string', description: '要写入剪贴板的文本' },
       },
-      required: ['text'],
+      required: ['tabId', 'text'],
     },
     requireContentScript: true,
     execute: async (params) => {
-      await rpc.request('clipboard.write', params);
+      await rpc.request('content.execute', {
+        tabId: params.tabId,
+        method: 'clipboard.write',
+        params: { text: params.text },
+      });
       return { success: true };
     },
   };

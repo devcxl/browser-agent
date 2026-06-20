@@ -91,15 +91,19 @@ describe('Misc tools', () => {
       expect(tool.preflight).toBeDefined();
     });
 
-    it('clipboard_read execute 调用 rpc.request("clipboard.read")', async () => {
+    it('clipboard_read execute 调用 content.execute 转发 clipboard.read', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue({ text: 'clipboard content' });
 
       const tools = createMiscTools(rpc);
       const tool = tools.find((t) => t.name === 'clipboard_read')!;
-      const result = await tool.execute({});
+      const result = await tool.execute({ tabId: 123 });
 
-      expect(rpc.request).toHaveBeenCalledWith('clipboard.read', {});
+      expect(rpc.request).toHaveBeenCalledWith('content.execute', {
+        tabId: 123,
+        method: 'clipboard.read',
+        params: {},
+      });
       expect(result).toEqual({ success: true, data: { text: 'clipboard content' } });
     });
 

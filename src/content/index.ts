@@ -28,6 +28,13 @@ export default defineContentScript({
             case 'page.getMetadata':
               result = metadata.getMetadata();
               break;
+            case 'clipboard.read':
+              result = { text: await navigator.clipboard.readText() };
+              break;
+            case 'clipboard.write':
+              await navigator.clipboard.writeText(params?.text ?? '');
+              result = { success: true };
+              break;
             default:
               throw new Error(`未知方法: ${method}`);
           }
