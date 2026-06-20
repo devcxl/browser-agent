@@ -13,7 +13,20 @@ import type {
   NotificationsCreateOptions,
   HistoryItem,
   HistorySearchParams,
-  HistoryDeleteParams,
+  BookmarkSearchQuery,
+  BookmarkCreateArg,
+  BookmarkChangesArg,
+  BookmarkTreeNode,
+  DownloadQuery,
+  DownloadOptions,
+  DownloadItem,
+  CookieDetails,
+  CookieGetAllDetails,
+  CookieSetDetails,
+  Cookie,
+  CookieStore,
+  SessionFilter,
+  Session,
 } from '@/shared/types';
 
 // ==================== IBrowserAdapter ====================
@@ -92,6 +105,62 @@ export interface IBrowserAdapter {
 
   notifications: {
     create(options: NotificationsCreateOptions): Promise<string>;
+  };
+
+  // ── Bookmarks ───────────────────────────────────────
+
+  bookmarks: {
+    search(query: string | BookmarkSearchQuery): Promise<BookmarkTreeNode[]>;
+    create(bookmark: BookmarkCreateArg): Promise<BookmarkTreeNode>;
+    update(id: string, changes: BookmarkChangesArg): Promise<BookmarkTreeNode>;
+    remove(id: string): Promise<void>;
+    getTree(): Promise<BookmarkTreeNode[]>;
+  };
+
+  // ── Downloads ───────────────────────────────────────
+
+  downloads: {
+    search(query: DownloadQuery): Promise<DownloadItem[]>;
+    download(options: DownloadOptions): Promise<number>;
+    erase(query: DownloadQuery): Promise<number[]>;
+    open(downloadId: number): Promise<void>;
+    cancel(downloadId: number): Promise<void>;
+    pause(downloadId: number): Promise<void>;
+    resume(downloadId: number): Promise<void>;
+  };
+
+  // ── Cookies ─────────────────────────────────────────
+
+  cookies: {
+    get(details: CookieDetails): Promise<Cookie | null>;
+    getAll(details: CookieGetAllDetails): Promise<Cookie[]>;
+    set(details: CookieSetDetails): Promise<Cookie | null>;
+    remove(details: CookieDetails): Promise<CookieDetails>;
+    getAllCookieStores(): Promise<CookieStore[]>;
+  };
+
+  // ── Sessions ────────────────────────────────────────
+
+  sessions: {
+    getRecentlyClosed(filter?: SessionFilter): Promise<Session[]>;
+    restore(sessionId?: string): Promise<Session>;
+  };
+
+  // ── Storage ─────────────────────────────────────────
+
+  storage: {
+    local: {
+      get(keys?: string | string[]): Promise<Record<string, unknown>>;
+      set(items: Record<string, unknown>): Promise<void>;
+      remove(keys: string | string[]): Promise<void>;
+    };
+  };
+
+  // ── Clipboard ───────────────────────────────────────
+
+  clipboard: {
+    read(): Promise<string>;
+    write(text: string): Promise<void>;
   };
 }
 

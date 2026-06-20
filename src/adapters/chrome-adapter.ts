@@ -13,7 +13,20 @@ import type {
   NotificationsCreateOptions,
   HistoryItem,
   HistorySearchParams,
-  HistoryDeleteParams,
+  BookmarkSearchQuery,
+  BookmarkCreateArg,
+  BookmarkChangesArg,
+  BookmarkTreeNode,
+  DownloadQuery,
+  DownloadOptions,
+  DownloadItem,
+  CookieDetails,
+  CookieGetAllDetails,
+  CookieSetDetails,
+  Cookie,
+  CookieStore,
+  SessionFilter,
+  Session,
 } from '@/shared/types';
 import type { IBrowserAdapter } from './types';
 import { BrowserEvent } from './types';
@@ -140,6 +153,109 @@ export class ChromeAdapter implements IBrowserAdapter {
 
     deleteAll: (): Promise<void> =>
       chrome.history.deleteAll(),
+  };
+
+  // ── Bookmarks ──────────────────────────────────────
+
+  bookmarks = {
+    search: (query: string | BookmarkSearchQuery): Promise<BookmarkTreeNode[]> =>
+      chrome.bookmarks.search(query as any) as Promise<BookmarkTreeNode[]>,
+
+    create: (bookmark: BookmarkCreateArg): Promise<BookmarkTreeNode> =>
+      chrome.bookmarks.create(bookmark) as Promise<BookmarkTreeNode>,
+
+    update: (id: string, changes: BookmarkChangesArg): Promise<BookmarkTreeNode> =>
+      chrome.bookmarks.update(id, changes) as Promise<BookmarkTreeNode>,
+
+    remove: (id: string): Promise<void> =>
+      chrome.bookmarks.remove(id),
+
+    getTree: (): Promise<BookmarkTreeNode[]> =>
+      chrome.bookmarks.getTree() as Promise<BookmarkTreeNode[]>,
+  };
+
+  // ── Downloads ──────────────────────────────────────
+
+  downloads = {
+    search: (query: DownloadQuery): Promise<DownloadItem[]> =>
+      chrome.downloads.search(query as chrome.downloads.DownloadQuery) as Promise<DownloadItem[]>,
+
+    download: (options: DownloadOptions): Promise<number> =>
+      chrome.downloads.download(options as chrome.downloads.DownloadOptions) as Promise<number>,
+
+    erase: (query: DownloadQuery): Promise<number[]> =>
+      chrome.downloads.erase(query as chrome.downloads.DownloadQuery) as Promise<number[]>,
+
+    open: (downloadId: number): Promise<void> =>
+      new Promise((resolve) => {
+        chrome.downloads.open(downloadId);
+        resolve();
+      }),
+
+    cancel: (downloadId: number): Promise<void> =>
+      chrome.downloads.cancel(downloadId),
+
+    pause: (downloadId: number): Promise<void> =>
+      chrome.downloads.pause(downloadId),
+
+    resume: (downloadId: number): Promise<void> =>
+      chrome.downloads.resume(downloadId),
+  };
+
+  // ── Cookies ────────────────────────────────────────
+
+  cookies = {
+    get: (details: CookieDetails): Promise<Cookie | null> =>
+      chrome.cookies.get(details as chrome.cookies.CookieDetails) as Promise<Cookie | null>,
+
+    getAll: (details: CookieGetAllDetails): Promise<Cookie[]> =>
+      chrome.cookies.getAll(details as chrome.cookies.GetAllDetails) as Promise<Cookie[]>,
+
+    set: (details: CookieSetDetails): Promise<Cookie | null> =>
+      chrome.cookies.set(details as chrome.cookies.SetDetails) as Promise<Cookie | null>,
+
+    remove: (details: CookieDetails): Promise<CookieDetails> =>
+      chrome.cookies.remove(details as chrome.cookies.CookieDetails) as Promise<CookieDetails>,
+
+    getAllCookieStores: (): Promise<CookieStore[]> =>
+      chrome.cookies.getAllCookieStores() as Promise<CookieStore[]>,
+  };
+
+  // ── Sessions ───────────────────────────────────────
+
+  sessions = {
+    getRecentlyClosed: (filter?: SessionFilter): Promise<Session[]> =>
+      chrome.sessions.getRecentlyClosed(filter as chrome.sessions.Filter) as Promise<Session[]>,
+
+    restore: (sessionId?: string): Promise<Session> =>
+      chrome.sessions.restore(sessionId) as Promise<Session>,
+  };
+
+  // ── Storage ────────────────────────────────────────
+
+  storage = {
+    local: {
+      get: (keys?: string | string[]): Promise<Record<string, unknown>> =>
+        chrome.storage.local.get(keys) as Promise<Record<string, unknown>>,
+
+      set: (items: Record<string, unknown>): Promise<void> =>
+        chrome.storage.local.set(items),
+
+      remove: (keys: string | string[]): Promise<void> =>
+        chrome.storage.local.remove(keys),
+    },
+  };
+
+  // ── Clipboard ──────────────────────────────────────
+  // Chrome MV3 中 background 无 DOM，navigator.clipboard 不可用
+  // 需通过 offscreen document，此处标记为不支持，由调用方处理
+
+  clipboard = {
+    read: (): Promise<string> =>
+      Promise.reject(new Error('Clipboard read requires content script context')),
+
+    write: (_text: string): Promise<void> =>
+      Promise.reject(new Error('Clipboard write requires content script context')),
   };
 
   // ── Event ───────────────────────────────────────────

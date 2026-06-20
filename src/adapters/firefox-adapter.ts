@@ -13,7 +13,20 @@ import type {
   NotificationsCreateOptions,
   HistoryItem,
   HistorySearchParams,
-  HistoryDeleteParams,
+  BookmarkSearchQuery,
+  BookmarkCreateArg,
+  BookmarkChangesArg,
+  BookmarkTreeNode,
+  DownloadQuery,
+  DownloadOptions,
+  DownloadItem,
+  CookieDetails,
+  CookieGetAllDetails,
+  CookieSetDetails,
+  Cookie,
+  CookieStore,
+  SessionFilter,
+  Session,
 } from '@/shared/types';
 import type { IBrowserAdapter } from './types';
 import { BrowserEvent } from './types';
@@ -148,6 +161,105 @@ export class FirefoxAdapter implements IBrowserAdapter {
 
     deleteAll: (): Promise<void> =>
       this.browser.history.deleteAll(),
+  };
+
+  // ── Bookmarks ──────────────────────────────────────
+
+  bookmarks = {
+    search: (query: string | BookmarkSearchQuery): Promise<BookmarkTreeNode[]> =>
+      this.browser.bookmarks.search(query),
+
+    create: (bookmark: BookmarkCreateArg): Promise<BookmarkTreeNode> =>
+      this.browser.bookmarks.create(bookmark),
+
+    update: (id: string, changes: BookmarkChangesArg): Promise<BookmarkTreeNode> =>
+      this.browser.bookmarks.update(id, changes),
+
+    remove: (id: string): Promise<void> =>
+      this.browser.bookmarks.remove(id),
+
+    getTree: (): Promise<BookmarkTreeNode[]> =>
+      this.browser.bookmarks.getTree(),
+  };
+
+  // ── Downloads ──────────────────────────────────────
+
+  downloads = {
+    search: (query: DownloadQuery): Promise<DownloadItem[]> =>
+      this.browser.downloads.search(query),
+
+    download: (options: DownloadOptions): Promise<number> =>
+      this.browser.downloads.download(options),
+
+    erase: (query: DownloadQuery): Promise<number[]> =>
+      this.browser.downloads.erase(query),
+
+    open: (downloadId: number): Promise<void> =>
+      this.browser.downloads.open(downloadId),
+
+    cancel: (downloadId: number): Promise<void> =>
+      this.browser.downloads.cancel(downloadId),
+
+    pause: (downloadId: number): Promise<void> =>
+      this.browser.downloads.pause(downloadId),
+
+    resume: (downloadId: number): Promise<void> =>
+      this.browser.downloads.resume(downloadId),
+  };
+
+  // ── Cookies ────────────────────────────────────────
+
+  cookies = {
+    get: (details: CookieDetails): Promise<Cookie | null> =>
+      this.browser.cookies.get(details),
+
+    getAll: (details: CookieGetAllDetails): Promise<Cookie[]> =>
+      this.browser.cookies.getAll(details),
+
+    set: (details: CookieSetDetails): Promise<Cookie | null> =>
+      this.browser.cookies.set(details),
+
+    remove: (details: CookieDetails): Promise<CookieDetails> =>
+      this.browser.cookies.remove(details),
+
+    getAllCookieStores: (): Promise<CookieStore[]> =>
+      this.browser.cookies.getAllCookieStores(),
+  };
+
+  // ── Sessions ───────────────────────────────────────
+
+  sessions = {
+    getRecentlyClosed: (filter?: SessionFilter): Promise<Session[]> =>
+      this.browser.sessions.getRecentlyClosed(filter),
+
+    restore: (sessionId?: string): Promise<Session> =>
+      this.browser.sessions.restore(sessionId),
+  };
+
+  // ── Storage ────────────────────────────────────────
+
+  storage = {
+    local: {
+      get: (keys?: string | string[]): Promise<Record<string, unknown>> =>
+        this.browser.storage.local.get(keys),
+
+      set: (items: Record<string, unknown>): Promise<void> =>
+        this.browser.storage.local.set(items),
+
+      remove: (keys: string | string[]): Promise<void> =>
+        this.browser.storage.local.remove(keys),
+    },
+  };
+
+  // ── Clipboard ──────────────────────────────────────
+  // Firefox background 同样无 DOM，clipboard 需 content script 上下文
+
+  clipboard = {
+    read: (): Promise<string> =>
+      Promise.reject(new Error('Clipboard read requires content script context')),
+
+    write: (_text: string): Promise<void> =>
+      Promise.reject(new Error('Clipboard write requires content script context')),
   };
 
   // ── Event ───────────────────────────────────────────
