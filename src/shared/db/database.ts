@@ -1,6 +1,5 @@
-import { openDB } from 'idb';
 import type { BrowserAgentDatabase, BrowserAgentDB } from './schema';
-import { DB_NAME, DB_VERSION, StoreNames } from './schema';
+import { DB_NAME, DB_VERSION, StoreNames, openBrowserAgentDB } from './schema';
 
 /**
  * IndexedDB 数据库管理
@@ -211,23 +210,6 @@ export class Database {
   // ── 初始化 ──────────────────────────────────────────
 
   private async initDB(): Promise<BrowserAgentDatabase> {
-    return openDB<BrowserAgentDB>(DB_NAME, DB_VERSION, {
-      upgrade(db, oldVersion, _newVersion, _transaction) {
-        if (oldVersion < 1) {
-          const convStore = db.createObjectStore(StoreNames.CONVERSATIONS, { keyPath: 'id' });
-          convStore.createIndex('byUpdatedAt', 'updatedAt');
-
-          const msgStore = db.createObjectStore(StoreNames.MESSAGES, { keyPath: 'id' });
-          msgStore.createIndex('byConversation', 'conversationId');
-          msgStore.createIndex('byConversationAndTime', ['conversationId', 'timestamp']);
-
-          const logStore = db.createObjectStore(StoreNames.TOOL_CALL_LOGS, { keyPath: 'id' });
-          logStore.createIndex('byConversation', 'conversationId');
-
-          const snapStore = db.createObjectStore(StoreNames.SNAPSHOTS, { keyPath: 'id' });
-          snapStore.createIndex('byCapturedAt', 'capturedAt');
-        }
-      },
-    });
+    return openBrowserAgentDB();
   }
 }

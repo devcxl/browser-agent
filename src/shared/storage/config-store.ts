@@ -90,7 +90,6 @@ export class ConfigStore implements IConfigStore {
   onChange(callback: (changes: Partial<StorageSchema>) => void): () => void {
     const handler = (
       changes: Record<string, chrome.storage.StorageChange>,
-      _areaName: string,
     ) => {
       const typedChanges: Partial<StorageSchema> = {};
       for (const [key, change] of Object.entries(changes)) {

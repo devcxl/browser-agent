@@ -6,14 +6,14 @@ import { ConfigStore } from '../config-store';
  */
 function mockChromeStorage() {
   const storage: Record<string, unknown> = {};
-  const listeners: Array<(changes: Record<string, chrome.storage.StorageChange>, areaName: string) => void> = [];
+  const listeners: Array<(changes: Record<string, chrome.storage.StorageChange>) => void> = [];
 
   const mock = {
     get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {
       if (keys === null) {
         return { ...storage };
       }
-      const keysArr = Array.isArray(keys) ? keys : [keys];
+      const keysArr = Array.isArray(keys) ? (keys as string[]) : [keys as string];
       const result: Record<string, unknown> = {};
       for (const key of keysArr) {
         if (key in storage) {
@@ -30,7 +30,7 @@ function mockChromeStorage() {
         changes[key] = { newValue, oldValue: storage[key] };
       }
       for (const listener of listeners) {
-        listener(changes, 'local');
+        listener(changes);
       }
     }),
     clear: vi.fn(async () => {
@@ -117,12 +117,12 @@ describe('ConfigStore', () => {
     const callback = vi.fn();
     store.onChange(callback);
 
-    // 直接触发 chrome.storage.onChanged
+      // 直接触发 chrome.storage.onChanged
     const change: Record<string, chrome.storage.StorageChange> = {
       providers: { newValue: [{ id: 'p1' }] },
     };
     for (const listener of chromeMock.listeners) {
-      listener(change, 'local');
+      listener(change);
     }
 
     expect(callback).toHaveBeenCalledWith({ providers: [{ id: 'p1' }] });
@@ -139,7 +139,7 @@ describe('ConfigStore', () => {
       providers: { newValue: [{ id: 'p1' }] },
     };
     for (const listener of chromeMock.listeners) {
-      listener(change, 'local');
+      listener(change);
     }
 
     expect(callback).not.toHaveBeenCalled();
