@@ -4,6 +4,7 @@ import { BrowserEvent } from '../types';
 
 function createMockBrowser() {
   const mockTab = { id: 1, title: 'test', index: 0, windowId: 1, groupId: -1, active: true, pinned: false, discarded: false, incognito: false };
+  const mockGroup = { id: 1, title: 'test-group', color: 'blue', collapsed: false, windowId: 1 };
 
   const mockEvent: any = {
     addListener: vi.fn(),
@@ -18,6 +19,8 @@ function createMockBrowser() {
       update: vi.fn().mockResolvedValue(mockTab),
       remove: vi.fn().mockResolvedValue(undefined),
       move: vi.fn().mockResolvedValue([mockTab]),
+      group: vi.fn().mockResolvedValue(1),
+      ungroup: vi.fn().mockResolvedValue(undefined),
       getCurrent: vi.fn().mockResolvedValue(mockTab),
       reload: vi.fn().mockResolvedValue(undefined),
       duplicate: vi.fn().mockResolvedValue(mockTab),
@@ -41,6 +44,14 @@ function createMockBrowser() {
       onCreated: mockEvent,
       onRemoved: mockEvent,
       onFocusChanged: mockEvent,
+    },
+    tabGroups: {
+      query: vi.fn().mockResolvedValue([mockGroup]),
+      get: vi.fn().mockResolvedValue(mockGroup),
+      update: vi.fn().mockResolvedValue(mockGroup),
+      move: vi.fn().mockResolvedValue(mockGroup),
+      onUpdated: mockEvent,
+      onMoved: mockEvent,
     },
     history: {
       search: vi.fn().mockResolvedValue([]),
@@ -104,12 +115,15 @@ describe('FirefoxAdapter', () => {
       expect(mockBrowser.tabs.move).toHaveBeenCalledWith([1, 2], { index: 0 });
     });
 
-    it('group reject with Error', async () => {
-      await expect(adapter.tabs.group({ tabIds: [1, 2] })).rejects.toThrow('tabGroups is not supported in Firefox');
+    it('group 正确转发到 browser.tabs.group', async () => {
+      const groupId = await adapter.tabs.group({ tabIds: [1, 2] });
+      expect(mockBrowser.tabs.group).toHaveBeenCalledWith({ tabIds: [1, 2] });
+      expect(groupId).toBe(1);
     });
 
-    it('ungroup reject with Error', async () => {
-      await expect(adapter.tabs.ungroup([1, 2])).rejects.toThrow('tabGroups is not supported in Firefox');
+    it('ungroup 正确转发到 browser.tabs.ungroup', async () => {
+      await adapter.tabs.ungroup([1, 2]);
+      expect(mockBrowser.tabs.ungroup).toHaveBeenCalledWith([1, 2]);
     });
 
     it('getCurrent 正确转发到 browser.tabs.getCurrent', async () => {
@@ -172,24 +186,28 @@ describe('FirefoxAdapter', () => {
     });
   });
 
-  // ── TabGroups (Firefox: no-op) ───────────────────
+  // ── TabGroups ───────────────────────────────────
 
   describe('tabGroups', () => {
-    it('query 返回空数组', async () => {
+    it('query 正确转发到 browser.tabGroups.query', async () => {
       const result = await adapter.tabGroups.query({});
-      expect(result).toEqual([]);
+      expect(mockBrowser.tabGroups.query).toHaveBeenCalledWith({});
+      expect(result).toBeDefined();
     });
 
-    it('get reject with Error', async () => {
-      await expect(adapter.tabGroups.get(1)).rejects.toThrow('tabGroups is not supported in Firefox');
+    it('get 正确转发到 browser.tabGroups.get', async () => {
+      await adapter.tabGroups.get(1);
+      expect(mockBrowser.tabGroups.get).toHaveBeenCalledWith(1);
     });
 
-    it('update reject with Error', async () => {
-      await expect(adapter.tabGroups.update(1, { collapsed: true })).rejects.toThrow('tabGroups is not supported in Firefox');
+    it('update 正确转发到 browser.tabGroups.update', async () => {
+      await adapter.tabGroups.update(1, { collapsed: true });
+      expect(mockBrowser.tabGroups.update).toHaveBeenCalledWith(1, { collapsed: true });
     });
 
-    it('move reject with Error', async () => {
-      await expect(adapter.tabGroups.move(1, { index: 0 })).rejects.toThrow('tabGroups is not supported in Firefox');
+    it('move 正确转发到 browser.tabGroups.move', async () => {
+      await adapter.tabGroups.move(1, { index: 0 });
+      expect(mockBrowser.tabGroups.move).toHaveBeenCalledWith(1, { index: 0 });
     });
   });
 
@@ -257,12 +275,10 @@ describe('FirefoxAdapter', () => {
       expect(mockBrowser.windows.onCreated.addListener).toHaveBeenCalledWith(cb);
     });
 
-    it('tabGroups 事件返回 no-op 不抛异常', () => {
+    it('tabGroups 事件正确注册', () => {
       const cb = vi.fn();
-      const result = adapter.addListener(BrowserEvent.TAB_GROUP_UPDATED, cb);
-      expect(result).toBeInstanceOf(Function);
-      // 不应该调用任何 addListener
-      expect(mockBrowser.tabs.onCreated.addListener).not.toHaveBeenCalled();
+      adapter.addListener(BrowserEvent.TAB_GROUP_UPDATED, cb);
+      expect(mockBrowser.tabGroups.onUpdated.addListener).toHaveBeenCalledWith(cb);
     });
 
     it('注册事件后返回的取消函数能正确移除监听器', () => {

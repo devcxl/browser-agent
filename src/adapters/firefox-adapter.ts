@@ -31,11 +31,10 @@ import type {
 import type { IBrowserAdapter } from './types';
 import { BrowserEvent } from './types';
 
-const TAB_GROUPS_NOT_SUPPORTED = 'tabGroups is not supported in Firefox';
-
 /**
  * Firefox 浏览器适配器
- * Firefox 使用 `browser.*` 命名空间，且不支持 tabGroups API
+ * Firefox 使用 `browser.*` 命名空间
+ * Firefox 152+ 已支持 tabGroups API
  */
 export class FirefoxAdapter implements IBrowserAdapter {
   readonly browserType = 'firefox' as const;
@@ -69,15 +68,15 @@ export class FirefoxAdapter implements IBrowserAdapter {
     ): Promise<Tab | Tab[]> =>
       this.browser.tabs.move(tabIds, moveProperties),
 
-    group: (_options: {
+    group: (options: {
       tabIds: number | number[];
       groupId?: number;
       createProperties?: { windowId?: number };
     }): Promise<number> =>
-      Promise.reject(new Error(TAB_GROUPS_NOT_SUPPORTED)),
+      this.browser.tabs.group(options),
 
-    ungroup: (_tabIds: number | number[]): Promise<void> =>
-      Promise.reject(new Error(TAB_GROUPS_NOT_SUPPORTED)),
+    ungroup: (tabIds: number | number[]): Promise<void> =>
+      this.browser.tabs.ungroup(tabIds),
 
     getCurrent: (): Promise<Tab> =>
       this.browser.tabs.getCurrent(),
@@ -117,23 +116,23 @@ export class FirefoxAdapter implements IBrowserAdapter {
       this.browser.windows.getLastFocused(getInfo),
   };
 
-  // ── TabGroups (Firefox: 全部 no-op) ────────────────
+  // ── TabGroups ──────────────────────────────────────
 
   tabGroups = {
-    query: (_queryInfo: TabGroupQueryInfo): Promise<TabGroup[]> =>
-      Promise.resolve([]),
+    query: (queryInfo: TabGroupQueryInfo): Promise<TabGroup[]> =>
+      this.browser.tabGroups.query(queryInfo),
 
-    get: (_groupId: number): Promise<TabGroup> =>
-      Promise.reject(new Error(TAB_GROUPS_NOT_SUPPORTED)),
+    get: (groupId: number): Promise<TabGroup> =>
+      this.browser.tabGroups.get(groupId),
 
-    update: (_groupId: number, _updateProperties: TabGroupUpdateProperties): Promise<TabGroup> =>
-      Promise.reject(new Error(TAB_GROUPS_NOT_SUPPORTED)),
+    update: (groupId: number, updateProperties: TabGroupUpdateProperties): Promise<TabGroup> =>
+      this.browser.tabGroups.update(groupId, updateProperties),
 
     move: (
-      _groupId: number,
-      _moveProperties: { windowId?: number; index: number },
+      groupId: number,
+      moveProperties: { windowId?: number; index: number },
     ): Promise<TabGroup> =>
-      Promise.reject(new Error(TAB_GROUPS_NOT_SUPPORTED)),
+      this.browser.tabGroups.move(groupId, moveProperties),
   };
 
   // ── Notifications ──────────────────────────────────
@@ -267,7 +266,6 @@ export class FirefoxAdapter implements IBrowserAdapter {
   addListener(event: BrowserEvent, callback: (...args: any[]) => void): () => void {
     const api = this.resolveEventApi(event);
     if (!api) {
-      // Firefox 不支持 tabGroups 事件，返回 no-op
       return () => {};
     }
     api.addListener(callback);
