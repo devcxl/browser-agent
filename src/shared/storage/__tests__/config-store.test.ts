@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ConfigStore } from '../config-store';
 
 /**
- * 创建 mock chrome.storage.local
+ * 创建 mock browser.storage.local
  */
-function mockChromeStorage() {
+function mockBrowserStorage() {
   const storage: Record<string, unknown> = {};
-  const listeners: Array<(changes: Record<string, chrome.storage.StorageChange>) => void> = [];
+  const listeners: Array<(changes: Record<string, browser.storage.StorageChange>) => void> = [];
 
   const mock = {
     get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {
@@ -24,8 +24,7 @@ function mockChromeStorage() {
     }),
     set: vi.fn(async (items: Record<string, unknown>) => {
       Object.assign(storage, items);
-      // 触发 onChanged
-      const changes: Record<string, chrome.storage.StorageChange> = {};
+      const changes: Record<string, browser.storage.StorageChange> = {};
       for (const [key, newValue] of Object.entries(items)) {
         changes[key] = { newValue, oldValue: storage[key] };
       }
@@ -51,12 +50,12 @@ function mockChromeStorage() {
 }
 
 describe('ConfigStore', () => {
-  let chromeMock: ReturnType<typeof mockChromeStorage>;
+  let browserMock: ReturnType<typeof mockBrowserStorage>;
 
   beforeEach(() => {
-    chromeMock = mockChromeStorage();
-    vi.stubGlobal('chrome', {
-      storage: { local: chromeMock.mock },
+    browserMock = mockBrowserStorage();
+    vi.stubGlobal('browser', {
+      storage: { local: browserMock.mock },
     });
     ConfigStore.resetInstance();
   });
@@ -71,8 +70,8 @@ describe('ConfigStore', () => {
   // #2 get 存在值
   it('should return stored value via get', async () => {
     const store = ConfigStore.getInstance();
-    // 模拟 chrome.storage.local.get 返回数据
-    chromeMock.mock.get.mockResolvedValueOnce({ providers: [{ id: 'p1' }] });
+    // 模拟 browser.storage.local.get 返回数据
+    browserMock.mock.get.mockResolvedValueOnce({ providers: [{ id: 'p1' }] });
     const result = await store.get('providers');
     expect(result).toEqual([{ id: 'p1' }]);
   });
@@ -80,7 +79,7 @@ describe('ConfigStore', () => {
   // #3 get 不存在返回默认值
   it('should return default value when key is not stored', async () => {
     const store = ConfigStore.getInstance();
-    chromeMock.mock.get.mockResolvedValueOnce({});
+    browserMock.mock.get.mockResolvedValueOnce({});
     const result = await store.get<unknown[]>('providers');
     expect(result).toEqual([]);
   });
@@ -88,7 +87,7 @@ describe('ConfigStore', () => {
   // #4 getAll 合并默认值
   it('should merge stored values with defaults', async () => {
     const store = ConfigStore.getInstance();
-    chromeMock.mock.get.mockResolvedValueOnce({ providers: [{ id: 'p1' }] });
+    browserMock.mock.get.mockResolvedValueOnce({ providers: [{ id: 'p1' }] });
     const result = await store.getAll();
     expect(result.providers).toEqual([{ id: 'p1' }]);
     expect(result.agentSettings.maxToolRounds).toBe(15);
@@ -99,14 +98,14 @@ describe('ConfigStore', () => {
   it('should call chrome.storage.local.set', async () => {
     const store = ConfigStore.getInstance();
     await store.set('providers', [{ id: 'p2' }]);
-    expect(chromeMock.mock.set).toHaveBeenCalledWith({ providers: [{ id: 'p2' }] });
+    expect(browserMock.mock.set).toHaveBeenCalledWith({ providers: [{ id: 'p2' }] });
   });
 
   // #6 patch
   it('should call chrome.storage.local.set with partial', async () => {
     const store = ConfigStore.getInstance();
     await store.patch({ preferences: { theme: 'dark', language: 'zh-CN', sidebarExpanded: false } });
-    expect(chromeMock.mock.set).toHaveBeenCalledWith({
+    expect(browserMock.mock.set).toHaveBeenCalledWith({
       preferences: { theme: 'dark', language: 'zh-CN', sidebarExpanded: false },
     });
   });
@@ -121,7 +120,7 @@ describe('ConfigStore', () => {
     const change: Record<string, chrome.storage.StorageChange> = {
       providers: { newValue: [{ id: 'p1' }] },
     };
-    for (const listener of chromeMock.listeners) {
+    for (const listener of browserMock.listeners) {
       listener(change);
     }
 
@@ -138,7 +137,7 @@ describe('ConfigStore', () => {
     const change: Record<string, chrome.storage.StorageChange> = {
       providers: { newValue: [{ id: 'p1' }] },
     };
-    for (const listener of chromeMock.listeners) {
+    for (const listener of browserMock.listeners) {
       listener(change);
     }
 
@@ -149,7 +148,7 @@ describe('ConfigStore', () => {
   it('should call chrome.storage.local.clear', async () => {
     const store = ConfigStore.getInstance();
     await store.clear();
-    expect(chromeMock.mock.clear).toHaveBeenCalled();
+    expect(browserMock.mock.clear).toHaveBeenCalled();
   });
 
   // #10 getDefaults

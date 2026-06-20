@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ChatProvider, useChat } from './ChatContext';
 import { ChatView } from './components/ChatView';
 import { MessageInput } from './components/MessageInput';
@@ -6,8 +6,12 @@ import { ConversationSidebar } from './components/ConversationSidebar';
 import { BrowserStatePanel } from './components/BrowserStatePanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import { ErrorBoundary } from './ErrorBoundary';
+import { ConfigStore } from '@/shared/storage';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig } from '@/shared/types';
+
+const store = ConfigStore.getInstance();
 
 function AgentStatusIndicator() {
   const { agent } = useChat();
@@ -37,7 +41,7 @@ function ChatLayout() {
   const [browserCollapsed, setBrowserCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Settings state (in-memory; persisted through ConfigStore)
+  // Settings state (persisted via ConfigStore → browser.storage.local)
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     maxToolRounds: 15,
@@ -48,6 +52,43 @@ function ChatLayout() {
     enabled: false,
     switches: {},
   });
+
+  // 初始化：从 storage 加载
+  useEffect(() => {
+    (async () => {
+      setProviders(await store.get('providers'));
+      const saved = await store.get('agentSettings');
+      setAgentSettings({
+        maxToolRounds: saved.maxToolRounds,
+        maxContextMessages: saved.maxContextMessages,
+        systemPrompt: saved.systemPrompt,
+      });
+      setExpertMode(await store.get('expertModeSettings'));
+    })();
+  }, []);
+
+  // 持久化回调
+  const handleSaveProviders = useCallback((p: ProviderConfig[]) => {
+    setProviders(p);
+    store.set('providers', p);
+  }, []);
+  const handleSaveAgentSettings = useCallback((s: AgentSettings) => {
+    setAgentSettings(s);
+    store.set('agentSettings', {
+      maxToolRounds: s.maxToolRounds,
+      systemPrompt: s.systemPrompt,
+      maxContextMessages: s.maxContextMessages,
+      summaryThreshold: {
+        messageCount: 30,
+        estimatedTokens: 12000,
+        toolCallCount: 50,
+      },
+    });
+  }, []);
+  const handleSaveExpertMode = useCallback((e: ExpertModeSettings) => {
+    setExpertMode(e);
+    store.set('expertModeSettings', e);
+  }, []);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -77,7 +118,7 @@ function ChatLayout() {
   }, [conversations, agent]);
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-full flex flex-col bg-gray-50">
       {/* Header */}
       <header className="h-10 border-b border-gray-200 bg-white flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3">
@@ -134,9 +175,9 @@ function ChatLayout() {
           providers={providers}
           agentSettings={agentSettings}
           expertMode={expertMode}
-          onSaveProviders={setProviders}
-          onSaveAgentSettings={setAgentSettings}
-          onSaveExpertMode={setExpertMode}
+          onSaveProviders={handleSaveProviders}
+          onSaveAgentSettings={handleSaveAgentSettings}
+          onSaveExpertMode={handleSaveExpertMode}
           onTestConnection={handleTestConnection}
           onClose={() => setShowSettings(false)}
         />
@@ -156,8 +197,10 @@ function ChatLayout() {
 
 export default function App() {
   return (
-    <ChatProvider>
-      <ChatLayout />
-    </ChatProvider>
+    <ErrorBoundary>
+      <ChatProvider>
+        <ChatLayout />
+      </ChatProvider>
+    </ErrorBoundary>
   );
 }

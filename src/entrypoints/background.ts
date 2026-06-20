@@ -14,5 +14,9 @@ export default defineBackground(() => {
     return capabilityDetector.detect();
   });
 
+  browser.action.onClicked.addListener(() => {
+    browser.tabs.create({ url: browser.runtime.getURL('chat.html') });
+  });
+
   console.log('[Background] RPC server ready, capabilities:', capabilityDetector.detect());
 });

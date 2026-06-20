@@ -2,11 +2,9 @@
 set -euo pipefail
 echo "Cleaning dist..."
 rm -rf dist/
-echo "Building Chrome..."
-npm run build:chrome
-echo "Building Firefox..."
-npm run build:firefox
-echo "Creating zip packages..."
-npm run zip
+echo "Building & packaging Chrome..."
+npx wxt zip -b chrome
+echo "Building & packaging Firefox..."
+npx wxt zip -b firefox --mv3
 echo "Build complete!"
 ls -lh dist/

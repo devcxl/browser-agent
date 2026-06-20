@@ -46,10 +46,10 @@ export class ConfigStore implements IConfigStore {
     ConfigStore.instance = null;
   }
 
-  private storage: chrome.storage.LocalStorageArea;
+  private storage: typeof browser.storage.local;
 
   constructor() {
-    this.storage = chrome.storage.local;
+    this.storage = browser.storage.local;
   }
 
   // ── 读取 ────────────────────────────────────────────
