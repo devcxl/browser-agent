@@ -48,6 +48,7 @@ export function initBackground(): {
       (p as any).params,
     ),
   );
+  router.register('notifications.create', (p) => adapter.notifications.create(p as any));
 
   // 管理已连接的 Chat Page Port
   const connectedPorts = new Set<ReturnType<typeof browser.runtime.connect>>();

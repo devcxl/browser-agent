@@ -10,6 +10,7 @@ import type {
   WindowUpdateInfo,
   TabGroupQueryInfo,
   TabGroupUpdateProperties,
+  NotificationsCreateOptions,
 } from '@/shared/types';
 import type { IBrowserAdapter } from './types';
 import { BrowserEvent } from './types';
@@ -110,6 +111,16 @@ export class ChromeAdapter implements IBrowserAdapter {
       moveProperties: { windowId?: number; index: number },
     ): Promise<TabGroup> =>
       chrome.tabGroups.move(groupId, moveProperties) as Promise<TabGroup>,
+  };
+
+  // ── Notifications ──────────────────────────────────
+
+  notifications = {
+    create: (options: NotificationsCreateOptions): Promise<string> => {
+      return new Promise((resolve) => {
+        chrome.notifications.create('', options as any, (id) => resolve(id));
+      });
+    },
   };
 
   // ── Event ───────────────────────────────────────────

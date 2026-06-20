@@ -53,7 +53,9 @@ function createMockChrome() {
       onMoved: mockEvent,
     },
     notifications: {
-      create: vi.fn().mockResolvedValue('notif-42'),
+      create: vi.fn().mockImplementation((_id, _options, cb) => {
+        cb('notif-42');
+      }),
     },
   };
 }

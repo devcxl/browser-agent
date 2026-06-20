@@ -10,6 +10,7 @@ import type {
   WindowUpdateInfo,
   TabGroupQueryInfo,
   TabGroupUpdateProperties,
+  NotificationsCreateOptions,
 } from '@/shared/types';
 import type { IBrowserAdapter } from './types';
 import { BrowserEvent } from './types';
@@ -117,6 +118,17 @@ export class FirefoxAdapter implements IBrowserAdapter {
       _moveProperties: { windowId?: number; index: number },
     ): Promise<TabGroup> =>
       Promise.reject(new Error(TAB_GROUPS_NOT_SUPPORTED)),
+  };
+
+  // ── Notifications ──────────────────────────────────
+
+  notifications = {
+    create: (options: NotificationsCreateOptions): Promise<string> => {
+      if (typeof this.browser?.notifications?.create !== 'function') {
+        return Promise.reject(new Error('notifications API not available in this Firefox version'));
+      }
+      return this.browser.notifications.create(options);
+    },
   };
 
   // ── Event ───────────────────────────────────────────
