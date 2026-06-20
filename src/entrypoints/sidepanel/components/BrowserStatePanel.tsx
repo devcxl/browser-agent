@@ -31,13 +31,13 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
         <div className="flex-1 overflow-y-auto p-2 space-y-2 text-xs">
           {loading && (
             <div className="flex items-center justify-center py-8 text-mute">
-              <span className="inline-block w-3 h-3 border-2 border-ash border-t-accent rounded-full animate-spin mr-2" />
+              <span className="inline-block w-3 h-3 border-2 border-ash border-t-primary rounded-full animate-spin mr-2" />
               加载中...
             </div>
           )}
 
           {error && (
-            <div className="text-danger bg-red-50 rounded-sm px-2 py-1">
+            <div className="text-danger bg-red-50 rounded-md px-2 py-1">
               错误: {error}
             </div>
           )}
@@ -48,7 +48,6 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
 
           {!loading && state && (
             <>
-              {/* Windows */}
               <p className="text-[10px] font-semibold text-mute uppercase tracking-wider">
                 窗口 ({state.windows.length})
               </p>
@@ -56,7 +55,7 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
                 <div
                   key={w.id}
                   className={cn(
-                    'rounded-sm px-2 py-1',
+                    'rounded-md px-2 py-1',
                     w.focused ? 'bg-surface-soft border border-hairline-strong' : 'bg-surface-soft',
                   )}
                 >
@@ -65,7 +64,7 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
                       {w.title ?? `窗口 ${w.id}`}
                     </span>
                     {w.focused && (
-                      <span className="text-[9px] bg-ink text-canvas px-1 rounded-sm">
+                      <span className="text-[9px] bg-primary text-on-primary px-1 rounded-full">
                         活跃
                       </span>
                     )}
@@ -74,7 +73,6 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
                 </div>
               ))}
 
-              {/* Tabs */}
               <p className="text-[10px] font-semibold text-mute uppercase tracking-wider pt-2">
                 标签页 ({state.tabs.length})
               </p>
@@ -82,7 +80,7 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
                 <div
                   key={t.id}
                   className={cn(
-                    'rounded-sm px-2 py-1 flex items-center gap-1.5',
+                    'rounded-md px-2 py-1 flex items-center gap-1.5',
                     t.active ? 'bg-surface-soft border border-hairline-strong' : 'hover:bg-surface-soft',
                   )}
                 >

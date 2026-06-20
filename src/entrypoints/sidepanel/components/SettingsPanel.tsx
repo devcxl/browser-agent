@@ -71,8 +71,7 @@ export function SettingsPanel({
       data-testid="settings-panel"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
     >
-      <div className="bg-canvas rounded-sm shadow-xl w-[560px] max-w-[90vw] max-h-[85vh] flex flex-col">
-        {/* Header */}
+      <div className="bg-canvas rounded-xl shadow-xl w-[560px] max-w-[90vw] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-hairline">
           <h2 className="text-base font-semibold text-ink">设置</h2>
           <button
@@ -84,7 +83,6 @@ export function SettingsPanel({
           </button>
         </div>
 
-        {/* Tabs */}
         <div className="flex border-b border-hairline px-5">
           {(['provider', 'agent', 'expert'] as const).map((t) => (
             <button
@@ -97,7 +95,7 @@ export function SettingsPanel({
               className={cn(
                 'px-3 py-2 text-sm font-medium border-b-2 transition-colors',
                 tab === t
-                  ? 'border-ink text-ink'
+                  ? 'border-primary text-ink'
                   : 'border-transparent text-mute hover:text-ink',
               )}
             >
@@ -106,7 +104,6 @@ export function SettingsPanel({
           ))}
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {tab === 'provider' && (
             <div className="space-y-3">
@@ -114,17 +111,16 @@ export function SettingsPanel({
                 <p className="text-sm text-mute">暂无 Provider 配置</p>
               )}
 
-              {/* Provider list */}
               {providers.map((p, idx) => (
                 <div
                   key={p.id}
-                  className="flex items-center justify-between border border-hairline rounded-sm px-3 py-2"
+                  className="flex items-center justify-between border border-hairline rounded-xl px-3 py-2"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-ink">{p.name}</span>
                       {p.isLocalTrusted && (
-                        <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-sm">
+                        <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">
                           Trusted
                         </span>
                       )}
@@ -136,7 +132,7 @@ export function SettingsPanel({
                       type="button"
                       onClick={() => handleTestConnection(idx)}
                       disabled={testingIdx === idx}
-                      className="px-2 py-1 text-xs rounded-sm border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50"
+                      className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50"
                     >
                       {testingIdx === idx ? '测试中...' : '测试'}
                     </button>
@@ -157,14 +153,14 @@ export function SettingsPanel({
                           isLocalTrusted: p.isLocalTrusted,
                         })
                       }
-                      className="px-2 py-1 text-xs rounded-sm border border-hairline text-mute hover:bg-surface-soft"
+                      className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft"
                     >
                       编辑
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteProvider(p.id)}
-                      className="px-2 py-1 text-xs rounded-sm border border-danger/30 text-danger hover:bg-red-50"
+                      className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50"
                     >
                       删除
                     </button>
@@ -172,22 +168,21 @@ export function SettingsPanel({
                 </div>
               ))}
 
-              {/* Add / Edit form */}
               {editing && (
-                <div className="border border-hairline rounded-sm p-3 space-y-2 bg-surface-soft">
+                <div className="border border-hairline rounded-xl p-3 space-y-2 bg-surface-soft">
                   <input
                     data-testid="provider-name-input"
                     placeholder="名称"
                     value={editing.name}
                     onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-sm bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-ink"
+                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
                   <input
                     data-testid="provider-endpoint-input"
                     placeholder="Endpoint (e.g. https://api.openai.com/v1)"
                     value={editing.endpoint}
                     onChange={(e) => setEditing({ ...editing, endpoint: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-sm bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-ink"
+                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
                   <input
                     data-testid="provider-apikey-input"
@@ -195,14 +190,14 @@ export function SettingsPanel({
                     placeholder="API Key"
                     value={editing.apiKey}
                     onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-sm bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-ink"
+                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
                   <input
                     data-testid="provider-model-input"
                     placeholder="模型 (e.g. gpt-4o)"
                     value={editing.model}
                     onChange={(e) => setEditing({ ...editing, model: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-sm bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-ink"
+                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
                   <label className="flex items-center gap-2 text-sm text-mute">
                     <input
@@ -218,14 +213,14 @@ export function SettingsPanel({
                       data-testid="save-provider-button"
                       onClick={handleSaveProvider}
                       disabled={!editing.name || !editing.endpoint || !editing.apiKey || !editing.model}
-                      className="px-3 py-1 text-sm rounded-sm bg-ink text-canvas hover:bg-ink-deep disabled:bg-surface-card disabled:text-ash disabled:cursor-not-allowed"
+                      className="px-3 py-1 text-sm rounded-full bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed"
                     >
                       保存
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditing(null)}
-                      className="px-3 py-1 text-sm rounded-sm border border-hairline-strong text-mute hover:bg-surface-soft"
+                      className="px-3 py-1 text-sm rounded-full border border-hairline-strong text-mute hover:bg-surface-soft"
                     >
                       取消
                     </button>
@@ -238,7 +233,7 @@ export function SettingsPanel({
                   type="button"
                   data-testid="add-provider-button"
                   onClick={() => setEditing(defaultForm)}
-                  className="w-full py-2 text-sm rounded-sm border-2 border-dashed border-ash text-mute hover:border-ink hover:text-ink"
+                  className="w-full py-2 text-sm rounded-xl border-2 border-dashed border-ash text-mute hover:border-ink hover:text-ink"
                 >
                   + 添加 Provider
                 </button>
@@ -256,7 +251,7 @@ export function SettingsPanel({
                   onChange={(e) =>
                     onSaveAgentSettings({ ...agentSettings, maxToolRounds: Number(e.target.value) })
                   }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-sm bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-ink"
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
                   min={1}
                   max={100}
                 />
@@ -269,7 +264,7 @@ export function SettingsPanel({
                   onChange={(e) =>
                     onSaveAgentSettings({ ...agentSettings, maxContextMessages: Number(e.target.value) })
                   }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-sm bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-ink"
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
                   min={1}
                   max={200}
                 />
@@ -281,7 +276,7 @@ export function SettingsPanel({
                   onChange={(e) =>
                     onSaveAgentSettings({ ...agentSettings, reasoningEffort: e.target.value as ReasoningEffort })
                   }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-sm bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-ink"
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
                 >
                   <option value="low">Low（低）</option>
                   <option value="medium">Medium（中）</option>
@@ -300,7 +295,7 @@ export function SettingsPanel({
                     onSaveAgentSettings({ ...agentSettings, systemPrompt: e.target.value })
                   }
                   rows={4}
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-sm bg-surface-soft text-ink resize-none focus:outline-none focus:bg-canvas focus:border-ink"
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink resize-none focus:outline-none focus:bg-canvas focus:border-primary"
                 />
               </label>
             </div>
@@ -346,7 +341,7 @@ export function SettingsPanel({
                         switches: { ...expertMode.switches, 'new-switch': false },
                       })
                     }
-                    className="text-xs text-accent hover:text-accent-hover"
+                    className="text-xs text-primary hover:text-primary-active"
                   >
                     + 添加子开关
                   </button>
