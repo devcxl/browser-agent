@@ -83,24 +83,31 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    let cancelled = false;
     setMessagesLoading(true);
     setMessagesError(null);
 
     (async () => {
       try {
         const conv = await manager.get(activeId);
+        if (cancelled) return;
         if (conv) {
           setMessages(conv.messages.map(storedMessageToUIMessage));
         } else {
           setMessages([]);
         }
       } catch (e) {
+        if (cancelled) return;
         setMessagesError((e as Error).message);
         setMessages([]);
       } finally {
-        setMessagesLoading(false);
+        if (!cancelled) setMessagesLoading(false);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [conversations.activeId]);
 
   return (

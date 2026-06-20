@@ -72,11 +72,14 @@ export function useConversations() {
   useEffect(() => {
     if (initialRestoredRef.current || loading) return;
     initialRestoredRef.current = true;
+    let cancelled = false;
 
     (async () => {
       const savedId = await store.get<string | undefined>('activeConversationId');
+      if (cancelled) return;
       if (savedId) {
         const conv = await manager.get(savedId);
+        if (cancelled) return;
         if (conv) {
           setActiveId(savedId);
           return;
@@ -84,11 +87,16 @@ export function useConversations() {
       }
       // 降级：选最近更新的会话
       const convs = await manager.list();
+      if (cancelled) return;
       if (convs.length > 0) {
         const sorted = [...convs].sort((a, b) => b.updatedAt - a.updatedAt);
         setActiveId(sorted[0]!.id);
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [loading]);
 
   return { list, activeId, loading, error, create, select, rename, remove, refresh };
