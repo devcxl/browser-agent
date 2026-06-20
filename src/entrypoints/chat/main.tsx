@@ -1,9 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-
-function App() {
-  return <div className="p-4 text-lg">Browser Agent</div>;
-}
+import App from './App';
 
 const root = document.getElementById('root');
 if (root) {
