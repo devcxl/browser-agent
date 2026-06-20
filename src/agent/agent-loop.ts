@@ -309,7 +309,7 @@ export class AgentLoop implements IAgentRuntime {
           id: tc.toolCallId ?? `call_${crypto.randomUUID()}`,
           name: tc.toolName,
           params: tc.params,
-          result: tc.result.success ? 'success' : tc.result.error,
+          result: tc.result.success ? 'success' : (tc.result.error ?? 'unknown error'),
         })),
         timestamp: Date.now(),
       });

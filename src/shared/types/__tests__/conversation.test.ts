@@ -23,6 +23,7 @@ describe('Conversation types', () => {
         role: 'assistant',
         content: '',
         toolCalls: [{
+          id: 'call_1',
           name: 'tabs_query',
           params: {},
           result: '2 tabs found',

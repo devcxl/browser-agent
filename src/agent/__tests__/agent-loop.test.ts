@@ -3,7 +3,7 @@ import { AgentLoop, type AgentLoopHooks } from '../agent-loop';
 import type { AgentConfig, AgentRunInput, ToolCallRecord } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types';
 import type { IGuardrail, GuardrailCheck, GuardrailContext } from '@/shared/types/guardrail';
-import type { IConversationManager, Conversation } from '@/shared/types/conversation';
+import type { IConversationManager, Conversation, StoredMessage } from '@/shared/types/conversation';
 import type { ILlmClient, ChatCompletionResponse, ChatMessage, ToolCallDelta } from '@/shared/types/llm';
 import type { ProviderConfig, LowSensitivityContext } from '@/shared/types';
 

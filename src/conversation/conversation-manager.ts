@@ -27,6 +27,7 @@ function dbMsgToStored(msg: {
     toolCalls: msg.toolCalls
       ? (JSON.parse(msg.toolCalls) as StoredMessage['toolCalls'])
       : undefined,
+    toolCallId: msg.toolCallId ?? undefined,
     timestamp: msg.timestamp,
   };
 }
