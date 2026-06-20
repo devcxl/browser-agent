@@ -10,6 +10,12 @@ function createMockAdapter(browserType: 'chrome' | 'firefox'): IBrowserAdapter {
     tabGroups: {} as any,
     history: {} as any,
     notifications: {} as any,
+    bookmarks: {} as any,
+    downloads: {} as any,
+    cookies: {} as any,
+    sessions: {} as any,
+    storage: { local: {} as any },
+    clipboard: {} as any,
     addListener: vi.fn() as any,
   };
 }
