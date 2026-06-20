@@ -18,8 +18,37 @@ declare namespace browser.runtime {
   }
 
   function connect(connectInfo?: { name?: string }): Port;
+  const onConnect: {
+    addListener(callback: (port: Port) => void): void;
+    removeListener(callback: (port: Port) => void): void;
+  };
+}
+
+declare namespace browser.tabs {
+  function sendMessage(tabId: number, message: unknown): Promise<unknown>;
+}
+
+declare namespace browser.notifications {
+  // present if notifications API is available
+}
+
+declare namespace browser.contextMenus {
+  // present if contextMenus API is available
+}
+
+declare namespace browser.alarms {
+  // present if alarms API is available
+}
+
+declare namespace browser.webRequest {
+  // present if webRequest API is available
 }
 
 declare namespace browser {
   const runtime: typeof browser.runtime;
+  const tabs: typeof browser.tabs;
+  const notifications: typeof browser.notifications | undefined;
+  const contextMenus: typeof browser.contextMenus | undefined;
+  const alarms: typeof browser.alarms | undefined;
+  const webRequest: typeof browser.webRequest | undefined;
 }
