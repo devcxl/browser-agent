@@ -26,6 +26,29 @@ declare namespace browser.runtime {
   };
 }
 
+declare namespace browser.tabs {
+  function query(queryInfo: Record<string, unknown>): Promise<any[]>;
+  function get(tabId: number): Promise<any>;
+  function create(createProperties: Record<string, unknown>): Promise<any>;
+  function update(tabId: number, updateProperties: Record<string, unknown>): Promise<any>;
+  function remove(tabIds: number | number[]): Promise<void>;
+  function sendMessage(tabId: number, message: unknown): Promise<any>;
+  function connect(tabId: number, connectInfo?: { name?: string }): browser.runtime.Port;
+}
+
+declare namespace browser.storage {
+  interface StorageArea {
+    get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>;
+    set(items: Record<string, unknown>): Promise<void>;
+    remove(keys: string | string[]): Promise<void>;
+  }
+  const local: StorageArea;
+  const sync: StorageArea;
+  const session: StorageArea;
+}
+
 declare namespace browser {
   const runtime: typeof browser.runtime;
+  const tabs: typeof browser.tabs;
+  const storage: typeof browser.storage;
 }

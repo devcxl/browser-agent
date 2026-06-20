@@ -23,6 +23,23 @@ export type {
   HistorySearchParams,
   HistoryDeleteParams,
   NotificationsCreateOptions,
+  BookmarkSearchQuery,
+  BookmarkCreateArg,
+  BookmarkChangesArg,
+  BookmarkTreeNode,
+  DownloadQuery,
+  DownloadOptions,
+  DownloadItem,
+  CookieDetails,
+  CookieGetAllDetails,
+  CookieSetDetails,
+  Cookie,
+  CookieStore,
+  SessionFilter,
+  Session,
+  StorageGetParams,
+  StorageSetParams,
+  StorageRemoveParams,
 } from './browser';
 
 export type {

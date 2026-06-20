@@ -253,3 +253,159 @@ export interface NotificationsCreateOptions {
   message: string;
   priority?: number;
 }
+
+// ==================== Bookmarks ====================
+
+export interface BookmarkSearchQuery {
+  query?: string;
+  url?: string;
+  title?: string;
+}
+
+export interface BookmarkCreateArg {
+  parentId?: string;
+  index?: number;
+  title?: string;
+  url?: string;
+}
+
+export interface BookmarkChangesArg {
+  title?: string;
+  url?: string;
+}
+
+export interface BookmarkTreeNode {
+  id: string;
+  parentId?: string;
+  index?: number;
+  url?: string;
+  title: string;
+  dateAdded?: number;
+  dateGroupModified?: number;
+  children?: BookmarkTreeNode[];
+}
+
+// ==================== Downloads ====================
+
+export interface DownloadQuery {
+  query?: string;
+  startedBefore?: number;
+  startedAfter?: number;
+  endedBefore?: number;
+  endedAfter?: number;
+  totalBytesGreater?: number;
+  totalBytesLess?: number;
+  filenameRegex?: string;
+  urlRegex?: string;
+  limit?: number;
+  orderBy?: string;
+  id?: number;
+  exists?: boolean;
+  filename?: string;
+  state?: 'in_progress' | 'interrupted' | 'complete';
+  danger?: string;
+}
+
+export interface DownloadOptions {
+  url: string;
+  filename?: string;
+  conflictAction?: 'uniquify' | 'overwrite' | 'prompt';
+  method?: 'GET' | 'POST';
+  headers?: Array<{ name: string; value: string }>;
+  body?: string;
+  saveAs?: boolean;
+}
+
+export interface DownloadItem {
+  id: number;
+  url: string;
+  filename: string;
+  danger?: string;
+  mime?: string;
+  startTime: string;
+  endTime?: string;
+  state: 'in_progress' | 'interrupted' | 'complete';
+  paused?: boolean;
+  canResume?: boolean;
+  error?: number;
+  totalBytes: number;
+  fileSize: number;
+  exists: boolean;
+  byExtensionId?: string;
+  byExtensionName?: string;
+}
+
+// ==================== Cookies ====================
+
+export interface CookieDetails {
+  url: string;
+  name: string;
+  storeId?: string;
+}
+
+export interface CookieGetAllDetails {
+  url?: string;
+  domain?: string;
+  name?: string;
+  path?: string;
+  secure?: boolean;
+  session?: boolean;
+  storeId?: string;
+}
+
+export interface CookieSetDetails {
+  url: string;
+  name: string;
+  value: string;
+  domain?: string;
+  path?: string;
+  secure?: boolean;
+  httpOnly?: boolean;
+  sameSite?: 'no_restriction' | 'lax' | 'strict';
+  expirationDate?: number;
+  storeId?: string;
+}
+
+export interface Cookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+  httpOnly: boolean;
+  sameSite: 'no_restriction' | 'lax' | 'strict';
+  session: boolean;
+  expirationDate?: number;
+  storeId?: string;
+}
+
+export interface CookieStore {
+  id: string;
+  tabIds: number[];
+}
+
+// ==================== Sessions ====================
+
+export interface SessionFilter {
+  maxResults?: number;
+}
+
+export interface Session {
+  lastModified: number;
+  tab?: Tab;
+  window?: Window;
+}
+
+// ==================== Storage ====================
+
+export interface StorageGetParams {
+  keys?: string | string[];
+}
+
+export interface StorageSetParams {
+  items: Record<string, unknown>;
+}
+
+export interface StorageRemoveParams {
+  keys?: string | string[];
+}
