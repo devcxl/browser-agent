@@ -15,6 +15,10 @@ export default defineConfig({
       'storage',
       'sessions',
       'alarms',
+      'bookmarks',
+      'downloads',
+      'cookies',
+      'history',
     ];
 
     if (!isFirefox) {
