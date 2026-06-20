@@ -8,10 +8,13 @@ export interface StoredMessage {
   content: string;
   /** 工具调用信息（仅 assistant 消息可能包含） */
   toolCalls?: Array<{
+    id: string;
     name: string;
     params: Record<string, unknown>;
     result?: string; // 只存摘要，不存原文
   }>;
+  /** 工具调用 ID（仅 tool 消息包含） */
+  toolCallId?: string;
   timestamp: number;
 }
 

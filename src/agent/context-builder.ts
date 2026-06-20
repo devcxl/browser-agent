@@ -58,13 +58,16 @@ export class ContextBuilder {
     const base: ChatMessage = { role: msg.role, content: msg.content };
     if (msg.toolCalls && msg.toolCalls.length > 0) {
       base.tool_calls = msg.toolCalls.map((tc) => ({
-        id: `call_${msg.id}`,
+        id: tc.id,
         type: 'function' as const,
         function: {
           name: tc.name,
           arguments: JSON.stringify(tc.params),
         },
       }));
+    }
+    if (msg.toolCallId) {
+      base.tool_call_id = msg.toolCallId;
     }
     return base;
   }
