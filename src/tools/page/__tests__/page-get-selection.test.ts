@@ -22,6 +22,11 @@ describe('page_getSelection tool', () => {
     const tool = createPageGetSelectionTool(executeFn);
 
     const result = await tool.execute({ tabId: 1 });
+    expect(executeFn).toHaveBeenCalledWith({
+      tabId: 1,
+      method: 'page.getSelection',
+      params: {},
+    });
     expect(result.data.text).toBe('selected text');
   });
 

@@ -17,7 +17,11 @@ export function createPageGetContentTool(
     confirmationRequired: true,
     resultSensitivity: 'sensitive',
     requireContentScript: true,
-    execute: executeFn,
+    execute: (params) => executeFn({
+      tabId: params.tabId,
+      method: 'page.getContent',
+      params: {},
+    }),
     preflight: async (params) => ({
       affectedObjects: [
         {

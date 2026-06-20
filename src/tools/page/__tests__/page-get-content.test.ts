@@ -20,7 +20,11 @@ describe('page_getContent tool', () => {
     const tool = createPageGetContentTool(executeFn);
 
     const result = await tool.execute({ tabId: 1 });
-    expect(executeFn).toHaveBeenCalledWith({ tabId: 1 });
+    expect(executeFn).toHaveBeenCalledWith({
+      tabId: 1,
+      method: 'page.getContent',
+      params: {},
+    });
     expect(result).toEqual({ success: true, data: 'content' });
   });
 

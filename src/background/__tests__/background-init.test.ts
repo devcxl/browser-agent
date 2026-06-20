@@ -2,6 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initBackground } from '../index';
 import { getAdapter, resetAdapter } from '@/adapters';
 
+const contentBridgeMocks = vi.hoisted(() => ({
+  sendToContent: vi.fn(),
+}));
+
+vi.mock('../content-bridge', () => ({
+  ContentBridge: vi.fn().mockImplementation(() => ({
+    sendToContent: contentBridgeMocks.sendToContent,
+  })),
+}));
+
 // Mock the adapter module
 vi.mock('@/adapters', () => ({
   getAdapter: vi.fn(),
@@ -10,6 +20,8 @@ vi.mock('@/adapters', () => ({
 
 describe('Background initialization', () => {
   beforeEach(() => {
+    contentBridgeMocks.sendToContent.mockReset();
+
     (globalThis as any).browser = {
       runtime: {
         onConnect: {
@@ -66,7 +78,7 @@ describe('Background initialization', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should initialize router, eventHub, and register RPC methods', () => {
@@ -149,6 +161,42 @@ describe('Background initialization', () => {
 
     expect(response.error).toBeUndefined();
     expect(response.result).toEqual({ success: true });
+    destroy();
+  });
+
+  it('should handle content.execute RPC method with provided tabId', async () => {
+    contentBridgeMocks.sendToContent.mockResolvedValue({ title: 'Example' });
+    const { router, destroy } = initBackground();
+
+    const response = await router.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'content.execute',
+      params: { tabId: 5, method: 'page.getMetadata', params: {} },
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(response.result).toEqual({ title: 'Example' });
+    expect(contentBridgeMocks.sendToContent).toHaveBeenCalledWith(5, 'page.getMetadata', {});
+    destroy();
+  });
+
+  it('should use current active tab when content.execute has no tabId', async () => {
+    contentBridgeMocks.sendToContent.mockResolvedValue({ text: 'selected' });
+    const adapter = getAdapter() as any;
+    adapter.tabs.query.mockResolvedValue([{ id: 7 }]);
+    const { router, destroy } = initBackground();
+
+    const response = await router.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'content.execute',
+      params: { method: 'page.getSelection', params: {} },
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(adapter.tabs.query).toHaveBeenCalledWith({ active: true, currentWindow: true });
+    expect(contentBridgeMocks.sendToContent).toHaveBeenCalledWith(7, 'page.getSelection', {});
     destroy();
   });
 });

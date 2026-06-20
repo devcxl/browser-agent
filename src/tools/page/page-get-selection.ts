@@ -17,6 +17,10 @@ export function createPageGetSelectionTool(
     confirmationRequired: false,
     resultSensitivity: 'sensitive',
     requireContentScript: true,
-    execute: executeFn,
+    execute: (params) => executeFn({
+      tabId: params.tabId,
+      method: 'page.getSelection',
+      params: {},
+    }),
   };
 }

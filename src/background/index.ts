@@ -34,6 +34,17 @@ export function initBackground(): {
   const capabilityDetector = new CapabilityDetector(adapter);
   const contentBridge = new ContentBridge();
 
+  const resolveContentTabId = async (tabId: unknown): Promise<number> => {
+    if (typeof tabId === 'number') return tabId;
+
+    const tabs = await adapter.tabs.query({ active: true, currentWindow: true });
+    const activeTabId = tabs[0]?.id;
+    if (typeof activeTabId !== 'number') {
+      throw new Error('无法确定当前活动标签页');
+    }
+    return activeTabId;
+  };
+
   // ── Tabs ────────────────────────────────────────────
   router.register('tabs.query', (p) => tabsProxy.query(p as any));
   router.register('tabs.get', (p) => tabsProxy.get(p as any));
@@ -98,13 +109,11 @@ export function initBackground(): {
 
   // ── Capability & Content ────────────────────────────
   router.register('capability.detect', async () => capabilityDetector.detect());
-  router.register('content.execute', (p) =>
-    contentBridge.sendToContent(
-      (p as any).tabId,
-      (p as any).method,
-      (p as any).params,
-    ),
-  );
+  router.register('content.execute', async (p) => {
+    const params = p as any;
+    const tabId = await resolveContentTabId(params.tabId);
+    return contentBridge.sendToContent(tabId, params.method, params.params);
+  });
 
   // 管理已连接的 Chat Page Port
   const connectedPorts = new Set<ReturnType<typeof browser.runtime.connect>>();

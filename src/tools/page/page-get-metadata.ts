@@ -17,6 +17,10 @@ export function createPageGetMetadataTool(
     confirmationRequired: false,
     resultSensitivity: 'low',
     requireContentScript: true,
-    execute: executeFn,
+    execute: (params) => executeFn({
+      tabId: params.tabId,
+      method: 'page.getMetadata',
+      params: {},
+    }),
   };
 }

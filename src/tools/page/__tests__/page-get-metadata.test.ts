@@ -22,6 +22,11 @@ describe('page_getMetadata tool', () => {
     const tool = createPageGetMetadataTool(executeFn);
 
     const result = await tool.execute({ tabId: 1 });
+    expect(executeFn).toHaveBeenCalledWith({
+      tabId: 1,
+      method: 'page.getMetadata',
+      params: {},
+    });
     expect(result.data.title).toBe('Page Title');
   });
 
