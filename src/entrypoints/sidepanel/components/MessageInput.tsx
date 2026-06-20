@@ -46,11 +46,11 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning }: Props) {
           placeholder={disabled ? 'Agent 运行中...' : '输入消息... (Enter 发送, Shift+Enter 换行)'}
           rows={1}
           className={cn(
-            'flex-1 resize-none rounded-sm bg-surface-soft text-ink text-sm p-3',
+            'flex-1 resize-none rounded-md bg-surface-card text-ink text-sm p-3',
             'border border-hairline',
-            'placeholder:text-mute',
-            'focus:outline-none focus:bg-canvas focus:border-ink',
-            'disabled:bg-surface-card disabled:text-ash',
+            'placeholder:text-ash',
+            'focus:outline-none focus:border-primary',
+            'disabled:bg-hairline-soft disabled:text-ash',
           )}
         />
         {isRunning ? (
@@ -58,7 +58,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning }: Props) {
             type="button"
             data-testid="abort-button"
             onClick={onAbort}
-            className="px-5 py-2 rounded-sm bg-danger text-canvas text-sm font-medium hover:bg-danger-hover shrink-0"
+            className="px-5 py-2 rounded-full bg-danger text-on-primary text-sm font-medium hover:bg-danger-hover shrink-0"
           >
             中止
           </button>
@@ -69,10 +69,10 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning }: Props) {
             onClick={handleSend}
             disabled={!text.trim() || disabled}
             className={cn(
-              'px-5 py-2 rounded-sm text-sm font-medium shrink-0',
+              'px-5 py-2 rounded-full text-sm font-medium shrink-0',
               text.trim() && !disabled
-                ? 'bg-ink text-canvas hover:bg-ink-deep'
-                : 'bg-surface-card text-ash cursor-not-allowed',
+                ? 'bg-primary text-on-primary hover:bg-primary-active'
+                : 'bg-hairline-soft text-ash cursor-not-allowed',
             )}
           >
             发送

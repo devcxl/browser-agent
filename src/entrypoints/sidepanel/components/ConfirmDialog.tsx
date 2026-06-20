@@ -13,11 +13,11 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
       data-testid="confirm-dialog"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
     >
-      <div className="bg-canvas rounded-sm shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
+      <div className="bg-canvas rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
         <div className="px-5 py-4 border-b border-hairline">
           <h3 className="text-base font-semibold text-ink">确认操作</h3>
           <p className="text-sm text-mute mt-0.5">
-            工具: <code className="bg-surface-card px-1 rounded-sm">{request.toolName}</code>
+            工具: <code className="bg-surface-soft px-1 rounded-md">{request.toolName}</code>
           </p>
         </div>
 
@@ -57,7 +57,7 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
               </p>
               <ul className="space-y-1">
                 {request.warnings.map((w, i) => (
-                  <li key={i} className="text-xs text-orange-700 bg-orange-50 rounded-sm px-2 py-1">
+                  <li key={i} className="text-xs text-orange-700 bg-orange-50 rounded-md px-2 py-1">
                     ⚠ {w}
                   </li>
                 ))}
@@ -71,7 +71,7 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
             type="button"
             data-testid="cancel-button"
             onClick={onCancel}
-            className="px-4 py-1.5 text-sm rounded-sm border border-hairline-strong text-ink hover:bg-surface-soft"
+            className="px-4 py-1.5 text-sm rounded-full border border-hairline-strong text-ink hover:bg-surface-soft"
           >
             取消
           </button>
@@ -79,7 +79,7 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
             type="button"
             data-testid="confirm-button"
             onClick={onConfirm}
-            className="px-4 py-1.5 text-sm rounded-sm bg-ink text-canvas hover:bg-ink-deep"
+            className="px-4 py-1.5 text-sm rounded-full bg-primary text-on-primary hover:bg-primary-active"
           >
             确认
           </button>
