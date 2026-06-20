@@ -1,4 +1,5 @@
-import type { RiskLevel } from '@/shared/types';
+import type { RiskLevel, StoredMessage } from '@/shared/types';
+import type { UIMessage, ToolCallDisplay } from './types';
 
 /** 安全转义文本（用于 textContent 设置时的二次确认） */
 export function sanitizeText(text: string): string {
@@ -54,4 +55,33 @@ export function truncate(text: string, max: number): string {
 /** 生成唯一 ID */
 export function uid(): string {
   return crypto.randomUUID();
+}
+
+/**
+ * 将 StoredMessage 转换为 UIMessage
+ *
+ * 历史消息的 toolCalls 一律按已确认、低风险、成功状态处理。
+ * result 是 string 摘要，无法还原为 ToolResult，故设为 undefined。
+ */
+export function storedMessageToUIMessage(msg: StoredMessage): UIMessage {
+  const toolCalls: ToolCallDisplay[] | undefined = msg.toolCalls?.length
+    ? msg.toolCalls.map((tc) => ({
+        id: tc.id,
+        name: tc.name,
+        params: tc.params,
+        result: undefined,
+        status: 'success' as const,
+        riskLevel: 'low' as RiskLevel,
+        confirmed: true,
+      }))
+    : undefined;
+
+  return {
+    id: msg.id,
+    role: msg.role,
+    content: msg.content,
+    timestamp: msg.timestamp,
+    status: 'complete',
+    toolCalls,
+  };
 }
