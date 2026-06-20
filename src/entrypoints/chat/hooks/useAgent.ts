@@ -206,13 +206,9 @@ export function useAgent() {
         }
         if (output.toolCalls.length > 0) {
           if (!assistantMsg.toolCalls) assistantMsg.toolCalls = [];
+          // hooks 已通过 onToolCall 推送了所有工具调用，此处仅做二次兜底
           for (const tc of output.toolCalls) {
-            const alreadyShown = assistantMsg.toolCalls.some(
-              (d) => d.name === tc.toolName && d.params === tc.params,
-            );
-            if (!alreadyShown) {
-              assistantMsg.toolCalls.push(recordToDisplay(tc));
-            }
+            assistantMsg.toolCalls.push(recordToDisplay(tc));
           }
         }
         assistantMsg.status = 'complete';
@@ -240,19 +236,10 @@ export function useAgent() {
     loopRef.current?.abort();
   }, []);
 
-  const requestConfirm = useCallback((req: ConfirmRequest) => {
-    setStatus('waitingConfirmation');
-    cbRef.current.onConfirm?.(req);
-  }, []);
-
-  const resumeAfterConfirm = useCallback(() => {
-    setStatus('streaming');
-  }, []);
-
   const resolveConfirm = useCallback((allowed: boolean) => {
     confirmResolveRef.current?.(allowed);
     confirmResolveRef.current = null;
   }, []);
 
-  return { status, error, run, abort, setCallbacks, requestConfirm, resumeAfterConfirm, resolveConfirm };
+  return { status, error, run, abort, setCallbacks, resolveConfirm };
 }

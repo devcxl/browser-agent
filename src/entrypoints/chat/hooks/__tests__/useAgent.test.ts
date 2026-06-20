@@ -195,34 +195,6 @@ describe('useAgent', () => {
     }).not.toThrow();
   });
 
-  it('requestConfirm 设置状态为 waitingConfirmation', () => {
-    const { result } = renderHook(() => useAgent());
-    const onConfirm = vi.fn();
-    result.current.setCallbacks({ onConfirm });
-
-    act(() => {
-      result.current.requestConfirm({
-        toolName: 'tabs_close',
-        params: { tabId: 1 },
-        affectedObjects: [],
-        warnings: [],
-      });
-    });
-
-    expect(result.current.status).toBe('waitingConfirmation');
-    expect(onConfirm).toHaveBeenCalled();
-  });
-
-  it('resumeAfterConfirm 恢复状态为 streaming', () => {
-    const { result } = renderHook(() => useAgent());
-
-    act(() => {
-      result.current.resumeAfterConfirm();
-    });
-
-    expect(result.current.status).toBe('streaming');
-  });
-
   it('error 时设置错误状态', async () => {
     mockRun.mockRejectedValue(new Error('网络错误'));
 
