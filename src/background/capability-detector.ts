@@ -4,37 +4,64 @@ import type { Capabilities } from '@/shared/types';
 /**
  * 浏览器能力检测器
  *
- * 检测当前浏览器支持哪些扩展 API。
+ * 检测当前浏览器可用的扩展 API 能力，覆盖 22 个能力域。
+ * 检测结果缓存，扩展生命周期内不改变。
  */
 export class CapabilityDetector {
+  private cache: Capabilities | null = null;
+
   constructor(private adapter: IBrowserAdapter) {}
 
-  async detect(): Promise<Capabilities> {
+  /**
+   * 检测当前浏览器所有扩展 API 能力。
+   * 结果缓存，后续调用直接返回缓存。
+   * 需强制刷新时先调用 invalidateCache()。
+   */
+  detect(): Capabilities {
+    if (this.cache) return { ...this.cache };
+
     const isChrome = this.adapter.browserType === 'chrome';
 
-    return {
+    this.cache = {
+      // 核心能力 — 双浏览器必备
       tabs: true,
       windows: true,
       tabGroups: isChrome,
-      bookmarks: isChrome && !!chrome.bookmarks,
-      history: isChrome && !!chrome.history,
-      downloads: isChrome && !!chrome.downloads,
-      cookies: isChrome && !!chrome.cookies,
-      sessions: isChrome && !!chrome.sessions,
-      scripting: isChrome && !!chrome.scripting,
-      clipboard: isChrome && !!(chrome as any).clipboard,
-      notifications: !!browser.notifications,
-      contextMenus: !!browser.contextMenus,
-      sidePanel: isChrome && !!chrome.sidePanel,
-      alarms: !!browser.alarms,
-      proxy: isChrome && !!chrome.proxy,
-      privacy: isChrome && !!chrome.privacy,
-      management: isChrome && !!chrome.management,
-      debugger: isChrome && !!chrome.debugger,
-      webRequest: !!browser.webRequest,
-      declarativeNetRequest: isChrome && !!chrome.declarativeNetRequest,
-      nativeMessaging: !!(browser.runtime as any)?.connectNative,
-      identity: isChrome && !!chrome.identity,
+      bookmarks: true,
+      history: true,
+      downloads: true,
+      cookies: true,
+      // 运行时检测
+      sessions: this.checkApi('sessions'),
+      scripting: this.checkApi('scripting'),
+      clipboard: isChrome,
+      notifications: this.checkApi('notifications'),
+      contextMenus: this.checkApi('contextMenus'),
+      sidePanel: isChrome,
+      alarms: this.checkApi('alarms'),
+      // Expert 能力
+      proxy: this.checkApi('proxy'),
+      privacy: this.checkApi('privacy'),
+      management: this.checkApi('management'),
+      debugger: this.checkApi('debugger'),
+      webRequest: this.checkApi('webRequest'),
+      declarativeNetRequest: this.checkApi('declarativeNetRequest'),
+      nativeMessaging:
+        this.checkApi('runtime') &&
+        typeof (browser as any).runtime?.connectNative !== 'undefined',
+      identity: this.checkApi('identity'),
     };
+
+    return { ...this.cache };
+  }
+
+  /** 清除缓存，下次 detect() 重新检测 */
+  invalidateCache(): void {
+    this.cache = null;
+  }
+
+  /** 检查全局 browser 对象上是否存在某 API 命名空间 */
+  private checkApi(namespace: string): boolean {
+    return typeof (browser as any)?.[namespace] !== 'undefined';
   }
 }

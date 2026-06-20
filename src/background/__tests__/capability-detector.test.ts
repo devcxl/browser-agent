@@ -1,101 +1,194 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CapabilityDetector } from '../capability-detector';
 import type { IBrowserAdapter } from '@/adapters/types';
 
+function createMockAdapter(browserType: 'chrome' | 'firefox'): IBrowserAdapter {
+  return {
+    browserType,
+    tabs: {} as any,
+    windows: {} as any,
+    tabGroups: {} as any,
+    addListener: vi.fn() as any,
+  };
+}
+
+function setBrowser(obj: Record<string, any>): void {
+  (globalThis as any).browser = obj;
+}
+
+const ALL_APIS: Record<string, any> = {
+  sessions: {},
+  scripting: {},
+  notifications: {},
+  contextMenus: {},
+  alarms: {},
+  proxy: {},
+  privacy: {},
+  management: {},
+  debugger: {},
+  webRequest: {},
+  declarativeNetRequest: {},
+  runtime: { connectNative: {} },
+  identity: {},
+};
+
 describe('CapabilityDetector', () => {
-  beforeEach(() => {
-    (globalThis as any).browser = {
-      notifications: {},
-      contextMenus: {},
-      alarms: {},
-      webRequest: {},
-      runtime: { connectNative: vi.fn() },
-    };
-    (globalThis as any).chrome = {
-      bookmarks: {},
-      history: {},
-      downloads: {},
-      cookies: {},
-      sessions: {},
-      scripting: {},
-      clipboard: {},
-      sidePanel: {},
-      proxy: {},
-      privacy: {},
-      management: {},
-      debugger: {},
-      declarativeNetRequest: {},
-      identity: {},
-    };
+  let adapter: IBrowserAdapter;
+
+  // ── Chrome 环境 ──────────────────────────────────────
+
+  describe('Chrome 环境', () => {
+    beforeEach(() => {
+      adapter = createMockAdapter('chrome');
+      setBrowser(ALL_APIS);
+    });
+
+    it('tabGroups / sidePanel / clipboard 为 true', () => {
+      const detector = new CapabilityDetector(adapter);
+      const caps = detector.detect();
+      expect(caps.tabGroups).toBe(true);
+      expect(caps.sidePanel).toBe(true);
+      expect(caps.clipboard).toBe(true);
+    });
+
+    it('核心能力（tabs / windows）为 true', () => {
+      const detector = new CapabilityDetector(adapter);
+      const caps = detector.detect();
+      expect(caps.tabs).toBe(true);
+      expect(caps.windows).toBe(true);
+      expect(caps.bookmarks).toBe(true);
+      expect(caps.history).toBe(true);
+      expect(caps.downloads).toBe(true);
+      expect(caps.cookies).toBe(true);
+    });
+
+    it('覆盖全部 22 个能力域', () => {
+      const detector = new CapabilityDetector(adapter);
+      const caps = detector.detect();
+      const keys = Object.keys(caps);
+      expect(keys).toHaveLength(22);
+      for (const v of Object.values(caps)) {
+        expect(typeof v).toBe('boolean');
+      }
+    });
   });
 
-  afterEach(() => {
-    delete (globalThis as any).chrome;
-    delete (globalThis as any).browser;
+  // ── Firefox 环境 ─────────────────────────────────────
+
+  describe('Firefox 环境', () => {
+    beforeEach(() => {
+      adapter = createMockAdapter('firefox');
+      setBrowser(ALL_APIS);
+    });
+
+    it('tabGroups / sidePanel / clipboard 为 false', () => {
+      const detector = new CapabilityDetector(adapter);
+      const caps = detector.detect();
+      expect(caps.tabGroups).toBe(false);
+      expect(caps.sidePanel).toBe(false);
+      expect(caps.clipboard).toBe(false);
+    });
+
+    it('核心能力仍为 true', () => {
+      const detector = new CapabilityDetector(adapter);
+      const caps = detector.detect();
+      expect(caps.tabs).toBe(true);
+      expect(caps.windows).toBe(true);
+    });
   });
 
-  it('should detect all capabilities on Chrome', async () => {
-    const adapter: IBrowserAdapter = { browserType: 'chrome' } as any;
-    const detector = new CapabilityDetector(adapter);
+  // ── 缓存行为 ────────────────────────────────────────
 
-    const caps = await detector.detect();
+  describe('缓存', () => {
+    it('缓存生效：首次检测后修改 adapter，仍返回缓存结果', () => {
+      adapter = createMockAdapter('chrome');
+      setBrowser({ sessions: {} });
 
-    expect(caps.tabs).toBe(true);
-    expect(caps.windows).toBe(true);
-    expect(caps.tabGroups).toBe(true);
-    expect(caps.bookmarks).toBe(true);
-    expect(caps.history).toBe(true);
-    expect(caps.downloads).toBe(true);
-    expect(caps.cookies).toBe(true);
-    expect(caps.sessions).toBe(true);
-    expect(caps.scripting).toBe(true);
-    expect(caps.clipboard).toBe(true);
-    expect(caps.notifications).toBe(true);
-    expect(caps.contextMenus).toBe(true);
-    expect(caps.sidePanel).toBe(true);
-    expect(caps.alarms).toBe(true);
-    expect(caps.proxy).toBe(true);
-    expect(caps.privacy).toBe(true);
-    expect(caps.management).toBe(true);
-    expect(caps.debugger).toBe(true);
-    expect(caps.webRequest).toBe(true);
-    expect(caps.declarativeNetRequest).toBe(true);
-    expect(caps.nativeMessaging).toBe(true);
-    expect(caps.identity).toBe(true);
+      const detector = new CapabilityDetector(adapter);
+      const first = detector.detect();
+      expect(first.tabGroups).toBe(true);
+
+      (adapter as any).browserType = 'firefox';
+      const second = detector.detect();
+      expect(second.tabGroups).toBe(true);
+    });
+
+    it('invalidateCache 后重新检测', () => {
+      adapter = createMockAdapter('chrome');
+      setBrowser({ sessions: {} });
+
+      const detector = new CapabilityDetector(adapter);
+      const first = detector.detect();
+      expect(first.tabGroups).toBe(true);
+
+      detector.invalidateCache();
+      (adapter as any).browserType = 'firefox';
+      const second = detector.detect();
+      expect(second.tabGroups).toBe(false);
+    });
   });
 
-  it('should detect limited capabilities on Firefox', async () => {
-    const adapter: IBrowserAdapter = { browserType: 'firefox' } as any;
-    const detector = new CapabilityDetector(adapter);
+  // ── checkApi 运行时检测 ──────────────────────────────
 
-    const caps = await detector.detect();
+  describe('checkApi 运行时检测', () => {
+    beforeEach(() => {
+      adapter = createMockAdapter('chrome');
+    });
 
-    expect(caps.tabs).toBe(true);
-    expect(caps.windows).toBe(true);
-    expect(caps.tabGroups).toBe(false);
-    expect(caps.bookmarks).toBe(false);
-    expect(caps.history).toBe(false);
-    expect(caps.scripting).toBe(false);
-    expect(caps.notifications).toBe(true);
-    expect(caps.contextMenus).toBe(true);
-    expect(caps.alarms).toBe(true);
-    expect(caps.webRequest).toBe(true);
-    expect(caps.nativeMessaging).toBe(true);
+    it('API 不存在时返回 false', () => {
+      setBrowser({});
+
+      const detector = new CapabilityDetector(adapter);
+      const caps = detector.detect();
+      expect(caps.scripting).toBe(false);
+      expect(caps.sessions).toBe(false);
+    });
+
+    it('API 存在时返回 true', () => {
+      setBrowser({ scripting: {}, sessions: {} });
+
+      const detector = new CapabilityDetector(adapter);
+      const caps = detector.detect();
+      expect(caps.scripting).toBe(true);
+      expect(caps.sessions).toBe(true);
+    });
+
+    it('nativeMessaging 依赖 runtime.connectNative', () => {
+      setBrowser({ runtime: {}, sessions: {} });
+      const detector1 = new CapabilityDetector(adapter);
+      expect(detector1.detect().nativeMessaging).toBe(false);
+
+      setBrowser({ runtime: { connectNative: {} }, sessions: {} });
+      const detector2 = new CapabilityDetector(adapter);
+      expect(detector2.detect().nativeMessaging).toBe(true);
+    });
   });
 
-  it('should handle missing browser APIs gracefully', async () => {
-    delete (globalThis as any).browser;
-    (globalThis as any).browser = {};
+  // ── 返回结果独立性 ──────────────────────────────────
 
-    const adapter: IBrowserAdapter = { browserType: 'chrome' } as any;
-    const detector = new CapabilityDetector(adapter);
+  describe('返回结果独立性', () => {
+    it('两次调用返回不同对象引用', () => {
+      adapter = createMockAdapter('chrome');
+      setBrowser({ sessions: {} });
 
-    const caps = await detector.detect();
+      const detector = new CapabilityDetector(adapter);
+      const first = detector.detect();
+      const second = detector.detect();
 
-    expect(caps.notifications).toBe(false);
-    expect(caps.contextMenus).toBe(false);
-    expect(caps.alarms).toBe(false);
-    expect(caps.webRequest).toBe(false);
-    expect(caps.nativeMessaging).toBe(false);
+      expect(first).not.toBe(second);
+      expect(first).toEqual(second);
+    });
+
+    it('修改返回值不影响缓存', () => {
+      adapter = createMockAdapter('chrome');
+      setBrowser({ sessions: {} });
+
+      const detector = new CapabilityDetector(adapter);
+      const first = detector.detect();
+      (first as any).tabs = false;
+
+      const second = detector.detect();
+      expect(second.tabs).toBe(true);
+    });
   });
 });
