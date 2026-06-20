@@ -13,6 +13,8 @@ export interface StorageSchema {
   expertModeSettings: ExpertModeSettings;
   /** 全局偏好 */
   preferences: UserPreferences;
+  /** 最近活跃会话 ID */
+  activeConversationId?: string;
 }
 
 export interface AgentSettings {
