@@ -19,9 +19,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: 16, fontFamily: 'monospace', fontSize: 12, color: '#c00' }}>
-          <p><strong>渲染出错</strong></p>
-          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <div className="p-4 text-sm text-danger">
+          <p className="font-semibold mb-2">渲染出错</p>
+          <pre className="whitespace-pre-wrap break-all text-xs text-mute">
             {this.state.error?.message}
           </pre>
         </div>
