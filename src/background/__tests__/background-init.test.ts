@@ -50,6 +50,12 @@ describe('Background initialization', () => {
         update: vi.fn(),
         move: vi.fn(),
       },
+      history: {
+        search: vi.fn().mockResolvedValue([]),
+        deleteUrl: vi.fn().mockResolvedValue(undefined),
+        deleteRange: vi.fn().mockResolvedValue(undefined),
+        deleteAll: vi.fn().mockResolvedValue(undefined),
+      },
       notifications: {
         create: vi.fn().mockResolvedValue('notif-mock'),
       },

@@ -11,6 +11,9 @@ import type {
   TabGroupQueryInfo,
   TabGroupUpdateProperties,
   NotificationsCreateOptions,
+  HistoryItem,
+  HistorySearchParams,
+  HistoryDeleteParams,
 } from '@/shared/types';
 import type { IBrowserAdapter } from './types';
 import { BrowserEvent } from './types';
@@ -121,6 +124,22 @@ export class ChromeAdapter implements IBrowserAdapter {
         chrome.notifications.create('', options as any, (id) => resolve(id));
       });
     },
+  };
+
+  // ── History ──────────────────────────────────────
+
+  history = {
+    search: (params: HistorySearchParams): Promise<HistoryItem[]> =>
+      chrome.history.search(params as chrome.history.HistoryQuery) as Promise<HistoryItem[]>,
+
+    deleteUrl: (url: string): Promise<void> =>
+      chrome.history.deleteUrl({ url }),
+
+    deleteRange: (range: { startTime: number; endTime: number }): Promise<void> =>
+      chrome.history.deleteRange(range),
+
+    deleteAll: (): Promise<void> =>
+      chrome.history.deleteAll(),
   };
 
   // ── Event ───────────────────────────────────────────

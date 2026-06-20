@@ -42,6 +42,15 @@ function createMockBrowser() {
       onRemoved: mockEvent,
       onFocusChanged: mockEvent,
     },
+    history: {
+      search: vi.fn().mockResolvedValue([]),
+      deleteUrl: vi.fn().mockResolvedValue(undefined),
+      deleteRange: vi.fn().mockResolvedValue(undefined),
+      deleteAll: vi.fn().mockResolvedValue(undefined),
+    },
+    notifications: {
+      create: vi.fn().mockResolvedValue('notif-ff'),
+    },
   };
 }
 
@@ -198,6 +207,7 @@ describe('FirefoxAdapter', () => {
 
     it('create 在 notifications API 不可用时 reject', async () => {
       // 不设置 notifications mock，模拟 API 不存在
+      delete (mockBrowser as any).notifications;
       const result = adapter.notifications.create({ title: 'Test', message: 'Hello' });
       await expect(result).rejects.toThrow('notifications API not available');
     });

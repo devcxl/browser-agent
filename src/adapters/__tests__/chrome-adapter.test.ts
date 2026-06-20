@@ -57,6 +57,12 @@ function createMockChrome() {
         cb('notif-42');
       }),
     },
+    history: {
+      search: vi.fn().mockResolvedValue([]),
+      deleteUrl: vi.fn().mockResolvedValue(undefined),
+      deleteRange: vi.fn().mockResolvedValue(undefined),
+      deleteAll: vi.fn().mockResolvedValue(undefined),
+    },
   };
 }
 

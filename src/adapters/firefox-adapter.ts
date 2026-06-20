@@ -11,6 +11,9 @@ import type {
   TabGroupQueryInfo,
   TabGroupUpdateProperties,
   NotificationsCreateOptions,
+  HistoryItem,
+  HistorySearchParams,
+  HistoryDeleteParams,
 } from '@/shared/types';
 import type { IBrowserAdapter } from './types';
 import { BrowserEvent } from './types';
@@ -129,6 +132,22 @@ export class FirefoxAdapter implements IBrowserAdapter {
       }
       return this.browser.notifications.create(options);
     },
+  };
+
+  // ── History ──────────────────────────────────────
+
+  history = {
+    search: (params: HistorySearchParams): Promise<HistoryItem[]> =>
+      this.browser.history.search(params),
+
+    deleteUrl: (url: string): Promise<void> =>
+      this.browser.history.deleteUrl({ url }),
+
+    deleteRange: (range: { startTime: number; endTime: number }): Promise<void> =>
+      this.browser.history.deleteRange(range),
+
+    deleteAll: (): Promise<void> =>
+      this.browser.history.deleteAll(),
   };
 
   // ── Event ───────────────────────────────────────────

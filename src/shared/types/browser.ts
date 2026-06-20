@@ -220,6 +220,30 @@ export interface TabGroupUpdateProperties {
   color?: TabGroupColor;
 }
 
+// ==================== History ====================
+
+export interface HistoryItem {
+  id: string;
+  url?: string;
+  title?: string;
+  lastVisitTime?: number;
+  visitCount?: number;
+  typedCount?: number;
+}
+
+export interface HistorySearchParams {
+  text: string;
+  startTime?: number;
+  endTime?: number;
+  maxResults?: number;
+}
+
+export interface HistoryDeleteParams {
+  url?: string;
+  startTime?: number;
+  endTime?: number;
+}
+
 // ==================== Notifications ====================
 
 export interface NotificationsCreateOptions {

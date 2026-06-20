@@ -11,6 +11,9 @@ import type {
   TabGroupQueryInfo,
   TabGroupUpdateProperties,
   NotificationsCreateOptions,
+  HistoryItem,
+  HistorySearchParams,
+  HistoryDeleteParams,
 } from '@/shared/types';
 
 // ==================== IBrowserAdapter ====================
@@ -69,6 +72,15 @@ export interface IBrowserAdapter {
       groupId: number,
       moveProperties: { windowId?: number; index: number },
     ): Promise<TabGroup>;
+  };
+
+  // ── History ──────────────────────────────────────
+
+  history: {
+    search(params: HistorySearchParams): Promise<HistoryItem[]>;
+    deleteUrl(url: string): Promise<void>;
+    deleteRange(range: { startTime: number; endTime: number }): Promise<void>;
+    deleteAll(): Promise<void>;
   };
 
   // ── Event 注册 ──────────────────────────────────────

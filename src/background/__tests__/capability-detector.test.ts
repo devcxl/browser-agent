@@ -8,6 +8,8 @@ function createMockAdapter(browserType: 'chrome' | 'firefox'): IBrowserAdapter {
     tabs: {} as any,
     windows: {} as any,
     tabGroups: {} as any,
+    history: {} as any,
+    notifications: {} as any,
     addListener: vi.fn() as any,
   };
 }

@@ -19,6 +19,10 @@ export type {
   WindowUpdateInfo,
   TabGroupQueryInfo,
   TabGroupUpdateProperties,
+  HistoryItem,
+  HistorySearchParams,
+  HistoryDeleteParams,
+  NotificationsCreateOptions,
 } from './browser';
 
 export type {
