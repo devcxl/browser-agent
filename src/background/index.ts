@@ -3,6 +3,7 @@ import { JsonRpcRouter } from './jsonrpc-router';
 import { TabsProxy } from './proxies/tabs-proxy';
 import { WindowsProxy } from './proxies/windows-proxy';
 import { GroupsProxy } from './proxies/groups-proxy';
+import { HistoryProxy } from './proxies/history-proxy';
 import { BrowserEventHub } from './browser-event-hub';
 import { CapabilityDetector } from './capability-detector';
 import { ContentBridge } from './content-bridge';
@@ -18,6 +19,7 @@ export function initBackground(): {
   const tabsProxy = new TabsProxy(adapter);
   const windowsProxy = new WindowsProxy(adapter);
   const groupsProxy = new GroupsProxy(adapter);
+  const historyProxy = new HistoryProxy(adapter);
   const eventHub = new BrowserEventHub(adapter);
   const capabilityDetector = new CapabilityDetector(adapter);
   const contentBridge = new ContentBridge();
@@ -39,6 +41,10 @@ export function initBackground(): {
 
   router.register('tabGroups.query', (p) => groupsProxy.query(p as any));
   router.register('tabGroups.update', (p) => groupsProxy.update(p as any));
+
+  router.register('history.search', (p) => historyProxy.search(p as any));
+  router.register('history.delete', (p) => historyProxy.delete(p as any));
+  router.register('history.deleteAll', () => historyProxy.deleteAll());
 
   router.register('capability.detect', () => capabilityDetector.detect());
   router.register('content.execute', (p) =>

@@ -42,6 +42,15 @@ function createMockBrowser() {
       onRemoved: mockEvent,
       onFocusChanged: mockEvent,
     },
+    history: {
+      search: vi.fn().mockResolvedValue([]),
+      deleteUrl: vi.fn().mockResolvedValue(undefined),
+      deleteRange: vi.fn().mockResolvedValue(undefined),
+      deleteAll: vi.fn().mockResolvedValue(undefined),
+    },
+    notifications: {
+      create: vi.fn().mockResolvedValue('notif-ff'),
+    },
   };
 }
 
@@ -184,6 +193,35 @@ describe('FirefoxAdapter', () => {
     });
   });
 
+  // ── History ──────────────────────────────────────
+
+  describe('history', () => {
+    it('search 正确转发到 browser.history.search', async () => {
+      const mockItems = [
+        { id: '1', url: 'https://example.com', title: 'Example', lastVisitTime: 1000, visitCount: 5, typedCount: 0 },
+      ];
+      mockBrowser.history.search.mockResolvedValue(mockItems);
+      const result = await adapter.history.search({ text: 'test', maxResults: 10 });
+      expect(mockBrowser.history.search).toHaveBeenCalledWith({ text: 'test', maxResults: 10 });
+      expect(result).toEqual(mockItems);
+    });
+
+    it('deleteUrl 正确转发到 browser.history.deleteUrl', async () => {
+      await adapter.history.deleteUrl('https://example.com');
+      expect(mockBrowser.history.deleteUrl).toHaveBeenCalledWith({ url: 'https://example.com' });
+    });
+
+    it('deleteRange 正确转发到 browser.history.deleteRange', async () => {
+      await adapter.history.deleteRange({ startTime: 1000, endTime: 2000 });
+      expect(mockBrowser.history.deleteRange).toHaveBeenCalledWith({ startTime: 1000, endTime: 2000 });
+    });
+
+    it('deleteAll 正确转发到 browser.history.deleteAll', async () => {
+      await adapter.history.deleteAll();
+      expect(mockBrowser.history.deleteAll).toHaveBeenCalled();
+    });
+  });
+
   // ── Notifications ────────────────────────────────
 
   describe('notifications', () => {
@@ -198,6 +236,7 @@ describe('FirefoxAdapter', () => {
 
     it('create 在 notifications API 不可用时 reject', async () => {
       // 不设置 notifications mock，模拟 API 不存在
+      delete (mockBrowser as any).notifications;
       const result = adapter.notifications.create({ title: 'Test', message: 'Hello' });
       await expect(result).rejects.toThrow('notifications API not available');
     });

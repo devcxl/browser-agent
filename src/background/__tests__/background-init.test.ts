@@ -50,6 +50,12 @@ describe('Background initialization', () => {
         update: vi.fn(),
         move: vi.fn(),
       },
+      history: {
+        search: vi.fn().mockResolvedValue([]),
+        deleteUrl: vi.fn().mockResolvedValue(undefined),
+        deleteRange: vi.fn().mockResolvedValue(undefined),
+        deleteAll: vi.fn().mockResolvedValue(undefined),
+      },
       notifications: {
         create: vi.fn().mockResolvedValue('notif-mock'),
       },
@@ -96,6 +102,53 @@ describe('Background initialization', () => {
     expect(response.error).toBeUndefined();
     expect(response.result).toBe('notif-mock');
 
+    destroy();
+  });
+
+  it('should handle history.search RPC method', async () => {
+    const { router, destroy } = initBackground();
+    const mockItems = [{ id: '1', url: 'https://example.com', title: 'Example' }];
+    (getAdapter() as any).history.search.mockResolvedValue(mockItems);
+
+    const response = await router.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'history.search',
+      params: { text: 'test', maxResults: 10 },
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(response.result).toEqual(mockItems);
+    destroy();
+  });
+
+  it('should handle history.delete RPC method', async () => {
+    const { router, destroy } = initBackground();
+
+    const response = await router.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'history.delete',
+      params: { url: 'https://example.com' },
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(response.result).toEqual({ success: true });
+    destroy();
+  });
+
+  it('should handle history.deleteAll RPC method', async () => {
+    const { router, destroy } = initBackground();
+
+    const response = await router.handle({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'history.deleteAll',
+      params: {},
+    });
+
+    expect(response.error).toBeUndefined();
+    expect(response.result).toEqual({ success: true });
     destroy();
   });
 });

@@ -16,6 +16,8 @@ vi.mock('@/adapters', () => ({
     tabs: { query: vi.fn().mockResolvedValue([]), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), move: vi.fn(), group: vi.fn(), ungroup: vi.fn(), getCurrent: vi.fn(), reload: vi.fn(), duplicate: vi.fn(), highlight: vi.fn() },
     windows: { getAll: vi.fn().mockResolvedValue([]), get: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), getCurrent: vi.fn(), getLastFocused: vi.fn() },
     tabGroups: { query: vi.fn().mockResolvedValue([]), get: vi.fn(), update: vi.fn(), move: vi.fn() },
+    history: { search: vi.fn().mockResolvedValue([]), deleteUrl: vi.fn().mockResolvedValue(undefined), deleteRange: vi.fn().mockResolvedValue(undefined), deleteAll: vi.fn().mockResolvedValue(undefined) },
+    notifications: { create: vi.fn().mockResolvedValue('notif-mock') },
     addListener: vi.fn().mockReturnValue(() => {}),
   })),
 }));
