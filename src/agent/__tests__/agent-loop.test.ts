@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AgentLoop } from '../agent-loop';
-import type { AgentConfig, AgentRunInput } from '@/shared/types/agent';
+import { AgentLoop, type AgentLoopHooks } from '../agent-loop';
+import type { AgentConfig, AgentRunInput, ToolCallRecord } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types';
 import type { IGuardrail, GuardrailCheck, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager, Conversation } from '@/shared/types/conversation';
@@ -574,5 +574,183 @@ describe('AgentLoop', () => {
     expect(output.toolCalls[0]!.result.success).toBe(false);
     expect(output.toolCalls[0]!.result.error).toBe('权限不足');
     expect(output.finalMessage).toBe('查询失败，请检查权限。');
+  });
+
+  // === Hooks Tests ===
+
+  describe('AgentLoop hooks', () => {
+    it('onStreamChunk 在 stop 响应时被调用', async () => {
+      const llmClient = createMockLlmClient([stopResponse('你好！我是助手。')]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+      const onStreamChunk = vi.fn();
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        createMockToolRegistry([]),
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+        { onStreamChunk },
+      );
+
+      await loop.run(defaultInput);
+
+      expect(onStreamChunk).toHaveBeenCalled();
+      // Should be called with chunks of the final message
+      const calls = onStreamChunk.mock.calls.map((c: [string]) => c[0]);
+      const combined = calls.join('');
+      expect(combined).toBe('你好！我是助手。');
+    });
+
+    it('onToolCall 在工具执行完成后被调用', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          data: [{ id: 1, title: 'Example' }],
+        } satisfies ToolResult),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_1', 'tabs_query', {})),
+        stopResponse('查询完成。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+      const onToolCall = vi.fn();
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+        { onToolCall },
+      );
+
+      await loop.run(defaultInput);
+
+      expect(onToolCall).toHaveBeenCalledTimes(1);
+      const record: ToolCallRecord = onToolCall.mock.calls[0][0];
+      expect(record.toolName).toBe('tabs_query');
+      expect(record.result.success).toBe(true);
+    });
+
+    it('onConfirm 在高风险工具需确认时被调用', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_close',
+        description: '关闭标签页',
+        schema: { type: 'object', properties: { tabId: { type: 'number' } } },
+        category: 'tabs',
+        riskLevel: 'high',
+        confirmationRequired: true,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({ success: true, data: {} }),
+        preflight: vi.fn().mockResolvedValue({
+          affectedObjects: [{ type: 'tab', id: '1', reason: '关闭标签页' }],
+          warnings: ['关闭后将无法恢复'],
+        }),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      // Guardrail returns allowed=true but requiresConfirmation=true for high risk
+      const guardrail: IGuardrail = {
+        check: vi.fn().mockResolvedValue({
+          allowed: true,
+          riskLevel: 'high',
+          requiresPreflight: true,
+          requiresConfirmation: true,
+          reason: '高风险操作，需要用户确认',
+          dataSensitivity: 'low',
+        } satisfies GuardrailCheck),
+        filterResultForRemote: vi.fn().mockImplementation((_t, r) => r),
+      };
+
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_1', 'tabs_close', { tabId: 1 })),
+        stopResponse('已关闭标签页。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const onConfirm = vi.fn().mockResolvedValue(true);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        guardrail,
+        conversationManager,
+        llmFactory,
+        { onConfirm },
+      );
+
+      const output = await loop.run(defaultInput);
+
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+      const request = onConfirm.mock.calls[0][0];
+      expect(request.toolName).toBe('tabs_close');
+      expect(request.params).toEqual({ tabId: 1 });
+      expect(toolDef.execute).toHaveBeenCalled(); // confirmed, so tool executed
+      expect(output.toolCalls[0]!.confirmed).toBe(true);
+    });
+
+    it('onConfirm 拒绝后跳过工具执行', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_close',
+        description: '关闭标签页',
+        schema: { type: 'object', properties: { tabId: { type: 'number' } } },
+        category: 'tabs',
+        riskLevel: 'high',
+        confirmationRequired: true,
+        resultSensitivity: 'low',
+        execute: vi.fn(),
+        preflight: vi.fn().mockResolvedValue({
+          affectedObjects: [{ type: 'tab', id: '1', reason: '关闭标签页' }],
+          warnings: ['关闭后将无法恢复'],
+        }),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const guardrail: IGuardrail = {
+        check: vi.fn().mockResolvedValue({
+          allowed: true,
+          riskLevel: 'high',
+          requiresPreflight: true,
+          requiresConfirmation: true,
+          reason: '高风险操作，需要用户确认',
+          dataSensitivity: 'low',
+        } satisfies GuardrailCheck),
+        filterResultForRemote: vi.fn().mockImplementation((_t, r) => r),
+      };
+
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_1', 'tabs_close', { tabId: 1 })),
+        stopResponse('已取消操作。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const onConfirm = vi.fn().mockResolvedValue(false);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        guardrail,
+        conversationManager,
+        llmFactory,
+        { onConfirm },
+      );
+
+      const output = await loop.run(defaultInput);
+
+      expect(onConfirm).toHaveBeenCalledTimes(1);
+      expect(toolDef.execute).not.toHaveBeenCalled();
+      // Tool call record should exist but with confirmed=false and a skip note
+      expect(output.toolCalls[0]!.confirmed).toBe(false);
+    });
   });
 });

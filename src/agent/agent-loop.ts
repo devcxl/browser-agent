@@ -14,6 +14,17 @@ import { SummaryManager } from './summary-manager';
 
 const MAX_INVALID_TOOL_RETRIES = 3;
 
+export interface AgentLoopHooks {
+  onStreamChunk?: (chunk: string) => void;
+  onToolCall?: (record: ToolCallRecord) => void;
+  onConfirm?: (request: {
+    toolName: string;
+    params: Record<string, unknown>;
+    affectedObjects: Array<{ type: string; title?: string; url?: string; reason?: string }>;
+    warnings: string[];
+  }) => Promise<boolean>;
+}
+
 export class AgentLoop implements IAgentRuntime {
   private abortController: AbortController | null = null;
   private contextBuilder: ContextBuilder;
@@ -25,6 +36,7 @@ export class AgentLoop implements IAgentRuntime {
     private guardrail: IGuardrail,
     private conversationManager: IConversationManager,
     private llmClientFactory: (config: ProviderConfig) => ILlmClient,
+    private hooks?: AgentLoopHooks,
   ) {
     this.contextBuilder = new ContextBuilder(config, toolRegistry, conversationManager);
     this.summaryManager = new SummaryManager(conversationManager);
@@ -152,11 +164,44 @@ export class AgentLoop implements IAgentRuntime {
                 tool_call_id: tc.id,
                 content: `Blocked: ${check.reason}`,
               });
+              this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
               continue;
             }
 
+            // Run preflight before confirmation check to gather affected objects
+            let affectedObjects: Array<{ type: string; title?: string; url?: string; reason?: string }> = [];
+            let warnings: string[] = [];
             if (check.requiresPreflight && tool.preflight) {
-              await tool.preflight(params);
+              const preflightResult = await tool.preflight(params);
+              affectedObjects = preflightResult.affectedObjects ?? [];
+              warnings = preflightResult.warnings ?? [];
+            }
+
+            // User confirmation for high-risk operations
+            if (check.requiresConfirmation && this.hooks?.onConfirm) {
+              const confirmed = await this.hooks.onConfirm({
+                toolName: tc.function.name,
+                params,
+                affectedObjects,
+                warnings,
+              });
+              if (!confirmed) {
+                toolCalls.push({
+                  toolName: tc.function.name,
+                  params,
+                  result: { success: false, error: '用户取消确认' },
+                  riskLevel: check.riskLevel,
+                  confirmed: false,
+                  timestamp: Date.now(),
+                });
+                messages.push({
+                  role: 'tool',
+                  tool_call_id: tc.id,
+                  content: '用户取消确认，跳过执行。',
+                });
+                this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
+                continue;
+              }
             }
 
             const result = await tool.execute(params);
@@ -181,6 +226,7 @@ export class AgentLoop implements IAgentRuntime {
               content: JSON.stringify(filteredResult),
             });
 
+            this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
             invalidRetries = 0;
           }
 
@@ -188,6 +234,10 @@ export class AgentLoop implements IAgentRuntime {
           round++;
         } else {
           finalMessage = choice.message.content ?? '';
+          // Emit stream chunks for stop responses
+          if (finalMessage && this.hooks?.onStreamChunk) {
+            this.emitStreamChunks(finalMessage);
+          }
           break;
         }
       }
@@ -215,6 +265,16 @@ export class AgentLoop implements IAgentRuntime {
       return { finalMessage, toolCalls };
     } finally {
       this.abortController = null;
+    }
+  }
+
+  private emitStreamChunks(text: string): void {
+    const chunkSize = 15;
+    let i = 0;
+    while (i < text.length) {
+      const chunk = text.slice(i, i + chunkSize);
+      this.hooks?.onStreamChunk?.(chunk);
+      i += chunkSize;
     }
   }
 }
