@@ -20,7 +20,7 @@ export interface AgentLoopHooks {
   onConfirm?: (request: {
     toolName: string;
     params: Record<string, unknown>;
-    affectedObjects: Array<{ type: string; title?: string; url?: string; reason?: string }>;
+    affectedObjects: Array<{ type: string; id?: string; title?: string; url?: string; reason?: string }>;
     warnings: string[];
   }) => Promise<boolean>;
 }
