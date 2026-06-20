@@ -6,6 +6,7 @@ import {
   createStorageLocalGetTool,
   createStorageLocalSetTool,
   createStorageLocalRemoveTool,
+  createTimeGetTool,
 } from './misc-tools';
 
 export function createMiscTools(rpc: IJsonRpcClient): ToolDefinition[] {
@@ -16,5 +17,6 @@ export function createMiscTools(rpc: IJsonRpcClient): ToolDefinition[] {
     createStorageLocalGetTool(rpc),
     createStorageLocalSetTool(rpc),
     createStorageLocalRemoveTool(rpc),
+    createTimeGetTool(),
   ];
 }

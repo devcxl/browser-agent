@@ -17,13 +17,13 @@ function createMockRpc(): IJsonRpcClient {
 
 describe('Misc tools', () => {
   describe('createMiscTools', () => {
-    it('返回 6 个工具', () => {
+    it('返回 7 个工具', () => {
       const rpc = createMockRpc();
       const tools = createMiscTools(rpc);
-      expect(tools).toHaveLength(6);
+      expect(tools).toHaveLength(7);
     });
 
-    it('工具名包含 clipboard/notifications/storage', () => {
+    it('工具名包含 clipboard/notifications/storage/time_get', () => {
       const rpc = createMockRpc();
       const tools = createMiscTools(rpc);
       const names = tools.map((t) => t.name);
@@ -33,6 +33,7 @@ describe('Misc tools', () => {
       expect(names).toContain('storage_local_get');
       expect(names).toContain('storage_local_set');
       expect(names).toContain('storage_local_remove');
+      expect(names).toContain('time_get');
     });
 
     it('clipboard_read: riskLevel high, confirmationRequired true, resultSensitivity sensitive', () => {
@@ -127,6 +128,59 @@ describe('Misc tools', () => {
 
       expect(result.affectedObjects).toHaveLength(1);
       expect(result.affectedObjects[0]?.reason).toContain('key1');
+    });
+
+    it('time_get: category system, riskLevel low, confirmationRequired false', () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'time_get')!;
+      expect(tool).toBeDefined();
+      expect(tool.category).toBe('system');
+      expect(tool.riskLevel).toBe('low');
+      expect(tool.confirmationRequired).toBe(false);
+      expect(tool.resultSensitivity).toBe('low');
+      expect(tool.requireBackground).toBeFalsy();
+      expect(tool.requireContentScript).toBeFalsy();
+    });
+
+    it('time_get schema 无 required 字段', () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'time_get')!;
+      expect(tool.schema.required ?? []).toEqual([]);
+    });
+
+    it('time_get execute 返回当前时间 iso 和 timestamp', async () => {
+      const fixedDate = new Date('2026-06-21T08:30:00.000Z');
+      vi.useFakeTimers();
+      vi.setSystemTime(fixedDate);
+
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'time_get')!;
+      const result = await tool.execute({});
+
+      vi.useRealTimers();
+
+      expect(result.success).toBe(true);
+      expect(result.data).toEqual({
+        iso: '2026-06-21T08:30:00.000Z',
+        timestamp: 1782030600000,
+      });
+      // time_get 不应调用 rpc
+      expect(rpc.request).not.toHaveBeenCalled();
+    });
+
+    it('time_get execute 时间单调前进（真实时间）', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'time_get')!;
+      const before = Date.now();
+      const result = await tool.execute({});
+      const after = Date.now();
+      const ts = (result.data as { timestamp: number }).timestamp;
+      expect(ts).toBeGreaterThanOrEqual(before);
+      expect(ts).toBeLessThanOrEqual(after);
     });
   });
 });

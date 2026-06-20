@@ -3,7 +3,7 @@
 /** 风险等级 */
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
-/** 工具类别（16 个） */
+/** 工具类别（17 个） */
 export type ToolCategory =
   | 'tabs'
   | 'windows'
@@ -20,6 +20,7 @@ export type ToolCategory =
   | 'contextMenus'
   | 'sidePanel'
   | 'alarms'
+  | 'system'
   | 'expert';
 
 /** 数据敏感级别 */

@@ -38,10 +38,10 @@ describe('registerPhase2Tools', () => {
     registry = createMockRegistry();
   });
 
-  it('注册 30 个工具', () => {
+  it('注册 31 个工具', () => {
     registerPhase2Tools(registry, rpc);
     const allTools = registry.getAllTools();
-    expect(allTools).toHaveLength(30);
+    expect(allTools).toHaveLength(31);
   });
 
   it('覆盖所有 6 个 category', () => {
@@ -55,10 +55,11 @@ describe('registerPhase2Tools', () => {
     expect(categories.has('cookies')).toBe(true);
     expect(categories.has('sessions')).toBe(true);
 
-    // misc 工具分属 clipboard, notifications, storage
+    // misc 工具分属 clipboard, notifications, storage, system
     expect(categories.has('clipboard')).toBe(true);
     expect(categories.has('notifications')).toBe(true);
     expect(categories.has('storage')).toBe(true);
+    expect(categories.has('system')).toBe(true);
   });
 
   it('cookies 工具数量正确', () => {

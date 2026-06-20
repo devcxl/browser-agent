@@ -179,3 +179,28 @@ export function createStorageLocalRemoveTool(rpc: IJsonRpcClient): ToolDefinitio
     },
   };
 }
+
+export function createTimeGetTool(): ToolDefinition {
+  return {
+    name: 'time_get',
+    description: '获取当前时间，返回 ISO 8601 字符串和 Unix 毫秒时间戳。',
+    category: 'system',
+    riskLevel: 'low',
+    confirmationRequired: false,
+    resultSensitivity: 'low',
+    schema: {
+      type: 'object',
+      properties: {},
+    },
+    execute: async () => {
+      const now = new Date();
+      return {
+        success: true,
+        data: {
+          iso: now.toISOString(),
+          timestamp: now.getTime(),
+        },
+      };
+    },
+  };
+}

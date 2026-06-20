@@ -22,14 +22,14 @@ describe('Tool types', () => {
   });
 
   describe('ToolCategory', () => {
-    it('should have exactly 16 categories', () => {
+    it('should have exactly 17 categories', () => {
       const categories: ToolCategory[] = [
         'tabs', 'windows', 'tabGroups', 'bookmarks',
         'history', 'downloads', 'sessions', 'page',
         'cookies', 'storage', 'clipboard', 'notifications',
-        'contextMenus', 'sidePanel', 'alarms', 'expert',
+        'contextMenus', 'sidePanel', 'alarms', 'system', 'expert',
       ];
-      expect(categories).toHaveLength(16);
+      expect(categories).toHaveLength(17);
     });
   });
 
