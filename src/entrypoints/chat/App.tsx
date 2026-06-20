@@ -36,7 +36,7 @@ function AgentStatusIndicator() {
 }
 
 function ChatLayout() {
-  const { conversations, agent, browserState, messages, confirmRequest, resolveConfirm } = useChat();
+  const { conversations, agent, browserState, messages, messagesLoading, messagesError, confirmRequest, resolveConfirm } = useChat();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [browserCollapsed, setBrowserCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -154,6 +154,20 @@ function ChatLayout() {
         />
 
         <div className="flex-1 flex flex-col min-w-0">
+          {messagesLoading && (
+            <div className="flex items-center justify-center py-2 text-sm text-gray-400">
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              加载消息中...
+            </div>
+          )}
+          {messagesError && (
+            <div className="mx-4 mt-2 px-3 py-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded">
+              加载失败: {messagesError}
+            </div>
+          )}
           <ChatView messages={messages} />
           <MessageInput
             onSend={handleSend}

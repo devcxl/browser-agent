@@ -1,8 +1,14 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { UIMessage, ConfirmRequest } from './types';
 import { useConversations } from './hooks/useConversations';
 import { useAgent } from './hooks/useAgent';
 import { useBrowserState } from './hooks/useBrowserState';
+import { ConversationManager } from '@/conversation';
+import { Database } from '@/shared/db/database';
+import { storedMessageToUIMessage } from './utils';
+
+const db = Database.getInstance();
+const manager = new ConversationManager(db);
 
 interface ChatContextValue {
   // Conversations
@@ -15,6 +21,9 @@ interface ChatContextValue {
   messages: UIMessage[];
   addMessage: (msg: UIMessage) => void;
   clearMessages: () => void;
+  // Loading / Error
+  messagesLoading: boolean;
+  messagesError: string | null;
   // Confirm dialog
   confirmRequest: ConfirmRequest | null;
   resolveConfirm: (allowed: boolean) => void;
@@ -28,6 +37,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const browserState = useBrowserState();
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [messagesError, setMessagesError] = useState<string | null>(null);
+  const prevActiveIdRef = useRef<string | null>(null);
 
   const addMessage = useCallback((msg: UIMessage) => {
     setMessages((prev) => {
@@ -58,6 +70,39 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [agent],
   );
 
+  // 加载会话历史消息
+  useEffect(() => {
+    const activeId = conversations.activeId;
+    if (activeId === prevActiveIdRef.current) return;
+    prevActiveIdRef.current = activeId;
+
+    if (!activeId) {
+      setMessages([]);
+      setMessagesLoading(false);
+      setMessagesError(null);
+      return;
+    }
+
+    setMessagesLoading(true);
+    setMessagesError(null);
+
+    (async () => {
+      try {
+        const conv = await manager.get(activeId);
+        if (conv) {
+          setMessages(conv.messages.map(storedMessageToUIMessage));
+        } else {
+          setMessages([]);
+        }
+      } catch (e) {
+        setMessagesError((e as Error).message);
+        setMessages([]);
+      } finally {
+        setMessagesLoading(false);
+      }
+    })();
+  }, [conversations.activeId]);
+
   return (
     <ChatContext.Provider
       value={{
@@ -67,6 +112,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         messages,
         addMessage,
         clearMessages,
+        messagesLoading,
+        messagesError,
         confirmRequest,
         resolveConfirm,
       }}
