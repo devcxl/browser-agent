@@ -1,27 +1,31 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #201d1d;
-  --color-ink-deep: #0f0000;
-  --color-charcoal: #302c2c;
-  --color-body: #424245;
-  --color-mute: #646262;
-  --color-stone: #6e6e73;
-  --color-ash: #9a9898;
-  --color-canvas: #fdfcfc;
-  --color-surface-soft: #f8f7f7;
-  --color-surface-card: #f1eeee;
-  --color-surface-dark: #201d1d;
-  --color-surface-dark-elevated: #302c2c;
-  --color-hairline: rgba(15, 0, 0, 0.12);
-  --color-hairline-strong: #646262;
-  --color-accent: #007aff;
-  --color-accent-hover: #0056b3;
-  --color-accent-active: #004085;
+  --color-primary: #292524;
+  --color-primary-active: #0c0a09;
+  --color-ink: #0c0a09;
+  --color-ink-deep: #0c0a09;
+  --color-body: #4e4e4e;
+  --color-body-strong: #292524;
+  --color-mute: #777169;
+  --color-ash: #a8a29e;
+  --color-canvas: #f5f5f5;
+  --color-canvas-soft: #fafafa;
+  --color-surface-card: #ffffff;
+  --color-surface-soft: #f0efed;
+  --color-surface-dark: #0c0a09;
+  --color-surface-dark-elevated: #1c1917;
+  --color-hairline: #e7e5e4;
+  --color-hairline-soft: #f0efed;
+  --color-hairline-strong: #d6d3d1;
+  --color-on-primary: #ffffff;
+  --color-on-dark: #ffffff;
+  --color-on-dark-soft: #a8a29e;
   --color-warning: #ff9f0a;
-  --color-danger: #ff3b30;
-  --color-success: #30d158;
-  --default-font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-success: #16a34a;
+  --default-font-family: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 }
 
 html, body, #root {
