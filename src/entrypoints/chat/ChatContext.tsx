@@ -28,7 +28,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const browserState = useBrowserState();
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
-  const [confirmResolver, setConfirmResolver] = useState<((v: boolean) => void) | null>(null);
 
   const addMessage = useCallback((msg: UIMessage) => {
     setMessages((prev) => {
@@ -48,19 +47,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     onMessage: addMessage,
     onConfirm: (req) => {
       setConfirmRequest(req);
-      setConfirmResolver(() => (allowed: boolean) => {
-        setConfirmRequest(null);
-        if (allowed) agent.resumeAfterConfirm();
-      });
     },
   });
 
   const resolveConfirm = useCallback(
     (allowed: boolean) => {
-      confirmResolver?.(allowed);
+      agent.resolveConfirm(allowed);
       setConfirmRequest(null);
     },
-    [confirmResolver],
+    [agent],
   );
 
   return (
