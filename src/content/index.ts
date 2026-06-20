@@ -1,6 +1,7 @@
 import { ReadabilityExtractor } from './readability-extractor';
 import { SelectionReader } from './selection-reader';
 import { MetadataReader } from './metadata-reader';
+import { convertToMarkdown } from './markdown-converter';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -27,6 +28,9 @@ export default defineContentScript({
               break;
             case 'page.getMetadata':
               result = metadata.getMetadata();
+              break;
+            case 'page.getMarkdown':
+              result = convertToMarkdown(document);
               break;
             case 'clipboard.read':
               result = { text: await navigator.clipboard.readText() };
