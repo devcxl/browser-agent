@@ -12,7 +12,7 @@ export function MessageBubble({ message }: Props) {
 
   // 流式过程中自动展开思考面板
   const isStreaming = message.status === 'streaming';
-  const hasReasoning = !!message.reasoningContent;
+  const hasReasoning = message.role === 'assistant' && !!message.reasoningContent;
   useEffect(() => {
     if (isStreaming && hasReasoning) {
       setShowReasoning(true);
