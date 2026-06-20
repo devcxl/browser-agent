@@ -202,16 +202,15 @@ describe('Database', () => {
   });
 
   // #10 getRecentMessages
-  it('should return recent N messages in reverse order', async () => {
+  it('should return recent N messages in chronological order', async () => {
     const db = Database.getInstance();
     for (let i = 0; i < 10; i++) {
       await db.putMessage(makeMsg('conv-recent', { id: `r${i}`, timestamp: 1000 + i }));
     }
     const recent = await db.getRecentMessages('conv-recent', 5);
     expect(recent).toHaveLength(5);
-    // 按时间倒序：r9, r8, r7, r6, r5
-    expect(recent[0]!.id).toBe('r9');
-    expect(recent[4]!.id).toBe('r5');
+    // 最近 5 条仍必须按时间升序喂给 LLM：r5 → r6 → r7 → r8 → r9
+    expect(recent.map((m) => m.id)).toEqual(['r5', 'r6', 'r7', 'r8', 'r9']);
   });
 
   // #11 countMessagesByConversation

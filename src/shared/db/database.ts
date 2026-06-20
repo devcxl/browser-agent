@@ -120,7 +120,8 @@ export class Database {
     const all = await index.getAll(
       IDBKeyRange.bound([conversationId, 0], [conversationId, Date.now()]),
     );
-    return all.slice(-count).reverse();
+    // Chat Completions 历史消息必须按旧到新排列，最后一条才是最新用户输入。
+    return all.slice(-count);
   }
 
   async deleteMessage(id: string): Promise<void> {
