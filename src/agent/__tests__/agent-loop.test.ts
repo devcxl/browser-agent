@@ -790,19 +790,24 @@ describe('AgentLoop', () => {
 
       await loop.run(defaultInput);
 
-      // 验证 addMessage 被调用 3 次：user + tool + assistant
-      expect(conversationManager.addMessage).toHaveBeenCalledTimes(3);
+      // 验证 addMessage 被调用 4 次：user + assistant(tool_calls) + tool + assistant(final)
+      expect(conversationManager.addMessage).toHaveBeenCalledTimes(4);
 
-      // 第 2 次是 tool 响应持久化
-      const toolCall = vi.mocked(conversationManager.addMessage).mock.calls[1];
-      expect(toolCall[1].role).toBe('tool');
-      expect(toolCall[1].toolCallId).toBe('call_abc_123');
+      // 第 2 次：中间 assistant(tool_calls) 消息，toolCalls 含真实 id
+      const midAsst = vi.mocked(conversationManager.addMessage).mock.calls[1];
+      expect(midAsst![1].role).toBe('assistant');
+      expect(midAsst![1].toolCalls).toBeDefined();
+      expect(midAsst![1].toolCalls![0]!.id).toBe('call_abc_123');
 
-      // 第 3 次是 assistant 消息持久化，toolCalls 包含真实 id
-      const asstCall = vi.mocked(conversationManager.addMessage).mock.calls[2];
-      expect(asstCall[1].role).toBe('assistant');
-      expect(asstCall[1].toolCalls).toBeDefined();
-      expect(asstCall[1].toolCalls![0]!.id).toBe('call_abc_123');
+      // 第 3 次：tool 响应持久化
+      const toolCall = vi.mocked(conversationManager.addMessage).mock.calls[2];
+      expect(toolCall![1].role).toBe('tool');
+      expect(toolCall![1].toolCallId).toBe('call_abc_123');
+
+      // 第 4 次：最终 assistant 消息，不含 toolCalls（已在中间消息持久化）
+      const finalAsst = vi.mocked(conversationManager.addMessage).mock.calls[3];
+      expect(finalAsst![1].role).toBe('assistant');
+      expect(finalAsst![1].toolCalls).toBeUndefined();
     });
 
     // (Slice E)
@@ -976,6 +981,106 @@ describe('AgentLoop', () => {
       for (const tm of toolMsgs) {
         expect(secondRoundMessages.indexOf(tm)).toBeGreaterThan(asstIdx);
       }
+    });
+  });
+
+  // === Scenario: DB 持久化序列 ===
+  describe('DB 持久化序列（assistant(tool_calls) 必须独立持久化）', () => {
+    it('tool_call 场景：addMessage 序列为 user → assistant(tool_calls) → tool → assistant(final)', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({ success: true, data: [] } satisfies ToolResult),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_x1', 'tabs_query', {})),
+        stopResponse('查询完成。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+      );
+
+      await loop.run(defaultInput);
+
+      const calls = vi.mocked(conversationManager.addMessage).mock.calls;
+      // 预期 4 次：user → assistant(tool_calls) → tool → assistant(final)
+      expect(calls).toHaveLength(4);
+
+      const roles = calls.map((c) => c[1].role);
+      expect(roles).toEqual(['user', 'assistant', 'tool', 'assistant']);
+
+      // 第 2 条：中间 assistant(tool_calls) 消息，含真实 tool_call id
+      const midAsst = calls[1]![1];
+      expect(midAsst.toolCalls).toBeDefined();
+      expect(midAsst.toolCalls).toHaveLength(1);
+      expect(midAsst.toolCalls![0]!.id).toBe('call_x1');
+
+      // 第 3 条：tool 消息，toolCallId 匹配中间 assistant 的 tool_call id
+      const toolMsg = calls[2]![1];
+      expect(toolMsg.role).toBe('tool');
+      expect(toolMsg.toolCallId).toBe('call_x1');
+
+      // 第 4 条：最终 assistant 消息，不应再携带 toolCalls（已在中间消息持久化）
+      const finalAsst = calls[3]![1];
+      expect(finalAsst.role).toBe('assistant');
+      expect(finalAsst.toolCalls).toBeUndefined();
+    });
+
+    it('多轮 tool_call：每个 tool_calls 响应都独立持久化为 assistant 消息', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({ success: true, data: [] } satisfies ToolResult),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_a', 'tabs_query', {})),
+        toolCallsResponse(toolCallDelta('call_b', 'tabs_query', {})),
+        stopResponse('完成。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+      );
+
+      await loop.run(defaultInput);
+
+      const calls = vi.mocked(conversationManager.addMessage).mock.calls;
+      // user → asst(call_a) → tool → asst(call_b) → tool → asst(final)
+      expect(calls).toHaveLength(6);
+      const roles = calls.map((c) => c[1].role);
+      expect(roles).toEqual(['user', 'assistant', 'tool', 'assistant', 'tool', 'assistant']);
+
+      // 两个中间 assistant 消息各有 1 个 toolCall，id 分别为 call_a / call_b
+      expect(calls[1]![1].toolCalls![0]!.id).toBe('call_a');
+      expect(calls[3]![1].toolCalls![0]!.id).toBe('call_b');
+
+      // 最终 assistant 不含 toolCalls
+      expect(calls[5]![1].toolCalls).toBeUndefined();
     });
   });
 });

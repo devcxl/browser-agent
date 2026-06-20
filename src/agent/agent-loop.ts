@@ -114,10 +114,32 @@ export class AgentLoop implements IAgentRuntime {
 
         if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
           // 按 OpenAI 协议：tool(result) 消息前必须有对应的 assistant(tool_calls) 消息
-          messages.push({
-            role: 'assistant',
+          const assistantMsg = {
+            role: 'assistant' as const,
             content: choice.message.content ?? null,
             tool_calls: choice.message.tool_calls,
+          };
+          messages.push(assistantMsg);
+          // 持久化中间 assistant(tool_calls) 消息，确保刷新后 ContextBuilder 能重建完整序列
+          await this.conversationManager.addMessage(input.conversationId, {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: choice.message.content ?? '',
+            toolCalls: choice.message.tool_calls.map((tc) => {
+              let parsedParams: Record<string, unknown>;
+              try {
+                parsedParams = JSON.parse(tc.function.arguments);
+              } catch {
+                parsedParams = { __raw: tc.function.arguments };
+              }
+              return {
+                id: tc.id,
+                name: tc.function.name,
+                params: parsedParams,
+                result: 'pending',
+              };
+            }),
+            timestamp: Date.now(),
           });
 
           for (const tc of choice.message.tool_calls) {
@@ -307,17 +329,11 @@ export class AgentLoop implements IAgentRuntime {
         finalMessage = '操作步骤过多，已达到最大执行轮次。';
       }
 
-      // 4. Store assistant response
+      // 4. Store assistant response（toolCalls 已在中间消息持久化，此处只存最终文本）
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: finalMessage,
-        toolCalls: toolCalls.map((tc) => ({
-          id: tc.toolCallId ?? `call_${crypto.randomUUID()}`,
-          name: tc.toolName,
-          params: tc.params,
-          result: tc.result.success ? 'success' : (tc.result.error ?? 'unknown error'),
-        })),
         timestamp: Date.now(),
       });
 
