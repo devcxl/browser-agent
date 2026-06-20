@@ -61,8 +61,8 @@ export function ChatView({ messages }: Props) {
       ) : (
         <>
           {messages.length === 0 && (
-            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-              开始对话，发送消息给 Browser Agent
+            <div className="flex items-center justify-center h-full text-mute text-sm">
+               开始对话，发送消息给 Browser Agent
             </div>
           )}
           {messages.map((msg) => (

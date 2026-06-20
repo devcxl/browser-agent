@@ -23,6 +23,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
@@ -44,11 +45,12 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
     const items = screen.getAllByTestId('conversation-item');
-    expect(items[0]?.className).toContain('bg-blue-50');
+    expect(items[0]?.className).toContain('bg-surface-soft');
   });
 
   it('calls onSelect when item clicked', async () => {
@@ -65,6 +67,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
@@ -86,6 +89,7 @@ describe('ConversationSidebar', () => {
         onNew={onNew}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
@@ -106,6 +110,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
@@ -125,6 +130,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
@@ -144,6 +150,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        onOpenSettings={vi.fn()}
       />,
     );
 
