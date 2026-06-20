@@ -73,7 +73,7 @@ async function getDeps(): Promise<AgentDeps> {
     registry.registerAll(
       createPageTools(async (params) => {
         const result = await rpc.request('content.execute', params as Record<string, unknown>);
-        return result as { success: boolean; data?: unknown; error?: string };
+        return { success: true, data: result };
       }),
     );
 

@@ -4,6 +4,6 @@ export default defineBackground(() => {
   initBackground();
 
   browser.action.onClicked.addListener(() => {
-    browser.tabs.create({ url: browser.runtime.getURL('chat.html') });
+    browser.tabs.create({ url: browser.runtime.getURL('sidepanel.html') });
   });
 });
