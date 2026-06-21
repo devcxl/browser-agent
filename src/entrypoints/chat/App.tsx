@@ -3,38 +3,16 @@ import { ChatProvider, useChat } from './ChatContext';
 import { ChatView } from './components/ChatView';
 import { MessageInput } from './components/MessageInput';
 import { ConversationSidebar } from './components/ConversationSidebar';
-import { BrowserStatePanel } from './components/BrowserStatePanel';
+import { TokenPanel } from './components/TokenPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig } from '@/shared/types';
 
-function AgentStatusIndicator() {
-  const { agent } = useChat();
-  const colors: Record<string, string> = {
-    idle: 'bg-gray-400',
-    running: 'bg-yellow-400 animate-pulse',
-    streaming: 'bg-green-400 animate-pulse',
-    waitingConfirmation: 'bg-orange-400',
-  };
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={`inline-block w-2 h-2 rounded-full ${colors[agent.status]}`} />
-      <span className="text-xs text-gray-500">
-        {agent.status === 'idle' && '就绪'}
-        {agent.status === 'running' && '运行中...'}
-        {agent.status === 'streaming' && '输出中...'}
-        {agent.status === 'waitingConfirmation' && '等待确认'}
-      </span>
-    </div>
-  );
-}
-
 function ChatLayout() {
-  const { conversations, agent, browserState, messages, confirmRequest, resolveConfirm } = useChat();
+  const { conversations, agent, messages, tokenUsage, confirmRequest, resolveConfirm } = useChat();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [browserCollapsed, setBrowserCollapsed] = useState(false);
+  const [tokenCollapsed, setTokenCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   // Settings state (in-memory; persisted through ConfigStore)
@@ -62,18 +40,18 @@ function ChatLayout() {
     (text: string) => {
       if (!conversations.activeId) {
         conversations.create().then((id) => {
-          agent.run(id, text, providers[0]!);
+          agent.run(id, text, providers[0]!, agentSettings.maxToolRounds);
           generateTitle(id, text);
         });
         return;
       }
-      agent.run(conversations.activeId, text, providers[0]!);
+      agent.run(conversations.activeId, text, providers[0]!, agentSettings.maxToolRounds);
       const currentConv = conversations.list.find(c => c.id === conversations.activeId);
       if (currentConv && isDefaultTitle(currentConv.title)) {
         generateTitle(conversations.activeId, text);
       }
     },
-    [conversations, agent, providers],
+    [conversations, agent, providers, agentSettings.maxToolRounds],
   );
 
   const handleTestConnection = useCallback(
@@ -123,6 +101,7 @@ function ChatLayout() {
           onNew={handleNewConversation}
           onRename={conversations.rename}
           onDelete={conversations.remove}
+          agentStatus={agent.status}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -135,12 +114,10 @@ function ChatLayout() {
           />
         </div>
 
-        <BrowserStatePanel
-          state={browserState.state}
-          loading={browserState.loading}
-          error={browserState.error}
-          collapsed={browserCollapsed}
-          onToggleCollapse={() => setBrowserCollapsed(!browserCollapsed)}
+        <TokenPanel
+          usage={tokenUsage}
+          collapsed={tokenCollapsed}
+          onToggleCollapse={() => setTokenCollapsed(!tokenCollapsed)}
         />
       </div>
 
