@@ -49,15 +49,29 @@ function ChatLayout() {
     switches: {},
   });
 
+  const currentConversation = conversations.list.find(c => c.id === conversations.activeId);
+
+  const isDefaultTitle = (title: string): boolean => /^新对话/.test(title);
+
+  const generateTitle = (convId: string, message: string): void => {
+    const title = message.replace(/\s+/g, ' ').trim().slice(0, 30);
+    conversations.rename(convId, title).catch(() => {});
+  };
+
   const handleSend = useCallback(
     (text: string) => {
       if (!conversations.activeId) {
         conversations.create().then((id) => {
           agent.run(id, text, providers[0]!);
+          generateTitle(id, text);
         });
         return;
       }
       agent.run(conversations.activeId, text, providers[0]!);
+      const currentConv = conversations.list.find(c => c.id === conversations.activeId);
+      if (currentConv && isDefaultTitle(currentConv.title)) {
+        generateTitle(conversations.activeId, text);
+      }
     },
     [conversations, agent, providers],
   );
@@ -79,7 +93,7 @@ function ChatLayout() {
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {/* Header */}
-      <header className="h-10 border-b border-gray-200 bg-white flex items-center justify-between px-4 shrink-0">
+      <header className="h-10 border-b border-gray-200 bg-white flex items-center px-4 shrink-0">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -90,7 +104,9 @@ function ChatLayout() {
             ⚙ 设置
           </button>
         </div>
-        <AgentStatusIndicator />
+        <div className="flex-1 text-center text-sm text-gray-700 truncate px-4">
+          {currentConversation?.title ?? ''}
+        </div>
         <div className="w-10" /> {/* spacer */}
       </header>
 
