@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ConversationSummary } from '../types';
+import type { ConversationSummary, AgentStatus } from '../types';
 import { formatDateTime, cn } from '../utils';
 
 interface Props {
@@ -13,7 +13,22 @@ interface Props {
   onNew: () => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  agentStatus: AgentStatus;
 }
+
+const statusColors: Record<string, string> = {
+  idle: 'bg-gray-400',
+  running: 'bg-yellow-400 animate-pulse',
+  streaming: 'bg-green-400 animate-pulse',
+  waitingConfirmation: 'bg-orange-400',
+};
+
+const statusLabels: Record<string, string> = {
+  idle: '就绪',
+  running: '运行中...',
+  streaming: '输出中...',
+  waitingConfirmation: '等待确认',
+};
 
 export function ConversationSidebar({
   conversations,
@@ -26,6 +41,7 @@ export function ConversationSidebar({
   onNew,
   onRename,
   onDelete,
+  agentStatus,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -129,6 +145,12 @@ export function ConversationSidebar({
               ) : (
                 <>
                   <div className="text-sm text-gray-800 truncate">{conv.title}</div>
+                  {activeId === conv.id && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${statusColors[agentStatus]}`} />
+                      <span className="text-[10px] text-gray-400">{statusLabels[agentStatus]}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between mt-0.5">
                     <span className="text-[10px] text-gray-400">
                       {formatDateTime(conv.updatedAt)}
