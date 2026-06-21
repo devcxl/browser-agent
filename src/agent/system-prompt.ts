@@ -7,7 +7,7 @@ Guidelines:
 4. Do not fabricate browser state. Always use tools to query current state.`;
 
 export const DEFAULT_AGENT_CONFIG = {
-  maxToolRounds: 15,
+  maxToolRounds: 99,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   maxContextMessages: 20,
   summaryThreshold: {
