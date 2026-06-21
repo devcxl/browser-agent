@@ -40,7 +40,7 @@ function ChatLayout() {
   // Settings state (in-memory; persisted through ConfigStore)
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
-    maxToolRounds: 15,
+    maxToolRounds: 99,
     maxContextMessages: 40,
     systemPrompt: '',
   });
