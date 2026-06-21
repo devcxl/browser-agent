@@ -90,6 +90,27 @@ function stopResponse(content: string): ChatCompletionResponse {
   };
 }
 
+function stopResponseWithUsage(
+  content: string,
+  promptTokens: number,
+  completionTokens: number,
+): ChatCompletionResponse {
+  return {
+    id: 'resp-1',
+    choices: [
+      {
+        message: { role: 'assistant', content },
+        finish_reason: 'stop',
+      },
+    ],
+    usage: {
+      prompt_tokens: promptTokens,
+      completion_tokens: completionTokens,
+      total_tokens: promptTokens + completionTokens,
+    },
+  };
+}
+
 function toolCallsResponse(
   ...tcs: ToolCallDelta[]
 ): ChatCompletionResponse {
@@ -1082,5 +1103,113 @@ describe('AgentLoop', () => {
       // 最终 assistant 不含 toolCalls
       expect(calls[5]![1].toolCalls).toBeUndefined();
     });
+  // === Token Usage Tests ===
+  it('单轮有 usage → 返回 tokenUsage', async () => {
+    const llmClient = createMockLlmClient([stopResponseWithUsage('完成。', 50, 30)]);
+    const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+    const loop = new AgentLoop(
+      defaultConfig,
+      createMockToolRegistry([]),
+      createMockGuardrail(),
+      conversationManager,
+      llmFactory,
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(output.tokenUsage).toEqual({ prompt: 50, completion: 30 });
+  });
+
+  // === Scenario 14 ===
+  it('多轮累加 usage', async () => {
+    const toolDef: ToolDefinition = {
+      name: 'noop',
+      description: 'noop',
+      schema: { type: 'object', properties: {} },
+      category: 'tabs',
+      riskLevel: 'low',
+      confirmationRequired: false,
+      resultSensitivity: 'low',
+      execute: vi.fn().mockResolvedValue({ success: true, data: {} }),
+    };
+
+    const toolRegistry = createMockToolRegistry([toolDef]);
+    const toolCallResp = toolCallsResponse(toolCallDelta('call_1', 'noop', {}));
+
+    const resp1 = { ...toolCallResp, usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 } };
+    const resp2 = { ...toolCallResp, usage: { prompt_tokens: 60, completion_tokens: 40, total_tokens: 100 } };
+    const resp3 = { ...toolCallResp, usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 } };
+    const resp4 = { ...stopResponseWithUsage('完成。', 10, 5), usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
+
+    const config: AgentConfig = { ...defaultConfig, maxToolRounds: 4 };
+    const llmClient = createMockLlmClient([resp1, resp2, resp3, resp4]);
+    const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+    const loop = new AgentLoop(
+      config,
+      toolRegistry,
+      createMockGuardrail(),
+      conversationManager,
+      llmFactory,
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(output.tokenUsage).toEqual({ prompt: 200, completion: 115 });
+  });
+
+  // === Scenario 15 ===
+  it('usage 为 undefined → 不累积', async () => {
+    const llmClient = createMockLlmClient([stopResponse('完成。')]);
+    const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+    const loop = new AgentLoop(
+      defaultConfig,
+      createMockToolRegistry([]),
+      createMockGuardrail(),
+      conversationManager,
+      llmFactory,
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(output.tokenUsage).toEqual({ prompt: 0, completion: 0 });
+  });
+
+  // === Scenario 16 ===
+  it('混合场景：部分轮次有 usage，部分没有', async () => {
+    const toolDef: ToolDefinition = {
+      name: 'noop',
+      description: 'noop',
+      schema: { type: 'object', properties: {} },
+      category: 'tabs',
+      riskLevel: 'low',
+      confirmationRequired: false,
+      resultSensitivity: 'low',
+      execute: vi.fn().mockResolvedValue({ success: true, data: {} }),
+    };
+
+    const toolRegistry = createMockToolRegistry([toolDef]);
+    const toolCallResp = toolCallsResponse(toolCallDelta('call_1', 'noop', {}));
+
+    const respWithUsage = { ...toolCallResp, usage: { prompt_tokens: 80, completion_tokens: 30, total_tokens: 110 } };
+    const respWithoutUsage = toolCallResp;
+    const respFinal = stopResponse('完成。');
+
+    const llmClient = createMockLlmClient([respWithUsage, respWithoutUsage, respFinal]);
+    const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+    const loop = new AgentLoop(
+      defaultConfig,
+      toolRegistry,
+      createMockGuardrail(),
+      conversationManager,
+      llmFactory,
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(output.tokenUsage).toEqual({ prompt: 80, completion: 30 });
   });
 });

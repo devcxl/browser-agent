@@ -90,7 +90,7 @@ describe('ConfigStore', () => {
     browserMock.mock.get.mockResolvedValueOnce({ providers: [{ id: 'p1' }] });
     const result = await store.getAll();
     expect(result.providers).toEqual([{ id: 'p1' }]);
-    expect(result.agentSettings.maxToolRounds).toBe(15);
+    expect(result.agentSettings.maxToolRounds).toBe(99);
     expect(result.preferences.theme).toBe('system');
   });
 
@@ -156,11 +156,11 @@ describe('ConfigStore', () => {
     const store = ConfigStore.getInstance();
     const defaults = store.getDefaults();
     expect(defaults.providers).toEqual([]);
-    expect(defaults.agentSettings.maxToolRounds).toBe(15);
+    expect(defaults.agentSettings.maxToolRounds).toBe(99);
     // 修改返回的值不应影响后续调用
     defaults.agentSettings.maxToolRounds = 999;
     const defaults2 = store.getDefaults();
-    expect(defaults2.agentSettings.maxToolRounds).toBe(15);
+    expect(defaults2.agentSettings.maxToolRounds).toBe(99);
   });
 
   // #11 resetInstance

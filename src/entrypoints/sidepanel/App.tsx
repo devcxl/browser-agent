@@ -3,7 +3,7 @@ import { ChatProvider, useChat } from './ChatContext';
 import { ChatView } from './components/ChatView';
 import { MessageInput } from './components/MessageInput';
 import { ConversationSidebar } from './components/ConversationSidebar';
-import { BrowserStatePanel } from './components/BrowserStatePanel';
+import { TokenPanel } from './components/TokenPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -36,15 +36,15 @@ function AgentStatusIndicator() {
 }
 
 function ChatLayout() {
-  const { conversations, agent, browserState, messages, messagesLoading, messagesError, confirmRequest, resolveConfirm } = useChat();
+  const { conversations, agent, browserState, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm } = useChat();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [browserCollapsed, setBrowserCollapsed] = useState(false);
+  const [tokenCollapsed, setTokenCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   // Settings state (persisted via ConfigStore → browser.storage.local)
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
-    maxToolRounds: 15,
+    maxToolRounds: 99,
     maxContextMessages: 40,
     systemPrompt: '',
     reasoningEffort: 'medium',
@@ -172,12 +172,10 @@ function ChatLayout() {
           />
         </div>
 
-        <BrowserStatePanel
-          state={browserState.state}
-          loading={browserState.loading}
-          error={browserState.error}
-          collapsed={browserCollapsed}
-          onToggleCollapse={() => setBrowserCollapsed(!browserCollapsed)}
+        <TokenPanel
+          usage={tokenUsage}
+          collapsed={tokenCollapsed}
+          onToggleCollapse={() => setTokenCollapsed(!tokenCollapsed)}
         />
       </div>
 

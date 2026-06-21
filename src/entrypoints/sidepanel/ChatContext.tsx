@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import type { UIMessage, ConfirmRequest } from './types';
+import type { UIMessage, ConfirmRequest, TokenUsage } from './types';
 import { useConversations } from './hooks/useConversations';
 import { useAgent } from './hooks/useAgent';
 import { useBrowserState } from './hooks/useBrowserState';
@@ -24,6 +24,8 @@ interface ChatContextValue {
   // Loading / Error
   messagesLoading: boolean;
   messagesError: string | null;
+  // Token usage
+  tokenUsage: TokenUsage;
   // Confirm dialog
   confirmRequest: ConfirmRequest | null;
   resolveConfirm: (allowed: boolean) => void;
@@ -39,6 +41,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
   const prevActiveIdRef = useRef<string | null>(null);
 
   const addMessage = useCallback((msg: UIMessage) => {
@@ -60,7 +63,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     onConfirm: (req) => {
       setConfirmRequest(req);
     },
+    onTokenUsage: setTokenUsage,
   });
+
+  // Reset tokenUsage on conversation switch
+  useEffect(() => {
+    if (conversations.activeId !== prevActiveIdRef.current) {
+      prevActiveIdRef.current = conversations.activeId;
+      setTokenUsage({ prompt: 0, completion: 0 });
+    }
+  }, [conversations.activeId]);
 
   const resolveConfirm = useCallback(
     (allowed: boolean) => {
@@ -121,6 +133,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         clearMessages,
         messagesLoading,
         messagesError,
+        tokenUsage,
         confirmRequest,
         resolveConfirm,
       }}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest } from '../types';
+import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
 import type { ProviderConfig } from '@/shared/types';
 import type { AgentLoopHooks } from '@/agent/agent-loop';
 import type { ToolCallRecord } from '@/shared/types/agent';
@@ -13,6 +13,7 @@ import { uid } from '../utils';
 interface AgentCallbacks {
   onMessage?: (msg: UIMessage) => void;
   onConfirm?: (req: ConfirmRequest) => void;
+  onTokenUsage?: (usage: TokenUsage) => void;
 }
 
 interface AgentDeps {
@@ -240,6 +241,9 @@ export function useAgent() {
         // 兜底：hooks 未覆盖的场景（如 maxToolRounds 终止、无效工具等）
         if (!assistantMsg.content && output.finalMessage) {
           assistantMsg.content = output.finalMessage;
+        }
+        if (output.tokenUsage) {
+          cbRef.current.onTokenUsage?.(output.tokenUsage);
         }
         if (output.toolCalls.length > 0) {
           // hooks 已通过 onToolCall 推送了所有工具调用，此处仅做二次兜底

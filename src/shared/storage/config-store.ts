@@ -6,7 +6,7 @@ import type { StorageSchema, IConfigStore } from '@/shared/types';
 const DEFAULTS: StorageSchema = {
   providers: [],
   agentSettings: {
-    maxToolRounds: 15,
+    maxToolRounds: 99,
     systemPrompt: '',
     maxContextMessages: 40,
     reasoningEffort: 'medium',

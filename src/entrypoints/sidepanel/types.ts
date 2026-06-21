@@ -60,3 +60,8 @@ export interface ConfirmRequest {
   toolName: string;
   params: Record<string, unknown>;
 }
+
+export interface TokenUsage {
+  prompt: number;
+  completion: number;
+}

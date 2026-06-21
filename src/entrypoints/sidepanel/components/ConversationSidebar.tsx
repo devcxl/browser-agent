@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ConversationSummary } from '../types';
+import type { ConversationSummary, AgentStatus } from '../types';
 import { formatDateTime, cn } from '../utils';
 
 interface Props {
@@ -15,6 +15,20 @@ interface Props {
   onDelete: (id: string) => void;
   onOpenSettings: () => void;
 }
+
+const statusColors: Record<string, string> = {
+  idle: 'bg-gray-400',
+  running: 'bg-yellow-400 animate-pulse',
+  streaming: 'bg-green-400 animate-pulse',
+  waitingConfirmation: 'bg-orange-400',
+};
+
+const statusLabels: Record<string, string> = {
+  idle: '就绪',
+  running: '运行中...',
+  streaming: '输出中...',
+  waitingConfirmation: '等待确认',
+};
 
 export function ConversationSidebar({
   conversations,

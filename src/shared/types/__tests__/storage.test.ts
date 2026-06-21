@@ -18,7 +18,7 @@ describe('Storage types', () => {
       const schema: StorageSchema = {
         providers: [],
         agentSettings: {
-          maxToolRounds: 15,
+          maxToolRounds: 99,
           systemPrompt: '',
           maxContextMessages: 40,
           summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
@@ -26,7 +26,7 @@ describe('Storage types', () => {
         expertModeSettings: { enabled: false, switches: {} },
         preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },
       };
-      expect(schema.agentSettings.maxToolRounds).toBe(15);
+      expect(schema.agentSettings.maxToolRounds).toBe(99);
     });
   });
 
@@ -128,7 +128,7 @@ describe('Storage types', () => {
         getAll: async () => ({
           providers: [],
           agentSettings: {
-            maxToolRounds: 15,
+          maxToolRounds: 99,
             systemPrompt: '',
             maxContextMessages: 40,
             summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
