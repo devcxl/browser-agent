@@ -40,18 +40,18 @@ function ChatLayout() {
     (text: string) => {
       if (!conversations.activeId) {
         conversations.create().then((id) => {
-          agent.run(id, text, providers[0]!);
+          agent.run(id, text, providers[0]!, agentSettings.maxToolRounds);
           generateTitle(id, text);
         });
         return;
       }
-      agent.run(conversations.activeId, text, providers[0]!);
+      agent.run(conversations.activeId, text, providers[0]!, agentSettings.maxToolRounds);
       const currentConv = conversations.list.find(c => c.id === conversations.activeId);
       if (currentConv && isDefaultTitle(currentConv.title)) {
         generateTitle(conversations.activeId, text);
       }
     },
-    [conversations, agent, providers],
+    [conversations, agent, providers, agentSettings.maxToolRounds],
   );
 
   const handleTestConnection = useCallback(
