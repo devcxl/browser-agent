@@ -43,6 +43,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
   const prevActiveIdRef = useRef<string | null>(null);
+  const prevTokenResetIdRef = useRef<string | null>(null);
 
   const addMessage = useCallback((msg: UIMessage) => {
     setMessages((prev) => {
@@ -68,8 +69,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Reset tokenUsage on conversation switch
   useEffect(() => {
-    if (conversations.activeId !== prevActiveIdRef.current) {
-      prevActiveIdRef.current = conversations.activeId;
+    if (conversations.activeId !== prevTokenResetIdRef.current) {
+      prevTokenResetIdRef.current = conversations.activeId;
       setTokenUsage({ prompt: 0, completion: 0 });
     }
   }, [conversations.activeId]);

@@ -1103,6 +1103,8 @@ describe('AgentLoop', () => {
       // 最终 assistant 不含 toolCalls
       expect(calls[5]![1].toolCalls).toBeUndefined();
     });
+  });
+
   // === Token Usage Tests ===
   it('单轮有 usage → 返回 tokenUsage', async () => {
     const llmClient = createMockLlmClient([stopResponseWithUsage('完成。', 50, 30)]);
