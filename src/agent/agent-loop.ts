@@ -38,6 +38,8 @@ export class AgentLoop implements IAgentRuntime {
     this.abortController = new AbortController();
     const toolCalls: ToolCallRecord[] = [];
     let finalMessage = '';
+    let totalPrompt = 0;
+    let totalCompletion = 0;
 
     try {
       // 1. Store user message
@@ -81,6 +83,11 @@ export class AgentLoop implements IAgentRuntime {
             break;
           }
           throw err;
+        }
+
+        if (response.usage) {
+          totalPrompt += response.usage.prompt_tokens;
+          totalCompletion += response.usage.completion_tokens;
         }
 
         const choice = response.choices[0];
@@ -212,7 +219,7 @@ export class AgentLoop implements IAgentRuntime {
       // 5. Check if summary needed
       await this.summaryManager.checkAndSummarize(input.conversationId, llmClient);
 
-      return { finalMessage, toolCalls };
+      return { finalMessage, toolCalls, tokenUsage: { prompt: totalPrompt, completion: totalCompletion } };
     } finally {
       this.abortController = null;
     }
