@@ -23,6 +23,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        agentStatus="idle"
       />,
     );
 
@@ -44,6 +45,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        agentStatus="idle"
       />,
     );
 
@@ -65,6 +67,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        agentStatus="idle"
       />,
     );
 
@@ -86,6 +89,7 @@ describe('ConversationSidebar', () => {
         onNew={onNew}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        agentStatus="idle"
       />,
     );
 
@@ -106,6 +110,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        agentStatus="idle"
       />,
     );
 
@@ -125,6 +130,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        agentStatus="idle"
       />,
     );
 
@@ -144,6 +150,7 @@ describe('ConversationSidebar', () => {
         onNew={vi.fn()}
         onRename={vi.fn()}
         onDelete={vi.fn()}
+        agentStatus="idle"
       />,
     );
 
