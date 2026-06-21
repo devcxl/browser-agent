@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import type { UIMessage, ConfirmRequest } from './types';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import type { UIMessage, ConfirmRequest, TokenUsage } from './types';
 import { useConversations } from './hooks/useConversations';
 import { useAgent } from './hooks/useAgent';
 import { useBrowserState } from './hooks/useBrowserState';
@@ -15,6 +15,8 @@ interface ChatContextValue {
   messages: UIMessage[];
   addMessage: (msg: UIMessage) => void;
   clearMessages: () => void;
+  // Token usage
+  tokenUsage: TokenUsage;
   // Confirm dialog
   confirmRequest: ConfirmRequest | null;
   resolveConfirm: (allowed: boolean) => void;
@@ -29,6 +31,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   const [confirmResolver, setConfirmResolver] = useState<((v: boolean) => void) | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
+  const prevActiveIdRef = useRef<string | null>(null);
 
   const addMessage = useCallback((msg: UIMessage) => {
     setMessages((prev) => {
@@ -53,7 +57,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         if (allowed) agent.resumeAfterConfirm();
       });
     },
+    onTokenUsage: setTokenUsage,
   });
+
+  // Reset tokenUsage on conversation switch
+  useEffect(() => {
+    if (conversations.activeId !== prevActiveIdRef.current) {
+      prevActiveIdRef.current = conversations.activeId;
+      setTokenUsage({ prompt: 0, completion: 0 });
+    }
+  }, [conversations.activeId]);
 
   const resolveConfirm = useCallback(
     (allowed: boolean) => {
@@ -72,6 +85,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         messages,
         addMessage,
         clearMessages,
+        tokenUsage,
         confirmRequest,
         resolveConfirm,
       }}
