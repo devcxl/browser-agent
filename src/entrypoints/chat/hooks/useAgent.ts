@@ -1,16 +1,22 @@
 import { useState, useCallback, useRef } from 'react';
-import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest } from '../types';
+import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
 import type { ProviderConfig, StreamChunk } from '@/shared/types';
 import { uid } from '../utils';
 
 interface AgentCallbacks {
   onMessage?: (msg: UIMessage) => void;
   onConfirm?: (req: ConfirmRequest) => void;
+  onTokenUsage?: (usage: TokenUsage) => void;
+}
+
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length * 0.5);
 }
 
 export function useAgent() {
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
   const abortRef = useRef<AbortController | null>(null);
   const cbRef = useRef<AgentCallbacks>({});
 
@@ -23,10 +29,12 @@ export function useAgent() {
       conversationId: string,
       userMessage: string,
       providerConfig: ProviderConfig,
+      maxToolRounds: number = 99,
     ) => {
       abortRef.current = new AbortController();
       setStatus('running');
       setError(null);
+      setTokenUsage({ prompt: 0, completion: 0 });
 
       const userMsg: UIMessage = {
         id: uid(),
@@ -61,7 +69,7 @@ export function useAgent() {
         const convManager = new ConversationManager(db);
         const contextBuilder = new ContextBuilder(
           {
-            maxToolRounds: 15,
+            maxToolRounds,
             systemPrompt: '',
             maxContextMessages: 40,
             summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
@@ -87,6 +95,13 @@ export function useAgent() {
           },
           abortRef.current.signal,
         );
+
+        // Estimate token usage from messages sent and response received
+        const promptTokens = messages.reduce((sum: number, m: { content?: string | null }) => sum + estimateTokens(m.content ?? ''), 0);
+        const completionTokens = estimateTokens(assistantMsg.content);
+        const usage: TokenUsage = { prompt: promptTokens, completion: completionTokens };
+        setTokenUsage(usage);
+        cbRef.current.onTokenUsage?.(usage);
 
         assistantMsg.status = 'complete';
         cbRef.current.onMessage?.({ ...assistantMsg });
@@ -122,5 +137,5 @@ export function useAgent() {
     setStatus('streaming');
   }, []);
 
-  return { status, error, run, abort, setCallbacks, requestConfirm, resumeAfterConfirm };
+  return { status, error, tokenUsage, run, abort, setCallbacks, requestConfirm, resumeAfterConfirm };
 }
