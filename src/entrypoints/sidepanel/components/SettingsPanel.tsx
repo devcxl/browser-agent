@@ -35,6 +35,7 @@ export function SettingsPanel({
     apiKey: '',
     model: '',
     isLocalTrusted: false,
+    sttModel: '',
   };
 
   const handleSaveProvider = () => {
@@ -46,6 +47,7 @@ export function SettingsPanel({
       apiKey: editing.apiKey,
       model: editing.model,
       isLocalTrusted: editing.isLocalTrusted,
+      sttModel: editing.sttModel || undefined,
     };
     if (editing.id) {
       onSaveProviders(providers.map((p) => (p.id === editing.id ? newProvider : p)));
@@ -126,6 +128,11 @@ export function SettingsPanel({
                       )}
                     </div>
                     <div className="text-xs text-mute truncate">{p.endpoint} / {p.model}</div>
+                    {p.sttModel && (
+                      <div className="text-xs text-mute truncate mt-0.5">
+                        🎤 语音模型: {p.sttModel}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 ml-2">
                     <button
@@ -151,6 +158,7 @@ export function SettingsPanel({
                           apiKey: p.apiKey,
                           model: p.model,
                           isLocalTrusted: p.isLocalTrusted,
+                          sttModel: p.sttModel ?? '',
                         })
                       }
                       className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft"
@@ -197,6 +205,13 @@ export function SettingsPanel({
                     placeholder="模型 (e.g. gpt-4o)"
                     value={editing.model}
                     onChange={(e) => setEditing({ ...editing, model: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
+                  />
+                  <input
+                    data-testid="provider-stt-model-input"
+                    placeholder="语音模型 (e.g. whisper-1)"
+                    value={editing.sttModel ?? ''}
+                    onChange={(e) => setEditing({ ...editing, sttModel: e.target.value })}
                     className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
                   <label className="flex items-center gap-2 text-sm text-mute">
