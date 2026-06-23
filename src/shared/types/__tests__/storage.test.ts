@@ -25,6 +25,7 @@ describe('Storage types', () => {
         },
         expertModeSettings: { enabled: false, switches: {} },
         preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },
+        skills: [],
       };
       expect(schema.agentSettings.maxToolRounds).toBe(99);
     });
@@ -128,13 +129,15 @@ describe('Storage types', () => {
         getAll: async () => ({
           providers: [],
           agentSettings: {
-          maxToolRounds: 99,
+            maxToolRounds: 99,
             systemPrompt: '',
             maxContextMessages: 40,
+            reasoningEffort: 'medium',
             summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
           },
           expertModeSettings: { enabled: false, switches: {} },
           preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },
+          skills: [],
         }),
         patch: async () => {},
         onChange: () => () => {},

@@ -25,6 +25,7 @@ const DEFAULTS: StorageSchema = {
     language: 'zh-CN',
     sidebarExpanded: true,
   },
+  skills: [],
 };
 
 /**
