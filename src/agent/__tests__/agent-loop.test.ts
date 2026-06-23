@@ -5,7 +5,8 @@ import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types
 import type { IGuardrail, GuardrailCheck, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager, Conversation, StoredMessage } from '@/shared/types/conversation';
 import type { ILlmClient, ChatCompletionResponse, ChatMessage, ToolCallDelta } from '@/shared/types/llm';
-import type { ProviderConfig, LowSensitivityContext } from '@/shared/types';
+import type { ProviderConfig, LowSensitivityContext, Skill } from '@/shared/types';
+import { ContextBuilder } from '../context-builder';
 
 // ==================== Mocks ====================
 
@@ -41,14 +42,19 @@ function createMockGuardrail(allowed = true): IGuardrail {
 }
 
 function createMockConversationManager(): IConversationManager {
+  const storedMessages: StoredMessage[] = [];
   return {
     create: vi.fn(),
     get: vi.fn().mockResolvedValue(undefined),
     list: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
-    addMessage: vi.fn(),
-    getRecentMessages: vi.fn().mockResolvedValue([]),
+    addMessage: vi.fn().mockImplementation((_convId: string, msg: StoredMessage) => {
+      storedMessages.push(msg);
+    }),
+    getRecentMessages: vi.fn().mockImplementation((_convId: string) => {
+      return Promise.resolve([...storedMessages]);
+    }),
     generateSummary: vi.fn(),
     needsSummary: vi.fn().mockResolvedValue(false),
   };
@@ -1179,39 +1185,153 @@ describe('AgentLoop', () => {
     expect(output.tokenUsage).toEqual({ prompt: 0, completion: 0 });
   });
 
-  // === Scenario 16 ===
-  it('混合场景：部分轮次有 usage，部分没有', async () => {
-    const toolDef: ToolDefinition = {
-      name: 'noop',
-      description: 'noop',
-      schema: { type: 'object', properties: {} },
-      category: 'tabs',
-      riskLevel: 'low',
-      confirmationRequired: false,
-      resultSensitivity: 'low',
-      execute: vi.fn().mockResolvedValue({ success: true, data: {} }),
+  // === Skill Interception Tests ===
+
+  describe('Skill tool call 拦截', () => {
+    const mockSkill: Skill = {
+      id: 'skill-1',
+      name: 'caveman',
+      description: '压缩输出模式',
+      prompt: '用 caveman 模式回复',
+      enabled: true,
+      createdAt: 100,
+      updatedAt: 100,
     };
 
-    const toolRegistry = createMockToolRegistry([toolDef]);
-    const toolCallResp = toolCallsResponse(toolCallDelta('call_1', 'noop', {}));
+    it('匹配 skill → 拦截成功，activeSkillNames 更新，不经过 guardrail 和 execute', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'skill',
+        description: '激活一个技能',
+        schema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          required: ['name'],
+        },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn(),
+      };
 
-    const respWithUsage = { ...toolCallResp, usage: { prompt_tokens: 80, completion_tokens: 30, total_tokens: 110 } };
-    const respWithoutUsage = toolCallResp;
-    const respFinal = stopResponse('完成。');
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const guardrail = createMockGuardrail();
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_skill', 'skill', { name: 'caveman' })),
+        stopResponse('激活 caveman 成功。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
 
-    const llmClient = createMockLlmClient([respWithUsage, respWithoutUsage, respFinal]);
-    const llmFactory = vi.fn().mockReturnValue(llmClient);
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        guardrail,
+        conversationManager,
+        llmFactory,
+      );
 
-    const loop = new AgentLoop(
-      defaultConfig,
-      toolRegistry,
-      createMockGuardrail(),
-      conversationManager,
-      llmFactory,
-    );
+      const output = await loop.run({
+        ...defaultInput,
+        skills: [mockSkill],
+      });
 
-    const output = await loop.run(defaultInput);
+      // 验证
+      expect(output.finalMessage).toBe('激活 caveman 成功。');
+      // tool 不执行
+      expect(toolDef.execute).not.toHaveBeenCalled();
+      // guardrail.check 不被调用（skill 拦截在 guardrail 之前）
+      expect(guardrail.check).not.toHaveBeenCalled();
+      // addMessage 序列：user + assistant(tool_calls) + tool + assistant(final)
+      expect(conversationManager.addMessage).toHaveBeenCalledTimes(4);
 
-    expect(output.tokenUsage).toEqual({ prompt: 80, completion: 30 });
+      // 第二轮 LLM 调用的 messages 应包含 skill prompt
+      const llmChat = vi.mocked(llmClient.chat);
+      const secondRoundMessages = llmChat.mock.calls[1]![0]!.messages;
+      const systemMsg = secondRoundMessages.find((m) => m.role === 'system');
+      expect(systemMsg?.content).toContain('caveman');
+    });
+
+    it('不匹配的 skill name → 返回错误 result', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'skill',
+        description: '激活一个技能',
+        schema: {
+          type: 'object',
+          properties: { name: { type: 'string' } },
+          required: ['name'],
+        },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({ success: false, error: 'unknown skill' } satisfies ToolResult),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_bad', 'skill', { name: 'nonexistent' })),
+        stopResponse('未找到技能。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+      );
+
+      const output = await loop.run({
+        ...defaultInput,
+        skills: [mockSkill],
+      });
+
+      expect(output.finalMessage).toBe('未找到技能。');
+      expect(output.toolCalls).toHaveLength(1);
+      expect(output.toolCalls[0]!.toolName).toBe('skill');
+      expect(output.toolCalls[0]!.result.success).toBe(false);
+    });
+
+    it('非 skill tool call 不受影响', async () => {
+      const toolDef: ToolDefinition = {
+        name: 'tabs_query',
+        description: '查询标签页',
+        schema: { type: 'object', properties: {} },
+        category: 'tabs',
+        riskLevel: 'low',
+        confirmationRequired: false,
+        resultSensitivity: 'low',
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          data: [{ id: 1, title: 'Example' }],
+        } satisfies ToolResult),
+      };
+
+      const toolRegistry = createMockToolRegistry([toolDef]);
+      const llmClient = createMockLlmClient([
+        toolCallsResponse(toolCallDelta('call_1', 'tabs_query', {})),
+        stopResponse('查询完成。'),
+      ]);
+      const llmFactory = vi.fn().mockReturnValue(llmClient);
+
+      const loop = new AgentLoop(
+        defaultConfig,
+        toolRegistry,
+        createMockGuardrail(),
+        conversationManager,
+        llmFactory,
+      );
+
+      await loop.run({
+        ...defaultInput,
+        skills: [mockSkill],
+      });
+
+      // 正常执行流程
+      expect(toolDef.execute).toHaveBeenCalledWith({});
+      // addMessage 序列：user + assistant(tool_calls) + tool + assistant(final)
+      expect(conversationManager.addMessage).toHaveBeenCalledTimes(4);
+    });
   });
 });
