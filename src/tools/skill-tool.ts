@@ -1,4 +1,4 @@
-import type { ToolDefinition } from '@/registry/types';
+import type { ToolDefinition } from '@/shared/types';
 
 export function createSkillTool(): ToolDefinition {
   return {
