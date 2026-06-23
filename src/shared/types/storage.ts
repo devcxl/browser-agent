@@ -1,5 +1,6 @@
 import type { ProviderConfig } from './llm';
 import type { ReasoningEffort } from './llm';
+import type { Skill } from './skill';
 
 // ==================== chrome.storage.local 存储 Schema ====================
 
@@ -15,6 +16,8 @@ export interface StorageSchema {
   preferences: UserPreferences;
   /** 最近活跃会话 ID */
   activeConversationId?: string;
+  /** Skill 列表 */
+  skills: Skill[];
 }
 
 export interface AgentSettings {
