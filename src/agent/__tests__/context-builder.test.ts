@@ -5,6 +5,7 @@ import type { AgentConfig } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition } from '@/registry/types';
 import type { IConversationManager, StoredMessage, Conversation } from '@/shared/types/conversation';
 import type { LowSensitivityContext } from '@/shared/types/browser';
+import type { Skill } from '@/shared/types/skill';
 
 function createMockToolRegistry(tools: ToolDefinition[]): IToolRegistry {
   const map = new Map(tools.map((t) => [t.name, t]));
@@ -50,6 +51,103 @@ const defaultBrowserContext: LowSensitivityContext = {
   tabGroups: [],
   activeTab: { id: 1, title: 'Tab 1', url: 'https://example.com', windowId: 1 },
 };
+
+describe('ContextBuilder skill 注入', () => {
+  const toolRegistry = createMockToolRegistry([]);
+  const conversationManager = createMockConversationManager();
+
+  beforeEach(() => {
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue([]);
+  });
+
+  it('不传可选参数时输出与默认一致', async () => {
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    expect(messages).toHaveLength(2);
+    expect(messages[0]!.content).toContain('You are a browser assistant.');
+    expect(messages[0]!.content).toContain('## Available Tools');
+    expect(messages[0]!.content).not.toContain('## 可用技能');
+    expect(messages[0]!.content).not.toContain('## 已激活的技能');
+  });
+
+  it('传入 allSkills 时包含可用技能列表', async () => {
+    const allSkills: Skill[] = [
+      { id: 's1', name: 'git', description: 'Git 操作', prompt: 'Git skill prompt', enabled: true, createdAt: 0, updatedAt: 0 },
+      { id: 's2', name: 'docker', description: 'Docker 操作', prompt: 'Docker skill prompt', enabled: false, createdAt: 0, updatedAt: 0 },
+    ];
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext, undefined, allSkills);
+
+    const first = messages[0]!;
+    expect(first.content).toContain('## 可用技能');
+    expect(first.content).toContain('- git: Git 操作');
+    expect(first.content).toContain('- docker: Docker 操作');
+  });
+
+  it('传入匹配的 activeSkillNames 时注入已激活技能 prompt', async () => {
+    const allSkills: Skill[] = [
+      { id: 's1', name: 'git', description: 'Git 操作', prompt: 'Git skill prompt', enabled: true, createdAt: 0, updatedAt: 0 },
+    ];
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext, ['git'], allSkills);
+
+    const first = messages[0]!;
+    expect(first.content).toContain('## 已激活的技能');
+    expect(first.content).toContain('### git');
+    expect(first.content).toContain('Git skill prompt');
+  });
+
+  it('传入不匹配的 activeSkillNames 时不注入已激活技能 prompt', async () => {
+    const allSkills: Skill[] = [
+      { id: 's1', name: 'git', description: 'Git 操作', prompt: 'Git skill prompt', enabled: true, createdAt: 0, updatedAt: 0 },
+    ];
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext, ['nonexistent'], allSkills);
+
+    expect(messages[0]!.content).not.toContain('## 已激活的技能');
+    expect(messages[0]!.content).not.toContain('### git');
+  });
+
+  it('activeSkillNames 为空数组时不注入已激活技能', async () => {
+    const allSkills: Skill[] = [
+      { id: 's1', name: 'git', description: 'Git 操作', prompt: 'Git skill prompt', enabled: true, createdAt: 0, updatedAt: 0 },
+    ];
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext, [], allSkills);
+
+    expect(messages[0]!.content).not.toContain('## 已激活的技能');
+  });
+
+  it('allSkills 中有多个技能，activeSkillNames 只激活部分', async () => {
+    const allSkills: Skill[] = [
+      { id: 's1', name: 'git', description: 'Git 操作', prompt: 'Git skill prompt', enabled: true, createdAt: 0, updatedAt: 0 },
+      { id: 's2', name: 'docker', description: 'Docker 操作', prompt: 'Docker skill prompt', enabled: false, createdAt: 0, updatedAt: 0 },
+      { id: 's3', name: 'npm', description: 'NPM 操作', prompt: 'Npm skill prompt', enabled: true, createdAt: 0, updatedAt: 0 },
+    ];
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext, ['git', 'npm'], allSkills);
+
+    const first = messages[0]!;
+    expect(first.content).toContain('## 可用技能');
+    expect(first.content).toContain('- git: Git 操作');
+    expect(first.content).toContain('- docker: Docker 操作');
+    expect(first.content).toContain('- npm: NPM 操作');
+    expect(first.content).toContain('## 已激活的技能');
+    expect(first.content).toContain('### git');
+    expect(first.content).toContain('Git skill prompt');
+    expect(first.content).toContain('### npm');
+    expect(first.content).toContain('Npm skill prompt');
+    expect(first.content).not.toContain('### docker');
+    expect(first.content).not.toContain('Docker skill prompt');
+  });
+});
 
 describe('ContextBuilder', () => {
   it('正常构建上下文（messages[0] 为 system prompt 含工具列表）', async () => {

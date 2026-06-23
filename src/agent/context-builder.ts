@@ -3,6 +3,7 @@ import type { ChatMessage } from '@/shared/types/llm';
 import type { IToolRegistry } from '@/registry/types';
 import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { LowSensitivityContext } from '@/shared/types/browser';
+import type { Skill } from '@/shared/types/skill';
 
 export class ContextBuilder {
   constructor(
@@ -14,17 +15,27 @@ export class ContextBuilder {
   async build(
     conversationId: string,
     currentBrowserContext: LowSensitivityContext,
+    activeSkillNames?: string[],
+    allSkills?: Skill[],
   ): Promise<ChatMessage[]> {
     const messages: ChatMessage[] = [];
 
-    // 1. System prompt with tool list
     const toolsDesc = this.toolRegistry
       .getAllTools()
       .map((t) => `- **${t.name}**: ${t.description}`)
       .join('\n');
+
+    const skillSections = this.buildSkillSections(activeSkillNames, allSkills);
+
+    let systemContent = this.config.systemPrompt;
+    if (skillSections) {
+      systemContent += `\n\n${skillSections}`;
+    }
+    systemContent += `\n\n## Available Tools\n${toolsDesc}`;
+
     messages.push({
       role: 'system',
-      content: `${this.config.systemPrompt}\n\n## Available Tools\n${toolsDesc}`,
+      content: systemContent,
     });
 
     // 2. Conversation summary (if any)
@@ -52,6 +63,36 @@ export class ContextBuilder {
     }
 
     return messages;
+  }
+
+  private buildSkillSections(
+    activeSkillNames: string[] | undefined,
+    allSkills: Skill[] | undefined,
+  ): string | null {
+    if (!allSkills || allSkills.length === 0) {
+      return null;
+    }
+
+    const parts: string[] = [];
+
+    // 可用技能列表
+    const availableList = allSkills
+      .map((s) => `- ${s.name}: ${s.description}`)
+      .join('\n');
+    parts.push(`## 可用技能\n你可以使用 \`skill\` 工具激活以下技能。\n${availableList}`);
+
+    // 已激活技能 prompt
+    if (activeSkillNames && activeSkillNames.length > 0) {
+      const activeSkills = allSkills.filter((s) => activeSkillNames.includes(s.name));
+      if (activeSkills.length > 0) {
+        const activeParts = activeSkills.map(
+          (s) => `### ${s.name}\n${s.prompt}`,
+        );
+        parts.push(`## 已激活的技能\n${activeParts.join('\n\n')}`);
+      }
+    }
+
+    return parts.join('\n\n');
   }
 
   private convertToChatMessage(msg: StoredMessage): ChatMessage {
