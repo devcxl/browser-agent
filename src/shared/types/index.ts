@@ -113,3 +113,5 @@ export type {
 } from './storage';
 
 export { DB_NAME, DB_VERSION } from './storage';
+
+export type { Skill, ISkillStore } from './skill';
