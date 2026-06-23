@@ -5,6 +5,7 @@ import { MessageInput } from './components/MessageInput';
 import { ConversationSidebar } from './components/ConversationSidebar';
 import { TokenPanel } from './components/TokenPanel';
 import { SettingsPanel } from './components/SettingsPanel';
+import { SkillPanel } from './components/SkillPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ConfigStore } from '@/shared/storage';
@@ -40,6 +41,7 @@ function ChatLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [tokenCollapsed, setTokenCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSkillPanel, setShowSkillPanel] = useState(false);
 
   // Settings state (persisted via ConfigStore → browser.storage.local)
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
@@ -129,7 +131,17 @@ function ChatLayout() {
           </span>
         </div>
         <AgentStatusIndicator />
-        <div className="w-10" />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            data-testid="skill-panel-trigger"
+            onClick={() => setShowSkillPanel(true)}
+            className="text-xs text-mute hover:text-ink transition-colors"
+          >
+            Skills
+          </button>
+          <div className="w-10" />
+        </div>
       </header>
 
       {/* Main */}
@@ -191,6 +203,11 @@ function ChatLayout() {
           onTestConnection={handleTestConnection}
           onClose={() => setShowSettings(false)}
         />
+      )}
+
+      {/* Skill Panel */}
+      {showSkillPanel && (
+        <SkillPanel onClose={() => setShowSkillPanel(false)} />
       )}
 
       {/* Confirm Dialog */}
