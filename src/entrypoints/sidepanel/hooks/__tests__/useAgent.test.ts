@@ -85,6 +85,25 @@ vi.mock('@/tools/phase2-register', () => ({
 vi.mock('@/tools/page', () => ({
   createPageTools: vi.fn().mockReturnValue([]),
 }));
+vi.mock('@/tools/skill-tool', () => ({
+  createSkillTool: vi.fn().mockReturnValue({
+    name: 'skill',
+    description: 'mock skill tool',
+    schema: { type: 'object', properties: {}, required: [] },
+    category: 'expert',
+    riskLevel: 'low',
+    confirmationRequired: false,
+    resultSensitivity: 'low',
+    execute: vi.fn().mockResolvedValue({ success: true, data: {} }),
+  }),
+}));
+vi.mock('@/shared/storage', () => ({
+  SkillStore: {
+    getInstance: vi.fn().mockReturnValue({
+      getEnabled: vi.fn().mockResolvedValue([]),
+    }),
+  },
+}));
 
 import { useAgent } from '../useAgent';
 import type { UIMessage, ConfirmRequest } from '../../types';

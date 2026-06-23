@@ -10,6 +10,8 @@ import type { IConversationManager } from '@/shared/types/conversation';
 import type { IJsonRpcClient } from '@/shared/types';
 import { uid } from '../utils';
 
+import type { ISkillStore } from '@/shared/types/skill';
+
 interface AgentCallbacks {
   onMessage?: (msg: UIMessage) => void;
   onConfirm?: (req: ConfirmRequest) => void;
@@ -27,6 +29,7 @@ interface AgentDeps {
   guardrail: IGuardrail;
   convManager: IConversationManager;
   rpc: IJsonRpcClient;
+  skillStore: ISkillStore;
 }
 
 let _deps: Promise<AgentDeps> | null = null;
@@ -47,6 +50,8 @@ async function getDeps(): Promise<AgentDeps> {
       { createTabGroupsTools },
       { registerPhase2Tools },
       { createPageTools },
+      { createSkillTool },
+      { SkillStore },
     ] = await Promise.all([
       import('@/agent/agent-loop'),
       import('@/registry'),
@@ -60,6 +65,8 @@ async function getDeps(): Promise<AgentDeps> {
       import('@/tools/tabgroups'),
       import('@/tools/phase2-register'),
       import('@/tools/page'),
+      import('@/tools/skill-tool'),
+      import('@/shared/storage'),
     ]);
 
     const db = Database.getInstance();
@@ -78,9 +85,13 @@ async function getDeps(): Promise<AgentDeps> {
       }),
     );
 
-    const guardrail = new Guardrail(registry);
+    // Skill 伪 tool：注册到 ToolRegistry 使 LLM 可通过 function calling 调用
+    registry.register(createSkillTool());
 
-    return { AgentLoop, ToolRegistry, Guardrail, ConversationManager, JsonRpcClient, LlmClient, registry, guardrail, convManager, rpc };
+    const guardrail = new Guardrail(registry);
+    const skillStore = SkillStore.getInstance();
+
+    return { AgentLoop, ToolRegistry, Guardrail, ConversationManager, JsonRpcClient, LlmClient, registry, guardrail, convManager, rpc, skillStore };
   })();
   return _deps;
 }
@@ -139,7 +150,7 @@ export function useAgent() {
       try {
         setStatus('streaming');
 
-        const { AgentLoop, registry, guardrail, convManager, LlmClient } = await getDeps();
+        const { AgentLoop, registry, guardrail, convManager, LlmClient, skillStore } = await getDeps();
 
         const agentConfig: AgentConfig = {
           maxToolRounds: 15,
@@ -227,6 +238,9 @@ export function useAgent() {
 
         loopRef.current = loop;
 
+        // 从 SkillStore 获取已启用的 skills，传入 AgentLoop
+        const enabledSkills = await skillStore.getEnabled();
+
         const output = await loop.run({
           conversationId,
           userMessage,
@@ -236,6 +250,7 @@ export function useAgent() {
             allWindows: [],
             tabGroups: [],
           },
+          skills: enabledSkills,
         });
 
         // 兜底：hooks 未覆盖的场景（如 maxToolRounds 终止、无效工具等）
