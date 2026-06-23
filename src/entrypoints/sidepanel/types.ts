@@ -47,6 +47,8 @@ export interface ProviderFormData {
   apiKey: string;
   model: string;
   isLocalTrusted: boolean;
+  /** STT 语音识别模型（可选） */
+  sttModel?: string;
 }
 
 export interface ConfirmRequest {

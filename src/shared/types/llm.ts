@@ -21,6 +21,8 @@ export interface ProviderConfig {
   extraHeaders?: Record<string, string>;
   /** 请求超时 ms，默认 120000 */
   timeoutMs?: number;
+  /** STT 语音识别模型（可选，如 whisper-1），不填则不支持语音功能 */
+  sttModel?: string;
   /** 是否默认 Provider */
   isDefault?: boolean;
 }
