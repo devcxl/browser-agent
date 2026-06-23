@@ -79,7 +79,7 @@ export function MessageBubble({ message }: Props) {
   const isUser = message.role === 'user';
 
   return (
-    <div className={cn('flex mb-3', isUser ? 'justify-end' : 'justify-start')}>
+    <div data-testid="message-bubble" className={cn('flex mb-3', isUser ? 'justify-end' : 'justify-start')}>
       <div
         className={cn(
           'max-w-[80%] px-4 py-2.5',
