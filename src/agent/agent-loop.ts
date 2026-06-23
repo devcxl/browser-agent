@@ -5,6 +5,7 @@ import type {
   ToolCallRecord,
   IAgentRuntime,
 } from '@/shared/types/agent';
+import type { Skill } from '@/shared/types/skill';
 import type { IToolRegistry } from '@/registry/types';
 import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager } from '@/shared/types/conversation';
@@ -54,6 +55,9 @@ export class AgentLoop implements IAgentRuntime {
     let totalPrompt = 0;
     let totalCompletion = 0;
 
+    const allSkills: Skill[] = input.skills ?? [];
+    const activeSkillNames = new Set<string>();
+
     try {
       // 1. Store user message
       await this.conversationManager.addMessage(input.conversationId, {
@@ -65,13 +69,7 @@ export class AgentLoop implements IAgentRuntime {
 
       const llmClient = this.llmClientFactory(input.providerConfig);
 
-      // 2. Build context messages
-      let messages = await this.contextBuilder.build(
-        input.conversationId,
-        input.browserContext,
-      );
-
-      // 3. Agent loop
+      // 2. Agent loop
       let round = 0;
       let invalidRetries = 0;
 
@@ -80,6 +78,14 @@ export class AgentLoop implements IAgentRuntime {
           finalMessage = '操作已被中止。';
           break;
         }
+
+        // 每轮重建 messages，确保 skill 激活后下一轮 prompt 生效
+        let messages = await this.contextBuilder.build(
+          input.conversationId,
+          input.browserContext,
+          [...activeSkillNames],
+          allSkills,
+        );
 
         const tools = this.toolRegistry.toOpenAISchema();
         let response: ChatCompletionResponse;
@@ -197,6 +203,58 @@ export class AgentLoop implements IAgentRuntime {
               } else {
                 finalMessage = 'LLM 持续调用不存在的工具。';
                 break;
+              }
+            }
+
+            // ── Skill tool call interception ──
+            if (tc.function.name === 'skill') {
+              const skillName = params.name as string | undefined;
+              const matchedSkill = allSkills.find((s) => s.name === skillName);
+              if (matchedSkill) {
+                activeSkillNames.add(matchedSkill.name);
+                const toolMsg = {
+                  role: 'tool' as const,
+                  tool_call_id: tc.id,
+                  content: JSON.stringify({ success: true, data: { skill: matchedSkill.name } }),
+                };
+                messages.push(toolMsg);
+                await this.conversationManager.addMessage(input.conversationId, {
+                  id: crypto.randomUUID(),
+                  role: 'tool',
+                  content: toolMsg.content,
+                  toolCallId: tc.id,
+                  timestamp: Date.now(),
+                });
+                invalidRetries = 0;
+                continue;
+              } else {
+                const toolMsg = {
+                  role: 'tool' as const,
+                  tool_call_id: tc.id,
+                  content: JSON.stringify({
+                    success: false,
+                    error: `未找到技能 "${skillName}"，可用技能：${allSkills.map((s) => s.name).join(', ') ?? '无'}`,
+                  }),
+                };
+                toolCalls.push({
+                  toolName: tc.function.name,
+                  params,
+                  result: { success: false, error: `未找到技能 "${skillName}"` },
+                  riskLevel: 'low',
+                  confirmed: false,
+                  timestamp: Date.now(),
+                  toolCallId: tc.id,
+                });
+                messages.push(toolMsg);
+                await this.conversationManager.addMessage(input.conversationId, {
+                  id: crypto.randomUUID(),
+                  role: 'tool',
+                  content: toolMsg.content,
+                  toolCallId: tc.id,
+                  timestamp: Date.now(),
+                });
+                invalidRetries = 0;
+                continue;
               }
             }
 
