@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageInput } from '../components/MessageInput';
@@ -204,7 +204,9 @@ describe('MessageInput', () => {
     await userEvent.type(input, 'hello');
 
     const mockReturn = getLatestMockReturn();
-    mockReturn.__onTranscribed('world');
+    act(() => {
+      mockReturn.__onTranscribed('world');
+    });
 
     expect(input.value).toBe('hello world');
   });

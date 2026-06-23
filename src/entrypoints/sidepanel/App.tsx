@@ -181,6 +181,7 @@ function ChatLayout() {
             onAbort={agent.abort}
             disabled={agent.status !== 'idle'}
             isRunning={agent.status !== 'idle'}
+            providers={providers}
           />
         </div>
 
