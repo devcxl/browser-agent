@@ -47,6 +47,12 @@ export function useVoiceInput({
   const chunksRef = useRef<Blob[]>([]);
   const selectedProviderRef = useRef<ProviderConfig | null>(null);
   const onTranscribedRef = useRef(onTranscribed);
+  const voiceStateRef = useRef<VoiceState>('idle');
+
+  const setVoiceStateSync = useCallback((state: VoiceState) => {
+    voiceStateRef.current = state;
+    setVoiceState(state);
+  }, []);
 
   const voiceAvailable = useMemo(() => {
     return (
@@ -58,18 +64,27 @@ export function useVoiceInput({
   }, [providers]);
 
   const startRecording = useCallback(async () => {
+    // 幂等保护：requesting/recording/transcribing 状态下禁止重复触发
+    if (
+      voiceStateRef.current === 'requesting' ||
+      voiceStateRef.current === 'recording' ||
+      voiceStateRef.current === 'transcribing'
+    ) {
+      return;
+    }
+
     releaseStream(streamRef, recorderRef, chunksRef);
     setErrorMessage(null);
 
     const provider = selectProvider(providers);
     if (!provider) {
       setErrorMessage('未配置语音模型，请在设置中为 Provider 添加 sttModel');
-      setVoiceState('error');
+      setVoiceStateSync('error');
       return;
     }
     selectedProviderRef.current = provider;
 
-    setVoiceState('requesting');
+    setVoiceStateSync('requesting');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -90,7 +105,7 @@ export function useVoiceInput({
       recorder.onstop = () => {};
 
       recorder.start();
-      setVoiceState('recording');
+      setVoiceStateSync('recording');
     } catch (err) {
       releaseStream(streamRef, recorderRef, chunksRef);
       const error = err as DOMException;
@@ -101,15 +116,15 @@ export function useVoiceInput({
       } else {
         setErrorMessage(`无法启动录音: ${error.message}`);
       }
-      setVoiceState('error');
+      setVoiceStateSync('error');
     }
-  }, [providers]);
+  }, [providers, setVoiceStateSync]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
     if (!recorder || recorder.state !== 'recording') return;
 
-    setVoiceState('transcribing');
+    setVoiceStateSync('transcribing');
 
     recorder.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
@@ -117,7 +132,7 @@ export function useVoiceInput({
 
       if (!provider) {
         setErrorMessage('Provider 配置丢失');
-        setVoiceState('error');
+        setVoiceStateSync('error');
         releaseStream(streamRef, recorderRef, chunksRef);
         return;
       }
@@ -126,17 +141,17 @@ export function useVoiceInput({
         const client = new SttClient(provider);
         const text = await client.transcribe(blob);
         onTranscribedRef.current(text);
-        setVoiceState('idle');
+        setVoiceStateSync('idle');
       } catch (err) {
         setErrorMessage(`语音识别失败: ${(err as Error).message}`);
-        setVoiceState('error');
+        setVoiceStateSync('error');
       } finally {
         releaseStream(streamRef, recorderRef, chunksRef);
       }
     };
 
     recorder.stop();
-  }, []);
+  }, [setVoiceStateSync]);
 
   const cancelRecording = useCallback(() => {
     const recorder = recorderRef.current;
@@ -144,16 +159,16 @@ export function useVoiceInput({
 
     recorder.onstop = () => {
       releaseStream(streamRef, recorderRef, chunksRef);
-      setVoiceState('idle');
+      setVoiceStateSync('idle');
     };
 
     recorder.stop();
-  }, []);
+  }, [setVoiceStateSync]);
 
   const clearError = useCallback(() => {
     setErrorMessage(null);
-    setVoiceState('idle');
-  }, []);
+    setVoiceStateSync('idle');
+  }, [setVoiceStateSync]);
 
   useEffect(() => {
     return () => {

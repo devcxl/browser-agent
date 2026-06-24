@@ -6,7 +6,7 @@ function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     id: 'test-stt-provider',
     name: 'Test STT',
-    endpoint: 'https://api.test.com/v1',
+    endpoint: 'https://api.test.com',
     apiKey: 'sk-test-key',
     model: 'whisper-1',
     isLocalTrusted: false,
@@ -70,7 +70,7 @@ describe('SttClient', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
 
       const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe('https://api.test.com/v1/v1/audio/transcriptions');
+      expect(url).toBe('https://api.test.com/v1/audio/transcriptions');
       expect(init.method).toBe('POST');
       expect(init.body).toBeInstanceOf(FormData);
 
@@ -164,6 +164,32 @@ describe('SttClient', () => {
       const formData = init.body as FormData;
       expect(formData.get('model')).toBe('whisper-2');
     });
+
+    it('should propagate fetch network errors', async () => {
+      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
+
+      await expect(client.transcribe(makeAudioBlob())).rejects.toThrow('Failed to fetch');
+    });
+
+    it('should throw when response has no text field', async () => {
+      mockFetchOk({ no_text: true });
+
+      const result = await client.transcribe(makeAudioBlob());
+
+      expect(result).toBeUndefined();
+    });
+
+    it('should not include Authorization header when apiKey is empty', async () => {
+      const noKeyConfig = makeConfig({ apiKey: '' });
+      const noKeyClient = new SttClient(noKeyConfig);
+      const fetchSpy = mockFetchOk({ text: 'ok' });
+
+      await noKeyClient.transcribe(makeAudioBlob());
+
+      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      const headers = init.headers as Record<string, string>;
+      expect(headers['Authorization']).toBeUndefined();
+    });
   });
 
   describe('checkHealth', () => {
@@ -175,7 +201,7 @@ describe('SttClient', () => {
       const result = await client.checkHealth();
 
       expect(result).toBe(true);
-      expect(fetchSpy.mock.calls[0]![0]).toBe('https://api.test.com/v1/v1/models');
+      expect(fetchSpy.mock.calls[0]![0]).toBe('https://api.test.com/v1/models');
     });
 
     it('should return false on 401', async () => {
@@ -184,6 +210,17 @@ describe('SttClient', () => {
       const result = await client.checkHealth();
 
       expect(result).toBe(false);
+    });
+
+    it('should return false on timeout', async () => {
+      vi.useFakeTimers();
+      mockFetchPending();
+
+      const promise = client.checkHealth();
+      vi.advanceTimersByTime(10_000);
+
+      await expect(promise).resolves.toBe(false);
+      vi.useRealTimers();
     });
   });
 });

@@ -4,14 +4,16 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageInput } from '../components/MessageInput';
 import type { UseVoiceInputReturn } from '../hooks/useVoiceInput';
+import type { ProviderConfig } from '@/shared/types';
 
 // ── Module-level mocks (vi.mock is hoisted above imports) ──
 
 const mockUseVoiceInput = vi.fn();
 vi.mock('../hooks/useVoiceInput', () => ({
-  useVoiceInput: (options: { providers: unknown[]; onTranscribed: (text: string) => void }) => {
+  useVoiceInput: (options: { providers: ProviderConfig[]; onTranscribed: (text: string) => void }) => {
     const result = mockUseVoiceInput();
-    (result as any).__onTranscribed = options.onTranscribed;
+    (result as UseVoiceInputReturn & { __onTranscribed: (text: string) => void }).__onTranscribed =
+      options.onTranscribed;
     return result;
   },
 }));
@@ -34,7 +36,7 @@ function getLatestMockReturn(): UseVoiceInputReturn & { __onTranscribed: (text: 
   return mockUseVoiceInput.mock.results[mockUseVoiceInput.mock.results.length - 1].value;
 }
 
-const EMPTY_PROVIDERS: any[] = [];
+const EMPTY_PROVIDERS: ProviderConfig[] = [];
 
 describe('MessageInput', () => {
   beforeEach(() => {
@@ -231,5 +233,20 @@ describe('MessageInput', () => {
 
     const btn = screen.getByTestId('mic-button');
     expect(btn.tagName).toBe('SPAN');
+  });
+
+  it('录音中点击发送按钮仍可正常发送', async () => {
+    const onSend = vi.fn();
+    mockUseVoiceInput.mockReturnValue({ ...defaultMock(), voiceState: 'recording' });
+
+    render(
+      <MessageInput onSend={onSend} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
+    );
+
+    const input = screen.getByTestId('message-input');
+    await userEvent.type(input, 'hello during recording');
+    await userEvent.click(screen.getByTestId('send-button'));
+
+    expect(onSend).toHaveBeenCalledWith('hello during recording');
   });
 });

@@ -53,9 +53,11 @@ describe('SettingsPanel - sttModel', () => {
     const addBtn = screen.getByTestId('add-provider-button');
     await userEvent.click(addBtn);
 
-    const input = screen.getByTestId('provider-stt-model-input');
+    const input = screen.getByTestId('provider-stt-model-input') as HTMLInputElement;
     expect(input).toBeInTheDocument();
     expect(input).toHaveAttribute('placeholder', expect.stringContaining('语音模型'));
+    // defaultForm 中 sttModel 默认值为空字符串
+    expect(input.value).toBe('');
   });
 
   it('新增 Provider 时可填写 sttModel 并保存', async () => {
