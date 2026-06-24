@@ -72,13 +72,13 @@ function ChatLayout() {
   }, []);
 
   // 持久化回调
-  const handleSaveProviders = useCallback((p: ProviderConfig[]) => {
+  const handleSaveProviders = useCallback(async (p: ProviderConfig[]) => {
     setProviders(p);
-    store.set('providers', p);
+    await store.set('providers', p);
   }, []);
-  const handleSaveAgentSettings = useCallback((s: AgentSettings) => {
+  const handleSaveAgentSettings = useCallback(async (s: AgentSettings) => {
     setAgentSettings(s);
-    store.set('agentSettings', {
+    await store.set('agentSettings', {
       maxToolRounds: s.maxToolRounds,
       systemPrompt: s.systemPrompt,
       maxContextMessages: s.maxContextMessages,
@@ -90,9 +90,9 @@ function ChatLayout() {
       },
     });
   }, []);
-  const handleSaveExpertMode = useCallback((e: ExpertModeSettings) => {
+  const handleSaveExpertMode = useCallback(async (e: ExpertModeSettings) => {
     setExpertMode(e);
-    store.set('expertModeSettings', e);
+    await store.set('expertModeSettings', e);
   }, []);
 
   const handleSend = useCallback(
