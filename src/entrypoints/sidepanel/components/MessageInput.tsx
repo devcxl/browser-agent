@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '../utils';
 import type { ProviderConfig } from '@/shared/types';
 import { useVoiceInput } from '../hooks/useVoiceInput';
@@ -11,20 +11,26 @@ interface Props {
   providers: ProviderConfig[];
 }
 
+const SpinnerIcon = (
+  <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.25" />
+    <path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" strokeWidth="2" opacity="0.75" />
+  </svg>
+);
+
 export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }: Props) {
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { voiceState, errorMessage, voiceAvailable, startRecording, stopRecording, clearError } =
-    useVoiceInput({
-      providers,
-      onTranscribed: (transcribedText: string) => {
-        setText((prev) => {
-          const separator = prev.trim() ? ' ' : '';
-          return prev + separator + transcribedText;
-        });
-      },
+  const handleTranscribed = useCallback((transcribedText: string) => {
+    setText((prev) => {
+      const separator = prev.trim() ? ' ' : '';
+      return prev + separator + transcribedText;
     });
+  }, []);
+
+  const { voiceState, errorMessage, voiceAvailable, startRecording, stopRecording, clearError } =
+    useVoiceInput({ providers, onTranscribed: handleTranscribed });
 
   const handleSend = () => {
     const trimmed = text.trim();
@@ -80,10 +86,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
       case 'requesting':
         return (
           <span data-testid="mic-button" className={cn(baseMicClass, 'text-mute')} title="正在请求麦克风权限...">
-            <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-              <path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" strokeWidth="2" opacity="0.75" />
-            </svg>
+            {SpinnerIcon}
           </span>
         );
 
@@ -103,10 +106,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
       case 'transcribing':
         return (
           <span data-testid="mic-button" className={cn(baseMicClass, 'text-mute opacity-60')} title="正在识别语音...">
-            <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" opacity="0.25" />
-              <path d="M4 12a8 8 0 0 1 8-8" stroke="currentColor" strokeWidth="2" opacity="0.75" />
-            </svg>
+            {SpinnerIcon}
           </span>
         );
 
