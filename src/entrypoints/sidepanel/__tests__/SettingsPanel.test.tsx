@@ -6,6 +6,33 @@ import { SettingsPanel } from '../components/SettingsPanel';
 import type { ProviderConfig } from '@/shared/types';
 import type { AgentSettings, ExpertModeSettings } from '../types';
 
+// Mock stores used internally by SettingsPanel (skills tab)
+vi.mock('@/shared/github-skill-fetcher', () => ({
+  fetchSkillsFromGitHub: vi.fn().mockResolvedValue([]),
+}));
+vi.mock('@/shared/storage', () => {
+  const mockSkillStore = {
+    getAll: vi.fn().mockResolvedValue([]),
+    getEnabled: vi.fn().mockResolvedValue([]),
+    add: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    loadReady: vi.fn().mockResolvedValue([]),
+    onChange: vi.fn().mockReturnValue(() => {}),
+  };
+  const mockSubStore = {
+    getAll: vi.fn().mockResolvedValue([]),
+    add: vi.fn(),
+    update: vi.fn(),
+    remove: vi.fn(),
+    onChange: vi.fn().mockReturnValue(() => {}),
+  };
+  return {
+    SkillStore: { getInstance: vi.fn().mockReturnValue(mockSkillStore) },
+    SkillSubscriptionStore: { getInstance: vi.fn().mockReturnValue(mockSubStore) },
+  };
+});
+
 // ==================== 测试辅助 ====================
 
 function makeProps(overrides: Partial<React.ComponentProps<typeof SettingsPanel>> = {}) {

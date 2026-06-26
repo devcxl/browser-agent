@@ -63,11 +63,93 @@ function createMockConversationManager(): IConversationManager {
 function createMockLlmClient(
   responses: ChatCompletionResponse[],
 ): ILlmClient {
-  const mockChat = vi.fn();
-  responses.forEach((r) => mockChat.mockResolvedValueOnce(r));
+  const onChunkCallbacks: Array<(chunk: string) => void> = [];
+  const mockChatStream = vi.fn().mockImplementation(
+    async (
+      _request: Parameters<ILlmClient['chatStream']>[0],
+      onChunk: (chunk: import('@/shared/types').StreamChunk) => void,
+      _signal?: AbortSignal,
+      onReasoning?: (content: string) => void,
+    ) => {
+      const idx = mockChatStream.mock.calls.length - 1;
+      const resp = responses[idx];
+      if (!resp) return;
+
+      const choice = resp.choices[0]!;
+      const msg = choice.message;
+
+      // streaming content chunks (last chunk carries finish_reason and optional usage)
+      if (msg.content) {
+        const chunkSize = Math.max(1, Math.ceil(msg.content.length / 3));
+        for (let i = 0; i < msg.content.length; i += chunkSize) {
+          const isLast = i + chunkSize >= msg.content.length;
+          onChunk({
+            id: resp.id,
+            choices: [{
+              delta: { content: msg.content.slice(i, i + chunkSize) },
+              finish_reason: isLast ? choice.finish_reason : null,
+            }],
+            usage: isLast && resp.usage ? {
+              prompt_tokens: resp.usage.prompt_tokens,
+              completion_tokens: resp.usage.completion_tokens,
+              total_tokens: resp.usage.total_tokens,
+            } : undefined,
+          });
+        }
+        return;
+      }
+
+      // reasoning content
+      if (msg.reasoning_content && onReasoning) {
+        onReasoning(msg.reasoning_content);
+      }
+
+      // tool_calls in delta format (last delta carries finish_reason and optional usage)
+      if (msg.tool_calls) {
+        for (let i = 0; i < msg.tool_calls.length; i++) {
+          const tc = msg.tool_calls[i]!;
+          const isLast = i === msg.tool_calls.length - 1;
+          onChunk({
+            id: resp.id,
+            choices: [{
+              delta: {
+                tool_calls: [{
+                  index: i,
+                  id: tc.id,
+                  type: tc.type,
+                  function: tc.function,
+                }],
+              },
+              finish_reason: isLast ? choice.finish_reason : null,
+            }],
+            usage: isLast && resp.usage ? {
+              prompt_tokens: resp.usage.prompt_tokens,
+              completion_tokens: resp.usage.completion_tokens,
+              total_tokens: resp.usage.total_tokens,
+            } : undefined,
+          });
+        }
+        return;
+      }
+
+      // final chunk with finish_reason and optional usage
+      if (!msg.content && !msg.tool_calls) {
+        onChunk({
+          id: resp.id,
+          choices: [{ delta: {}, finish_reason: choice.finish_reason }],
+          usage: resp.usage ? {
+            prompt_tokens: resp.usage.prompt_tokens,
+            completion_tokens: resp.usage.completion_tokens,
+            total_tokens: resp.usage.total_tokens,
+          } : undefined,
+        });
+      }
+    },
+  );
+
   return {
-    chat: mockChat,
-    chatStream: vi.fn(),
+    chat: vi.fn(),
+    chatStream: mockChatStream,
     checkHealth: vi.fn(),
   };
 }
@@ -550,7 +632,7 @@ describe('AgentLoop', () => {
   // === Scenario 11 ===
   it('LLM API 调用失败 → 错误向上抛出', async () => {
     const llmClient = createMockLlmClient([]);
-    llmClient.chat = vi.fn().mockRejectedValue(new Error('API 调用失败'));
+    llmClient.chatStream = vi.fn().mockRejectedValue(new Error('API 调用失败'));
     const llmFactory = vi.fn().mockReturnValue(llmClient);
 
     const loop = new AgentLoop(
@@ -891,7 +973,7 @@ describe('AgentLoop', () => {
       expect(conversationManager.addMessage).toHaveBeenCalledTimes(2);
 
       // 验证：LLM 收到的 messages 中当前 user 消息只出现一次（没有重复 push）
-      const llmChat = vi.mocked(llmClient.chat);
+      const llmChat = vi.mocked(llmClient.chatStream);
       const messagesArg = llmChat.mock.calls[0]![0]!.messages;
 
       const userMessages = messagesArg.filter((m) => m.role === 'user');
@@ -935,7 +1017,7 @@ describe('AgentLoop', () => {
 
       // 第二轮 LLM 调用（index 1）的 messages 应包含：
       // ... assistant(tool_calls: call_1) → tool(tool_call_id: call_1)
-      const llmChat = vi.mocked(llmClient.chat);
+      const llmChat = vi.mocked(llmClient.chatStream);
       const secondRoundMessages = llmChat.mock.calls[1]![0]!.messages;
 
       const assistantToolCall = secondRoundMessages.find(
@@ -991,7 +1073,7 @@ describe('AgentLoop', () => {
 
       await loop.run(defaultInput);
 
-      const llmChat = vi.mocked(llmClient.chat);
+      const llmChat = vi.mocked(llmClient.chatStream);
       const secondRoundMessages = llmChat.mock.calls[1]![0]!.messages;
 
       // 只应有一个 assistant(tool_calls) 消息，包含两个 tool_call
@@ -1193,6 +1275,7 @@ describe('AgentLoop', () => {
       name: 'caveman',
       description: '压缩输出模式',
       prompt: '用 caveman 模式回复',
+      resources: [],
       enabled: true,
       createdAt: 100,
       updatedAt: 100,
@@ -1245,7 +1328,7 @@ describe('AgentLoop', () => {
       expect(conversationManager.addMessage).toHaveBeenCalledTimes(4);
 
       // 第二轮 LLM 调用的 messages 应包含 skill prompt
-      const llmChat = vi.mocked(llmClient.chat);
+      const llmChat = vi.mocked(llmClient.chatStream);
       const secondRoundMessages = llmChat.mock.calls[1]![0]!.messages;
       const systemMsg = secondRoundMessages.find((m) => m.role === 'system');
       expect(systemMsg?.content).toContain('caveman');

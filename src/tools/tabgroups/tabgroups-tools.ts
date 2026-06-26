@@ -8,18 +8,12 @@ const TAB_GROUP_COLORS = [
 const QUERY_SCHEMA: ToolParameterSchema = {
   type: 'object',
   properties: {
-    queryInfo: {
-      type: 'object',
-      description: '查询过滤条件（全部可选）',
-      properties: {
-        collapsed: { type: 'boolean', description: '按折叠状态过滤' },
-        color: { type: 'string', description: '按颜色过滤', enum: [...TAB_GROUP_COLORS] },
-        title: { type: 'string', description: '按标题过滤' },
-        windowId: { type: 'number', description: '按窗口 ID 过滤' },
-      },
-    },
+    collapsed: { type: 'boolean', description: '按折叠状态过滤' },
+    color: { type: 'string', description: '按颜色过滤', enum: [...TAB_GROUP_COLORS] },
+    title: { type: 'string', description: '按标题过滤' },
+    windowId: { type: 'number', description: '按窗口 ID 过滤' },
   },
-} as unknown as ToolParameterSchema;
+};
 
 const UPDATE_SCHEMA: ToolParameterSchema = {
   type: 'object',
@@ -51,7 +45,7 @@ function createTabGroupsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
     confirmationRequired: false,
     resultSensitivity: 'low',
     execute: async (params) => {
-      const data = await rpc.request('tabGroups.query', params as Record<string, unknown>);
+      const data = await rpc.request('tabGroups.query', { queryInfo: params } as Record<string, unknown>);
       return { success: true, data };
     },
   };

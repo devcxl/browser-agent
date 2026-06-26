@@ -101,6 +101,7 @@ vi.mock('@/shared/storage', () => ({
   SkillStore: {
     getInstance: vi.fn().mockReturnValue({
       getEnabled: vi.fn().mockResolvedValue([]),
+      loadReady: vi.fn().mockResolvedValue([]),
     }),
   },
 }));

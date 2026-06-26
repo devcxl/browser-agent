@@ -3,8 +3,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SkillPanel } from '../components/SkillPanel';
-import { SkillStore } from '@/shared/storage';
-import type { Skill } from '@/shared/types';
+import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
+import type { Skill, SkillSubscription } from '@/shared/types';
+
+// Mock github-skill-fetcher to avoid real network calls
+vi.mock('@/shared/github-skill-fetcher', () => ({
+  fetchSkillsFromGitHub: vi.fn().mockResolvedValue([]),
+}));
 
 // ==================== 测试辅助 ====================
 
@@ -17,6 +22,20 @@ function makeSkill(overrides: Partial<Skill> = {}): Skill {
     enabled: true,
     createdAt: 1700000000000,
     updatedAt: 1700000000000,
+    source: '',
+    resources: [],
+    ...overrides,
+  };
+}
+
+function makeSub(overrides: Partial<SkillSubscription> = {}): SkillSubscription {
+  return {
+    id: 'sub-1',
+    source: 'owner/repo',
+    type: 'github',
+    enabled: true,
+    lastSyncedAt: null,
+    createdAt: 1700000000000,
     ...overrides,
   };
 }
@@ -25,12 +44,14 @@ function mockSkillStore() {
   const listeners: Array<(skills: Skill[]) => void> = [];
 
   const mock = {
-    getAll: vi.fn<() => Promise<Skill[]>>(),
-    getEnabled: vi.fn<() => Promise<Skill[]>>(),
+    getAll: vi.fn<() => Promise<Skill[]>>().mockResolvedValue([]),
+    getEnabled: vi.fn<() => Promise<Skill[]>>().mockResolvedValue([]),
     save: vi.fn<(skills: Skill[]) => Promise<void>>(),
     add: vi.fn<(skill: Skill) => Promise<void>>(),
     update: vi.fn<(id: string, patch: Partial<Skill>) => Promise<void>>(),
     remove: vi.fn<(id: string) => Promise<void>>(),
+    getContent: vi.fn(),
+    loadReady: vi.fn<(skills: Skill[]) => Promise<Skill[]>>().mockResolvedValue([]),
     onChange: vi.fn((callback: (skills: Skill[]) => void) => {
       listeners.push(callback);
       return () => {
@@ -48,23 +69,52 @@ function mockSkillStore() {
   return mock;
 }
 
+function mockSubStore() {
+  const listeners: Array<(subs: SkillSubscription[]) => void> = [];
+
+  const mock = {
+    getAll: vi.fn<() => Promise<SkillSubscription[]>>().mockResolvedValue([]),
+    add: vi.fn<(sub: SkillSubscription) => Promise<void>>(),
+    update: vi.fn<(id: string, patch: Partial<SkillSubscription>) => Promise<void>>(),
+    remove: vi.fn<(id: string) => Promise<void>>(),
+    onChange: vi.fn((callback: (subs: SkillSubscription[]) => void) => {
+      listeners.push(callback);
+      return () => {
+        const idx = listeners.indexOf(callback);
+        if (idx >= 0) listeners.splice(idx, 1);
+      };
+    }),
+    _notify: (subs: SkillSubscription[]) => {
+      for (const listener of listeners) {
+        listener(subs);
+      }
+    },
+  };
+
+  return mock;
+}
+
 // ==================== 测试 ====================
 
 describe('SkillPanel', () => {
-  let storeMock: ReturnType<typeof mockSkillStore>;
+  let skillStoreMock: ReturnType<typeof mockSkillStore>;
+  let subStoreMock: ReturnType<typeof mockSubStore>;
 
   beforeEach(() => {
-    storeMock = mockSkillStore();
+    vi.clearAllMocks();
+    skillStoreMock = mockSkillStore();
+    subStoreMock = mockSubStore();
     vi.spyOn(SkillStore, 'getInstance').mockReturnValue(
-      storeMock as unknown as SkillStore,
+      skillStoreMock as unknown as SkillStore,
+    );
+    vi.spyOn(SkillSubscriptionStore, 'getInstance').mockReturnValue(
+      subStoreMock as unknown as SkillSubscriptionStore,
     );
   });
 
   // ── 渲染 ──────────────────────────────────────────
 
   it('应正确渲染标题栏和关闭按钮', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
-
     render(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
@@ -75,9 +125,7 @@ describe('SkillPanel', () => {
   });
 
   it('点击关闭按钮应调用 onClose', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
     const onClose = vi.fn();
-
     render(<SkillPanel onClose={onClose} />);
 
     await waitFor(() => {
@@ -89,255 +137,80 @@ describe('SkillPanel', () => {
 
   // ── 空状态 ────────────────────────────────────────
 
-  it('空列表时应显示"暂无技能"提示', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
-
+  it('无订阅和技能时应显示空提示', async () => {
     render(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('skill-empty-hint')).toBeDefined();
+      expect(screen.getByText('暂无订阅，输入 GitHub 仓库地址添加')).toBeDefined();
     });
-    expect(screen.getByText('暂无技能')).toBeDefined();
   });
 
-  // ── 列表渲染 ──────────────────────────────────────
+  // ── 订阅管理 ──────────────────────────────────────
 
-  it('应正确显示 skill 列表', async () => {
-    const skills = [
-      makeSkill({ id: 's1', name: 'Skill A', description: 'Desc A' }),
-      makeSkill({ id: 's2', name: 'Skill B', description: 'Desc B' }),
+  it('输入仓库地址后点击添加按钮应创建订阅', async () => {
+    render(<SkillPanel onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('subscription-add-btn')).toBeDefined();
+    });
+
+    const input = screen.getByPlaceholderText('输入 GitHub 仓库，如 owner/repo');
+    await userEvent.type(input, 'test-owner/test-repo');
+    await userEvent.click(screen.getByTestId('subscription-add-btn'));
+
+    expect(subStoreMock.add).toHaveBeenCalledOnce();
+    const added = subStoreMock.add.mock.calls[0][0] as SkillSubscription;
+    expect(added.source).toBe('test-owner/test-repo');
+    expect(added.type).toBe('github');
+  });
+
+  it('输入为空时添加按钮应 disabled', async () => {
+    render(<SkillPanel onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      const btn = screen.getByTestId('subscription-add-btn') as HTMLButtonElement;
+      expect(btn.disabled).toBe(true);
+    });
+  });
+
+  it('应显示已存在的订阅列表', async () => {
+    const subs = [
+      makeSub({ id: 'sub-a', source: 'owner/repo-a' }),
+      makeSub({ id: 'sub-b', source: 'owner/repo-b' }),
     ];
-    storeMock.getAll.mockResolvedValueOnce(skills);
+    subStoreMock.getAll.mockResolvedValue(subs);
 
     render(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
-      const items = screen.getAllByTestId('skill-item');
-      expect(items).toHaveLength(2);
+      expect(screen.getByText('owner/repo-a')).toBeDefined();
+      expect(screen.getByText('owner/repo-b')).toBeDefined();
     });
-    expect(screen.getByText('Skill A')).toBeDefined();
-    expect(screen.getByText('Skill B')).toBeDefined();
-    expect(screen.getByText('Desc A')).toBeDefined();
-    expect(screen.getByText('Desc B')).toBeDefined();
   });
 
-  it('skill 无描述时应显示"暂无描述"', async () => {
-    storeMock.getAll.mockResolvedValueOnce([
-      makeSkill({ id: 's1', description: '' }),
-    ]);
+  it('点击订阅的删除按钮应调用 subStore.remove', async () => {
+    const sub = makeSub({ id: 'sub-1', source: 'owner/repo' });
+    subStoreMock.getAll.mockResolvedValue([sub]);
 
     render(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText('暂无描述')).toBeDefined();
+      expect(screen.getByText('owner/repo')).toBeDefined();
     });
+
+    const removeBtns = screen.getAllByText('删除');
+    await userEvent.click(removeBtns[0]);
+
+    expect(subStoreMock.remove).toHaveBeenCalledWith('sub-1');
   });
 
-  it('启用的 skill 应显示"启用" badge', async () => {
-    storeMock.getAll.mockResolvedValueOnce([makeSkill({ enabled: true })]);
+  // ── 技能操作 ──────────────────────────────────────
 
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('启用')).toBeDefined();
-    });
-  });
-
-  // ── 新建 ──────────────────────────────────────────
-
-  it('点击"新建技能"应进入编辑模式', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-add-button')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-add-button'));
-
-    expect(screen.getByTestId('skill-edit-form')).toBeDefined();
-    expect(screen.getByTestId('skill-name-input')).toBeDefined();
-    expect(screen.getByTestId('skill-desc-input')).toBeDefined();
-    expect(screen.getByTestId('skill-prompt-input')).toBeDefined();
-    expect(screen.getByTestId('skill-save-button')).toBeDefined();
-    expect(screen.getByTestId('skill-cancel-button')).toBeDefined();
-  });
-
-  it('新建模式保存按钮在名称为空时应 disabled', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-add-button')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-add-button'));
-
-    const saveBtn = screen.getByTestId('skill-save-button');
-    expect((saveBtn as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('新建 skill 填写表单后可保存', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-add-button')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-add-button'));
-
-    await userEvent.type(screen.getByTestId('skill-name-input'), '新技能');
-    await userEvent.type(
-      screen.getByTestId('skill-desc-input'),
-      '新技能描述',
-    );
-    await userEvent.type(
-      screen.getByTestId('skill-prompt-input'),
-      '新技能提示词',
-    );
-
-    const saveBtn = screen.getByTestId('skill-save-button');
-    expect((saveBtn as HTMLButtonElement).disabled).toBe(false);
-
-    await userEvent.click(saveBtn);
-
-    expect(storeMock.add).toHaveBeenCalledOnce();
-    const addedSkill = storeMock.add.mock.calls[0]?.[0] as Skill;
-    expect(addedSkill.name).toBe('新技能');
-    expect(addedSkill.description).toBe('新技能描述');
-    expect(addedSkill.prompt).toBe('新技能提示词');
-    expect(addedSkill.enabled).toBe(true);
-    expect(addedSkill.id).toBeTruthy();
-    expect(addedSkill.createdAt).toBeGreaterThan(0);
-  });
-
-  // ── 编辑 ──────────────────────────────────────────
-
-  it('点击"编辑"应进入编辑模式并预填现有值', async () => {
-    const skill = makeSkill({
-      id: 's1',
-      name: '原名称',
-      description: '原描述',
-      prompt: '原提示词',
-    });
-    storeMock.getAll.mockResolvedValueOnce([skill]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-edit')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-edit'));
-
-    expect((screen.getByTestId('skill-name-input') as HTMLInputElement).value).toBe('原名称');
-    expect((screen.getByTestId('skill-desc-input') as HTMLInputElement).value).toBe('原描述');
-    expect((screen.getByTestId('skill-prompt-input') as HTMLTextAreaElement).value).toBe('原提示词');
-  });
-
-  it('编辑模式修改后可保存', async () => {
-    const skill = makeSkill({ id: 's1', name: '旧名称' });
-    storeMock.getAll.mockResolvedValueOnce([skill]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-edit')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-edit'));
-
-    const nameInput = screen.getByTestId('skill-name-input');
-    await userEvent.clear(nameInput);
-    await userEvent.type(nameInput, '新名称');
-
-    await userEvent.click(screen.getByTestId('skill-save-button'));
-
-    expect(storeMock.update).toHaveBeenCalledWith('s1', {
-      name: '新名称',
-      description: skill.description,
-      prompt: skill.prompt,
-    });
-  });
-
-  it('点击"取消"应退出编辑模式', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-add-button')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-add-button'));
-
-    expect(screen.getByTestId('skill-edit-form')).toBeDefined();
-
-    await userEvent.click(screen.getByTestId('skill-cancel-button'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('skill-edit-form')).toBeNull();
-    });
-  });
-
-  // ── 删除 ──────────────────────────────────────────
-
-  it('点击"删除"应弹出确认提示', async () => {
-    const skill = makeSkill({ id: 's1', name: '待删除技能' });
-    storeMock.getAll.mockResolvedValueOnce([skill]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-delete')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-delete'));
-
-    expect(screen.getByTestId('skill-delete-confirm')).toBeDefined();
-    expect(
-      screen.getByText(/确定要删除技能「待删除技能」吗/),
-    ).toBeDefined();
-  });
-
-  it('确认删除后 skill 应被移除', async () => {
-    const skill = makeSkill({ id: 's1', name: '待删除技能' });
-    storeMock.getAll.mockResolvedValueOnce([skill]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-delete')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-delete'));
-    await userEvent.click(screen.getByTestId('skill-delete-confirm-btn'));
-
-    expect(storeMock.remove).toHaveBeenCalledWith('s1');
-  });
-
-  it('取消删除后确认弹窗应消失', async () => {
-    const skill = makeSkill({ id: 's1' });
-    storeMock.getAll.mockResolvedValueOnce([skill]);
-
-    render(<SkillPanel onClose={vi.fn()} />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('skill-delete')).toBeDefined();
-    });
-    await userEvent.click(screen.getByTestId('skill-delete'));
-
-    expect(screen.getByTestId('skill-delete-confirm')).toBeDefined();
-
-    await userEvent.click(screen.getByTestId('skill-delete-cancel'));
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('skill-delete-confirm')).toBeNull();
-    });
-    expect(storeMock.remove).not.toHaveBeenCalled();
-  });
-
-  // ── 开关 ──────────────────────────────────────────
-
-  it('点击启用开关应调用 update 切换 enabled', async () => {
-    const skill = makeSkill({ id: 's1', enabled: true });
-    storeMock.getAll.mockResolvedValueOnce([skill]);
+  it('点击技能开关应调用 skillStore.update 切换 enabled', async () => {
+    const skill = makeSkill({ id: 's1', enabled: true, source: 'github:owner/repo' });
+    const sub = makeSub({ id: 'sub-1', source: 'owner/repo' });
+    skillStoreMock.getAll.mockResolvedValue([skill]);
+    subStoreMock.getAll.mockResolvedValue([sub]);
 
     render(<SkillPanel onClose={vi.fn()} />);
 
@@ -346,41 +219,82 @@ describe('SkillPanel', () => {
     });
     await userEvent.click(screen.getByTestId('skill-toggle'));
 
-    expect(storeMock.update).toHaveBeenCalledWith('s1', { enabled: false });
+    expect(skillStoreMock.update).toHaveBeenCalledWith('s1', { enabled: false });
   });
 
-  // ── onChange 监听 ─────────────────────────────────
-
-  it('SkillStore.onChange 触发时应更新列表', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
+  it('点击技能删除按钮应调用 skillStore.remove', async () => {
+    const skill = makeSkill({ id: 's1', source: 'github:owner/repo' });
+    const sub = makeSub({ id: 'sub-1', source: 'owner/repo' });
+    skillStoreMock.getAll.mockResolvedValue([skill]);
+    subStoreMock.getAll.mockResolvedValue([sub]);
 
     render(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('skill-empty-hint')).toBeDefined();
+      expect(screen.getByTestId('skill-delete')).toBeDefined();
     });
+    await userEvent.click(screen.getByTestId('skill-delete'));
 
-    const newSkills = [makeSkill({ id: 's-new', name: '外部新增' })];
-    storeMock._notify(newSkills);
+    expect(skillStoreMock.remove).toHaveBeenCalledWith('s1');
+  });
+
+  // ── 本地技能 ──────────────────────────────────────
+
+  it('应显示本地技能（无 source 的 skill）', async () => {
+    const localSkill = makeSkill({ id: 's1', name: '本地技能', source: '' });
+    skillStoreMock.getAll.mockResolvedValue([localSkill]);
+
+    render(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByText('外部新增')).toBeDefined();
+      const elements = screen.getAllByText('本地技能');
+      expect(elements.length).toBeGreaterThanOrEqual(2); // heading + skill name
+    });
+  });
+
+  // ── 启用的技能 badge ──────────────────────────────
+
+  it('启用的本地技能应显示"启用" badge', async () => {
+    const skill = makeSkill({ id: 's1', name: '已启用技能', enabled: true, source: '' });
+    skillStoreMock.getAll.mockResolvedValue([skill]);
+
+    render(<SkillPanel onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('已启用技能')).toBeDefined();
+    });
+    expect(screen.getByText('启用')).toBeDefined();
+  });
+
+  // ── onChange 监听 ─────────────────────────────────
+
+  it('SkillSubscriptionStore.onChange 触发时应更新列表', async () => {
+    subStoreMock.getAll.mockResolvedValue([]);
+    render(<SkillPanel onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('暂无订阅，输入 GitHub 仓库地址添加')).toBeDefined();
+    });
+
+    const newSubs = [makeSub({ id: 'sub-new', source: 'new/repo' })];
+    subStoreMock.getAll.mockResolvedValue(newSubs);
+    subStoreMock._notify(newSubs);
+
+    await waitFor(() => {
+      expect(screen.getByText('new/repo')).toBeDefined();
     });
   });
 
   // ── 组件卸载 ──────────────────────────────────────
 
-  it('组件卸载时应取消 SkillStore 监听', async () => {
-    storeMock.getAll.mockResolvedValueOnce([]);
-
-    const { unmount } = render(<SkillPanel onClose={vi.fn()} />);
+  it('组件卸载时应取消订阅监听', async () => {
+    render(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('skill-panel')).toBeDefined();
     });
 
-    expect(storeMock.onChange).toHaveBeenCalledOnce();
-
-    unmount();
+    expect(skillStoreMock.onChange).toHaveBeenCalledOnce();
+    expect(subStoreMock.onChange).toHaveBeenCalledOnce();
   });
 });

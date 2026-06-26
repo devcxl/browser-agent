@@ -58,20 +58,13 @@ describe('TabGroups tools', () => {
       expect(tool.schema.properties).toBeDefined();
 
       const props = tool.schema.properties as Record<string, unknown>;
-      const queryInfo = props.queryInfo as Record<string, unknown>;
-      expect(queryInfo).toBeDefined();
-      expect((queryInfo.type as string)).toBe('object');
 
-      const qiProps = queryInfo.properties as Record<string, unknown>;
-      expect(qiProps).toBeDefined();
-
-      // 检查可选字段
-      expect((qiProps.collapsed as Record<string, unknown>).type).toBe('boolean');
-      expect((qiProps.title as Record<string, unknown>).type).toBe('string');
-      expect((qiProps.windowId as Record<string, unknown>).type).toBe('number');
+      expect((props.collapsed as Record<string, unknown>).type).toBe('boolean');
+      expect((props.title as Record<string, unknown>).type).toBe('string');
+      expect((props.windowId as Record<string, unknown>).type).toBe('number');
 
       // color 枚举
-      const colorProp = qiProps.color as Record<string, unknown>;
+      const colorProp = props.color as Record<string, unknown>;
       expect(colorProp.type).toBe('string');
       expect(colorProp.enum).toEqual([
         'grey', 'blue', 'red', 'yellow',
@@ -111,13 +104,13 @@ describe('TabGroups tools', () => {
 
       const tools = createTabGroupsTools(rpc);
       const tool = tools.find((t) => t.name === 'tabGroups_query')!;
-      const result = await tool.execute({ queryInfo: { color: 'blue' } });
+      const result = await tool.execute({ color: 'blue' });
 
       expect(rpc.request).toHaveBeenCalledWith('tabGroups.query', { queryInfo: { color: 'blue' } });
       expect(result).toEqual({ success: true, data: { id: 1, collapsed: false, color: 'blue', title: 'Test', windowId: 1 } });
     });
 
-    it('tabGroups_query execute 无参数时传递空对象', async () => {
+    it('tabGroups_query execute 无参数时传递空 queryInfo', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue([]);
 
@@ -125,7 +118,7 @@ describe('TabGroups tools', () => {
       const tool = tools.find((t) => t.name === 'tabGroups_query')!;
       await tool.execute({});
 
-      expect(rpc.request).toHaveBeenCalledWith('tabGroups.query', {});
+      expect(rpc.request).toHaveBeenCalledWith('tabGroups.query', { queryInfo: {} });
     });
 
     it('tabGroups_update execute 调用 rpc.request("tabGroups.update")', async () => {
