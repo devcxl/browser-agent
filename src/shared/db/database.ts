@@ -215,6 +215,23 @@ export class Database {
     await tx.done;
   }
 
+  // ── Skill Content CRUD ─────────────────────────────
+
+  async getSkillContent(skillId: string): Promise<BrowserAgentDB['skillContents']['value'] | undefined> {
+    const db = await this.getDB();
+    return db.get(StoreNames.SKILL_CONTENTS, skillId);
+  }
+
+  async putSkillContent(content: BrowserAgentDB['skillContents']['value']): Promise<void> {
+    const db = await this.getDB();
+    await db.put(StoreNames.SKILL_CONTENTS, content);
+  }
+
+  async deleteSkillContent(skillId: string): Promise<void> {
+    const db = await this.getDB();
+    await db.delete(StoreNames.SKILL_CONTENTS, skillId);
+  }
+
   // ── 初始化 ──────────────────────────────────────────
 
   private async initDB(): Promise<BrowserAgentDatabase> {

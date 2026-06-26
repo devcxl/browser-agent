@@ -1,6 +1,6 @@
 import type { ProviderConfig } from './llm';
 import type { ReasoningEffort } from './llm';
-import type { Skill } from './skill';
+import type { Skill, SkillSubscription } from './skill';
 
 // ==================== chrome.storage.local 存储 Schema ====================
 
@@ -18,6 +18,8 @@ export interface StorageSchema {
   activeConversationId?: string;
   /** Skill 列表 */
   skills: Skill[];
+  /** Skill 订阅列表 */
+  skillSubscriptions: SkillSubscription[];
 }
 
 export interface AgentSettings {
@@ -55,7 +57,7 @@ export interface UserPreferences {
 
 /** IndexedDB 数据库名 */
 export const DB_NAME = 'browser-agent-db';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 /** conversations 表 */
 export interface DbConversation {

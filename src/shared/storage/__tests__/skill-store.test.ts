@@ -11,11 +11,17 @@ function makeSkill(overrides: Partial<Skill> = {}): Skill {
     name: '测试 Skill',
     description: '用于测试的 skill',
     prompt: '你是一个测试助手',
+    resources: [],
     enabled: true,
     createdAt: 1700000000000,
     updatedAt: 1700000000000,
     ...overrides,
   };
+}
+
+/** 元数据版本（不含 prompt/resources，模拟 chrome.storage.local 存储形态） */
+function metaSkill(overrides: Partial<Skill> = {}): Skill {
+  return { ...makeSkill(overrides), prompt: '', resources: [] };
 }
 
 /**
@@ -148,14 +154,15 @@ describe('SkillStore', () => {
 
   // ── save() ────────────────────────────────────────
 
-  it('save() 应全量替换 skills', async () => {
+  it('save() 应全量替换 skills（存储元数据版本）', async () => {
     const store = SkillStore.getInstance();
     const skills = [makeSkill({ id: 's1' }), makeSkill({ id: 's2' })];
 
     await store.save(skills);
 
-    // 验证 set 被调用
-    expect(browserMock.mock.set).toHaveBeenCalledWith({ skills });
+    // 存储的是元数据版本（不含 prompt/resources）
+    const expected = skills.map((s) => ({ ...s, prompt: '', resources: [] }));
+    expect(browserMock.mock.set).toHaveBeenCalledWith({ skills: expected });
   });
 
   // ── add() ─────────────────────────────────────────
@@ -169,9 +176,13 @@ describe('SkillStore', () => {
     browserMock.mock.get.mockResolvedValueOnce({ skills: [...existing] });
     await store.add(newSkill);
 
-    // 验证 set 被调用时包含 s1 + s2
+    // 验证 set 被调用时包含 s1 + s2（元数据版本）
+    const expected = [
+      { ...existing[0], prompt: '', resources: [] },
+      { ...newSkill, prompt: '', resources: [] },
+    ];
     expect(browserMock.mock.set).toHaveBeenCalledWith({
-      skills: [...existing, newSkill],
+      skills: expected,
     });
   });
 
@@ -221,8 +232,10 @@ describe('SkillStore', () => {
     browserMock.mock.get.mockResolvedValueOnce({ skills: [...skills] });
     await store.remove('s1');
 
+    // 剩余技能存储为元数据版本
+    const expectedMeta = { ...skills[1], prompt: '', resources: [] };
     expect(browserMock.mock.set).toHaveBeenCalledWith({
-      skills: [skills[1]],
+      skills: [expectedMeta],
     });
   });
 

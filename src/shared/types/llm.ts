@@ -97,6 +97,11 @@ export interface StreamChunk {
     };
     finish_reason: 'stop' | 'tool_calls' | 'length' | null;
   }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
 }
 
 // ==================== LLM Client 接口 ====================

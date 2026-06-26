@@ -114,4 +114,4 @@ export type {
 
 export { DB_NAME, DB_VERSION } from './storage';
 
-export type { Skill, ISkillStore } from './skill';
+export type { Skill, ISkillStore, SkillResource, SkillSubscription } from './skill';

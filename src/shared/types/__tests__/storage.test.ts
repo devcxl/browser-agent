@@ -21,11 +21,13 @@ describe('Storage types', () => {
           maxToolRounds: 99,
           systemPrompt: '',
           maxContextMessages: 40,
+          reasoningEffort: 'medium',
           summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
         },
         expertModeSettings: { enabled: false, switches: {} },
         preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },
         skills: [],
+        skillSubscriptions: [],
       };
       expect(schema.agentSettings.maxToolRounds).toBe(99);
     });
@@ -60,7 +62,7 @@ describe('Storage types', () => {
   describe('DB_NAME and DB_VERSION', () => {
     it('should have correct values', () => {
       expect(DB_NAME).toBe('browser-agent-db');
-      expect(DB_VERSION).toBe(2);
+      expect(DB_VERSION).toBe(3);
     });
   });
 
@@ -138,6 +140,7 @@ describe('Storage types', () => {
           expertModeSettings: { enabled: false, switches: {} },
           preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },
           skills: [],
+          skillSubscriptions: [],
         }),
         patch: async () => {},
         onChange: () => () => {},

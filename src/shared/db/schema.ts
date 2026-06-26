@@ -3,25 +3,21 @@ import type {
   DbMessage,
   DbToolCallLog,
   DbSnapshot,
+  SkillResource,
 } from '@/shared/types';
 import { DB_NAME, DB_VERSION } from '@/shared/types';
 import { openDB, type IDBPDatabase } from 'idb';
 
 export { DB_NAME, DB_VERSION };
 
-/**
- * 数据库表名常量
- */
 export const StoreNames = {
   CONVERSATIONS: 'conversations',
   MESSAGES: 'messages',
   TOOL_CALL_LOGS: 'toolCallLogs',
   SNAPSHOTS: 'snapshots',
+  SKILL_CONTENTS: 'skillContents',
 } as const;
 
-/**
- * 数据库 Schema 类型映射
- */
 export interface BrowserAgentDB {
   [StoreNames.CONVERSATIONS]: {
     key: string;
@@ -52,13 +48,18 @@ export interface BrowserAgentDB {
       byCapturedAt: number;
     };
   };
+  [StoreNames.SKILL_CONTENTS]: {
+    key: string;
+    value: {
+      skillId: string;
+      prompt: string;
+      resources: SkillResource[];
+    };
+  };
 }
 
 export type BrowserAgentDatabase = IDBPDatabase<BrowserAgentDB>;
 
-/**
- * 打开数据库连接（用于测试直接操作）
- */
 export async function openBrowserAgentDB(): Promise<BrowserAgentDatabase> {
   return openDB<BrowserAgentDB>(DB_NAME, DB_VERSION, {
     upgrade(db, oldVersion, _newVersion, _transaction) {
@@ -75,6 +76,9 @@ export async function openBrowserAgentDB(): Promise<BrowserAgentDatabase> {
 
         const snapStore = db.createObjectStore(StoreNames.SNAPSHOTS, { keyPath: 'id' });
         snapStore.createIndex('byCapturedAt', 'capturedAt');
+      }
+      if (oldVersion < 3) {
+        db.createObjectStore(StoreNames.SKILL_CONTENTS, { keyPath: 'skillId' });
       }
     },
   });

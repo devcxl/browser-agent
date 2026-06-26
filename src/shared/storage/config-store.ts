@@ -26,6 +26,7 @@ const DEFAULTS: StorageSchema = {
     sidebarExpanded: true,
   },
   skills: [],
+  skillSubscriptions: [],
 };
 
 /**
