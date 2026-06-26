@@ -183,7 +183,7 @@ export function useAgent() {
             }
             // 兼容两种流式模式：部分 provider 返回增量 delta，部分返回完整累积文本
             const existing = assistantMsg.content;
-            if (chunk.length > existing.length && chunk.startsWith(existing)) {
+            if (chunk.length >= existing.length && chunk.startsWith(existing)) {
               assistantMsg.content = chunk;
             } else {
               assistantMsg.content = existing + chunk;
@@ -192,7 +192,7 @@ export function useAgent() {
           },
           onReasoningChunk: (chunk: string) => {
             const existing = assistantMsg.reasoningContent ?? '';
-            if (chunk.length > existing.length && chunk.startsWith(existing)) {
+            if (chunk.length >= existing.length && chunk.startsWith(existing)) {
               assistantMsg.reasoningContent = chunk;
             } else {
               assistantMsg.reasoningContent = existing + chunk;
