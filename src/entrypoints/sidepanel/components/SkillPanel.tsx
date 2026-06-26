@@ -1,105 +1,144 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { Skill } from '@/shared/types';
-import { SkillStore } from '@/shared/storage';
+import type { Skill, SkillSubscription } from '@/shared/types';
+import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
+import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
 import { cn } from '../utils';
 
 interface SkillPanelProps {
   onClose: () => void;
 }
 
-function emptySkillForm(): Skill {
-  return {
-    id: '',
-    name: '',
-    description: '',
-    prompt: '',
-    enabled: true,
-    createdAt: 0,
-    updatedAt: 0,
-  };
-}
-
 export function SkillPanel({ onClose }: SkillPanelProps) {
   const [skills, setSkills] = useState<Skill[]>([]);
-  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
-  const [deletingSkill, setDeletingSkill] = useState<Skill | null>(null);
+  const [subscriptions, setSubscriptions] = useState<SkillSubscription[]>([]);
+  const [subInput, setSubInput] = useState('');
+  const [token, setToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<{ type: 'ok' | 'error'; msg: string } | null>(null);
 
-  const store = SkillStore.getInstance();
+  const skillStore = SkillStore.getInstance();
+  const subStore = SkillSubscriptionStore.getInstance();
+
+  const load = useCallback(async () => {
+    setSkills(await skillStore.getAll());
+    setSubscriptions(await subStore.getAll());
+  }, []);
 
   useEffect(() => {
-    store.getAll().then(setSkills);
-    const unsubscribe = store.onChange(setSkills);
-    return unsubscribe;
+    load();
+    const unsub1 = skillStore.onChange(setSkills);
+    const unsub2 = subStore.onChange(() => subStore.getAll().then(setSubscriptions));
+    return () => { unsub1(); unsub2(); };
   }, []);
 
-  const handleNew = useCallback(() => {
-    setEditingSkill(emptySkillForm());
-  }, []);
+  const handleAddSubscription = useCallback(async () => {
+    const source = subInput.trim();
+    if (!source) return;
 
-  const handleEdit = useCallback((skill: Skill) => {
-    setEditingSkill({ ...skill });
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    if (!editingSkill) return;
-    const name = editingSkill.name.trim();
-    if (!name) return;
-
-    if (editingSkill.id) {
-      await store.update(editingSkill.id, {
-        name,
-        description: editingSkill.description.trim(),
-        prompt: editingSkill.prompt.trim(),
-      });
-    } else {
-      const now = Date.now();
-      await store.add({
-        ...editingSkill,
-        id: crypto.randomUUID(),
-        name,
-        description: editingSkill.description.trim(),
-        prompt: editingSkill.prompt.trim(),
-        createdAt: now,
-        updatedAt: now,
-      });
+    const exists = subscriptions.find((s) => s.source === source);
+    if (exists) {
+      setSyncStatus({ type: 'error', msg: '该订阅已存在' });
+      return;
     }
-    setEditingSkill(null);
-  }, [editingSkill, store]);
 
-  const handleCancelEdit = useCallback(() => {
-    setEditingSkill(null);
+    const now = Date.now();
+    const sub: SkillSubscription = {
+      id: crypto.randomUUID(),
+      source,
+      type: 'github',
+      enabled: true,
+      lastSyncedAt: null,
+      createdAt: now,
+    };
+
+    await subStore.add(sub);
+    setSubInput('');
+
+    // auto sync after adding
+    await handleSync(sub);
+  }, [subInput, subscriptions, token]);
+
+  const handleSync = useCallback(async (sub: SkillSubscription) => {
+    setSyncingId(sub.id);
+    setSyncStatus(null);
+    try {
+      const parsed = await fetchSkillsFromGitHub(sub.source, token || undefined);
+      const existingSkills = await skillStore.getAll();
+
+      for (const ps of parsed) {
+        const exists = existingSkills.find(
+          (s) => s.name === ps.name && s.source === `github:${sub.source}`,
+        );
+        if (exists) {
+          await skillStore.update(exists.id, {
+            name: ps.name,
+            description: ps.description,
+            prompt: ps.prompt,
+            resources: ps.resources,
+            source: `github:${sub.source}`,
+          });
+        } else {
+          const now = Date.now();
+          await skillStore.add({
+            id: crypto.randomUUID(),
+            name: ps.name,
+            description: ps.description,
+            prompt: ps.prompt,
+            resources: ps.resources,
+            source: `github:${sub.source}`,
+            enabled: true,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      await subStore.update(sub.id, { lastSyncedAt: Date.now() });
+      setSyncStatus({ type: 'ok', msg: `同步完成，共 ${parsed.length} 个技能` });
+    } catch (err) {
+      setSyncStatus({ type: 'error', msg: `同步失败: ${(err as Error).message}` });
+    } finally {
+      setSyncingId(null);
+    }
+  }, [skillStore, subStore, token]);
+
+  const handleRemoveSubscription = useCallback(async (sub: SkillSubscription) => {
+    // also remove associated skills
+    const associated = skills.filter((s) => s.source === `github:${sub.source}`);
+    for (const skill of associated) {
+      await skillStore.remove(skill.id);
+    }
+    await subStore.remove(sub.id);
+  }, [skills]);
+
+  const handleToggleSkill = useCallback(async (skill: Skill) => {
+    await skillStore.update(skill.id, { enabled: !skill.enabled });
   }, []);
 
-  const handleDeleteRequest = useCallback((skill: Skill) => {
-    setDeletingSkill(skill);
+  const handleDeleteSkill = useCallback(async (skill: Skill) => {
+    await skillStore.remove(skill.id);
   }, []);
 
-  const handleDeleteConfirm = useCallback(async () => {
-    if (!deletingSkill) return;
-    await store.remove(deletingSkill.id);
-    setDeletingSkill(null);
-  }, [deletingSkill, store]);
-
-  const handleDeleteCancel = useCallback(() => {
-    setDeletingSkill(null);
-  }, []);
-
-  const handleToggle = useCallback(
-    async (skill: Skill) => {
-      await store.update(skill.id, { enabled: !skill.enabled });
-    },
-    [store],
-  );
-
-  const isSaveDisabled = !editingSkill?.name.trim();
+  const skillsBySource = new Map<string, Skill[]>();
+  const localSkills: Skill[] = [];
+  for (const skill of skills) {
+    if (skill.source) {
+      const list = skillsBySource.get(skill.source) ?? [];
+      list.push(skill);
+      skillsBySource.set(skill.source, list);
+    } else {
+      localSkills.push(skill);
+    }
+  }
 
   return (
     <div
       data-testid="skill-panel"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
     >
-      <div className="bg-canvas rounded-xl shadow-xl w-[560px] max-w-[90vw] max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-hairline">
+      <div className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] max-h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-hairline shrink-0">
           <h2 className="text-base font-semibold text-ink">技能管理</h2>
           <button
             type="button"
@@ -111,186 +150,217 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          {skills.length === 0 && !editingSkill && (
-            <p
-              data-testid="skill-empty-hint"
-              className="text-sm text-mute text-center py-8"
-            >
-              暂无技能
-            </p>
-          )}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
+          {/* 订阅管理 */}
+          <section>
+            <h3 className="text-sm font-semibold text-ink mb-2">订阅</h3>
+            <div className="flex gap-2 mb-3">
+              <input
+                value={subInput}
+                onChange={(e) => setSubInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubscription(); }}
+                placeholder="输入 GitHub 仓库，如 owner/repo"
+                className="flex-1 px-3 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
+              />
+              <button
+                type="button"
+                data-testid="subscription-add-btn"
+                onClick={handleAddSubscription}
+                disabled={!subInput.trim()}
+                className="px-3 py-1.5 text-sm rounded-md bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed shrink-0"
+              >
+                添加
+              </button>
+            </div>
 
-          {skills.map((skill) => (
-            <div
-              key={skill.id}
-              data-testid="skill-item"
-              className="flex items-center justify-between border border-hairline rounded-xl px-3 py-2"
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-ink">
-                    {skill.name}
-                  </span>
-                  {skill.enabled && (
-                    <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">
-                      启用
-                    </span>
-                  )}
-                </div>
-                <div className="text-xs text-mute truncate mt-0.5">
-                  {skill.description || '暂无描述'}
-                </div>
+            {/* GitHub Token 输入 */}
+            <div className="flex items-center gap-2 mb-3">
+              <button
+                type="button"
+                onClick={() => setShowToken(!showToken)}
+                className="text-xs text-mute hover:text-ink underline"
+              >
+                {showToken ? '隐藏 Token' : '配置 GitHub Token（选填，提高 API 限流）'}
+              </button>
+            </div>
+            {showToken && (
+              <div className="mb-3">
+                <input
+                  value={token}
+                  onChange={(e) => setToken(e.target.value)}
+                  placeholder="ghp_xxx 或 github_pat_xxx"
+                  type="password"
+                  className="w-full px-3 py-1.5 text-xs border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
+                />
               </div>
+            )}
 
-              <div className="flex items-center gap-1 ml-2 shrink-0">
-                <button
-                  type="button"
-                  data-testid="skill-toggle"
-                  onClick={() => handleToggle(skill)}
-                  className={cn(
-                    'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                    skill.enabled ? 'bg-primary' : 'bg-hairline-strong',
-                  )}
-                  role="switch"
-                  aria-checked={skill.enabled}
-                >
-                  <span
-                    className={cn(
-                      'inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform',
-                      skill.enabled ? 'translate-x-[18px]' : 'translate-x-[3px]',
+            {syncStatus && (
+              <div
+                className={cn(
+                  'mb-3 px-3 py-1.5 text-xs rounded-md',
+                  syncStatus.type === 'ok' ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger',
+                )}
+              >
+                {syncStatus.msg}
+              </div>
+            )}
+
+            {subscriptions.length === 0 && (
+              <p className="text-xs text-mute text-center py-3">暂无订阅，输入 GitHub 仓库地址添加</p>
+            )}
+
+            <div className="space-y-2">
+              {subscriptions.map((sub) => {
+                const subSkills = skillsBySource.get(`github:${sub.source}`) ?? [];
+                return (
+                  <div
+                    key={sub.id}
+                    className="border border-hairline rounded-xl px-3 py-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-ink">{sub.source}</span>
+                        {sub.lastSyncedAt && (
+                          <span className="text-[10px] text-mute ml-2">
+                            {new Date(sub.lastSyncedAt).toLocaleString('zh-CN')}
+                          </span>
+                        )}
+                        <span className="text-xs text-mute ml-2">
+                          {subSkills.length} 个技能
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          data-testid="subscription-sync-btn"
+                          onClick={() => handleSync(sub)}
+                          disabled={syncingId === sub.id}
+                          className="px-2 py-1 text-xs rounded-md border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50"
+                        >
+                          {syncingId === sub.id ? '同步中...' : '同步'}
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="subscription-remove-btn"
+                          onClick={() => handleRemoveSubscription(sub)}
+                          className="px-2 py-1 text-xs rounded-md border border-danger/30 text-danger hover:bg-red-50"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 该订阅下的技能列表 */}
+                    {subSkills.length > 0 && (
+                      <div className="mt-2 space-y-1 pl-2 border-l-2 border-hairline">
+                        {subSkills.map((skill) => (
+                          <div
+                            key={skill.id}
+                            className="flex items-center justify-between py-1"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <span className="text-xs text-ink">{skill.name}</span>
+                              {skill.description && (
+                                <span className="text-[10px] text-mute ml-1 truncate">
+                                  {skill.description}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                data-testid="skill-toggle"
+                                onClick={() => handleToggleSkill(skill)}
+                                className={cn(
+                                  'relative inline-flex h-4 w-8 items-center rounded-full transition-colors',
+                                  skill.enabled ? 'bg-primary' : 'bg-hairline-strong',
+                                )}
+                                role="switch"
+                                aria-checked={skill.enabled}
+                              >
+                                <span
+                                  className={cn(
+                                    'inline-block h-3 w-3 rounded-full bg-white shadow transition-transform',
+                                    skill.enabled ? 'translate-x-[18px]' : 'translate-x-[2px]',
+                                  )}
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                data-testid="skill-delete"
+                                onClick={() => handleDeleteSkill(skill)}
+                                className="text-[10px] text-mute hover:text-danger px-1"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     )}
-                  />
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="skill-edit"
-                  onClick={() => handleEdit(skill)}
-                  className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft"
-                >
-                  编辑
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="skill-delete"
-                  onClick={() => handleDeleteRequest(skill)}
-                  className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50"
-                >
-                  删除
-                </button>
-              </div>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          </section>
 
-          {editingSkill && (
-            <div
-              data-testid="skill-edit-form"
-              className="border border-hairline rounded-xl p-3 space-y-2 bg-surface-soft"
-            >
-              <input
-                data-testid="skill-name-input"
-                placeholder="技能名称"
-                value={editingSkill.name}
-                onChange={(e) =>
-                  setEditingSkill({ ...editingSkill, name: e.target.value })
-                }
-                className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-                autoFocus
-              />
-              <input
-                data-testid="skill-desc-input"
-                placeholder="描述（简要说明技能用途）"
-                value={editingSkill.description}
-                onChange={(e) =>
-                  setEditingSkill({
-                    ...editingSkill,
-                    description: e.target.value,
-                  })
-                }
-                className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-              />
-              <textarea
-                data-testid="skill-prompt-input"
-                placeholder="提示词（注入 LLM 的指令内容）"
-                value={editingSkill.prompt}
-                onChange={(e) =>
-                  setEditingSkill({ ...editingSkill, prompt: e.target.value })
-                }
-                rows={4}
-                className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute resize-none focus:outline-none focus:border-primary"
-              />
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  data-testid="skill-save-button"
-                  onClick={handleSave}
-                  disabled={isSaveDisabled}
-                  className="px-3 py-1 text-sm rounded-full bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed"
-                >
-                  保存
-                </button>
-                <button
-                  type="button"
-                  data-testid="skill-cancel-button"
-                  onClick={handleCancelEdit}
-                  className="px-3 py-1 text-sm rounded-full border border-hairline-strong text-mute hover:bg-surface-soft"
-                >
-                  取消
-                </button>
+          {/* 本地技能 */}
+          {localSkills.length > 0 && (
+            <section>
+              <h3 className="text-sm font-semibold text-ink mb-2">本地技能</h3>
+              <div className="space-y-2">
+                {localSkills.map((skill) => (
+                  <div
+                    key={skill.id}
+                    className="flex items-center justify-between border border-hairline rounded-xl px-3 py-2"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-ink">{skill.name}</span>
+                        {skill.enabled && (
+                          <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">启用</span>
+                        )}
+                      </div>
+                      {skill.description && (
+                        <div className="text-xs text-mute truncate mt-0.5">{skill.description}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 ml-2 shrink-0">
+                      <button
+                        type="button"
+                        data-testid="skill-toggle"
+                        onClick={() => handleToggleSkill(skill)}
+                        className={cn(
+                          'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
+                          skill.enabled ? 'bg-primary' : 'bg-hairline-strong',
+                        )}
+                        role="switch"
+                        aria-checked={skill.enabled}
+                      >
+                        <span
+                          className={cn(
+                            'inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform',
+                            skill.enabled ? 'translate-x-[18px]' : 'translate-x-[3px]',
+                          )}
+                        />
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="skill-delete"
+                        onClick={() => handleDeleteSkill(skill)}
+                        className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
-          )}
-
-          {!editingSkill && (
-            <button
-              type="button"
-              data-testid="skill-add-button"
-              onClick={handleNew}
-              className="w-full py-2 text-sm rounded-xl border-2 border-dashed border-ash text-mute hover:border-ink hover:text-ink"
-            >
-              + 新建技能
-            </button>
+            </section>
           )}
         </div>
       </div>
-
-      {deletingSkill && (
-        <div
-          data-testid="skill-delete-confirm"
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40"
-        >
-          <div className="bg-canvas rounded-xl shadow-xl max-w-sm w-full mx-4">
-            <div className="px-5 py-4 border-b border-hairline">
-              <h3 className="text-base font-semibold text-ink">确认删除</h3>
-            </div>
-            <div className="px-5 py-3">
-              <p className="text-sm text-body">
-                确定要删除技能「{deletingSkill.name}」吗？此操作不可撤销。
-              </p>
-            </div>
-            <div className="px-5 py-3 border-t border-hairline flex justify-end gap-2">
-              <button
-                type="button"
-                data-testid="skill-delete-cancel"
-                onClick={handleDeleteCancel}
-                className="px-4 py-1.5 text-sm rounded-full border border-hairline-strong text-ink hover:bg-surface-soft"
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                data-testid="skill-delete-confirm-btn"
-                onClick={handleDeleteConfirm}
-                className="px-4 py-1.5 text-sm rounded-full bg-danger text-white hover:opacity-90"
-              >
-                确认删除
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

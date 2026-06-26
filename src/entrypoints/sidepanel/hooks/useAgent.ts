@@ -238,8 +238,9 @@ export function useAgent() {
 
         loopRef.current = loop;
 
-        // 从 SkillStore 获取已启用的 skills，传入 AgentLoop
+        // 从 SkillStore 获取已启用的 skills，加载完整内容后传入 AgentLoop
         const enabledSkills = await skillStore.getEnabled();
+        const readySkills = await skillStore.loadReady(enabledSkills);
 
         const output = await loop.run({
           conversationId,
@@ -250,7 +251,7 @@ export function useAgent() {
             allWindows: [],
             tabGroups: [],
           },
-          skills: enabledSkills,
+          skills: readySkills,
         });
 
         // 兜底：hooks 未覆盖的场景（如 maxToolRounds 终止、无效工具等）

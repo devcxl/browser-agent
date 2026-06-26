@@ -3,9 +3,7 @@ import { ChatProvider, useChat } from './ChatContext';
 import { ChatView } from './components/ChatView';
 import { MessageInput } from './components/MessageInput';
 import { ConversationSidebar } from './components/ConversationSidebar';
-import { TokenPanel } from './components/TokenPanel';
 import { SettingsPanel } from './components/SettingsPanel';
-import { SkillPanel } from './components/SkillPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
 import { ConfigStore } from '@/shared/storage';
@@ -14,34 +12,10 @@ import type { ProviderConfig } from '@/shared/types';
 
 const store = ConfigStore.getInstance();
 
-function AgentStatusIndicator() {
-  const { agent } = useChat();
-  const colors: Record<string, string> = {
-    idle: 'bg-ash',
-    running: 'bg-warning animate-pulse',
-    streaming: 'bg-success animate-pulse',
-    waitingConfirmation: 'bg-orange-400',
-  };
-
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={`inline-block w-2 h-2 rounded-full ${colors[agent.status]}`} />
-      <span className="text-xs text-mute">
-        {agent.status === 'idle' && '就绪'}
-        {agent.status === 'running' && '运行中...'}
-        {agent.status === 'streaming' && '输出中...'}
-        {agent.status === 'waitingConfirmation' && '等待确认'}
-      </span>
-    </div>
-  );
-}
-
 function ChatLayout() {
-  const { conversations, agent, browserState, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm } = useChat();
+  const { conversations, agent, browserState, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm, conversationStatuses } = useChat();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [tokenCollapsed, setTokenCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showSkillPanel, setShowSkillPanel] = useState(false);
 
   // Settings state (persisted via ConfigStore → browser.storage.local)
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
@@ -125,29 +99,13 @@ function ChatLayout() {
     <div className="h-full flex flex-col bg-canvas">
       {/* Header */}
       <header className="h-10 border-b border-hairline bg-canvas flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-semibold text-ink tracking-wide">
-            BrowserAgent
-          </span>
-        </div>
-        <AgentStatusIndicator />
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            data-testid="skill-panel-trigger"
-            onClick={() => setShowSkillPanel(true)}
-            className="text-xs text-mute hover:text-ink transition-colors"
-          >
-            Skills
-          </button>
-          <div className="w-10" />
-        </div>
+        <span className="text-sm font-semibold text-ink tracking-wide">BrowserAgent</span>
       </header>
 
       {/* Main */}
       <div className="flex-1 flex overflow-hidden">
         <ConversationSidebar
-          conversations={conversations.list}
+          conversations={conversations.list.map((c) => ({ ...c, status: conversationStatuses[c.id] }))}
           activeId={conversations.activeId}
           loading={conversations.loading}
           error={conversations.error}
@@ -158,6 +116,7 @@ function ChatLayout() {
           onRename={conversations.rename}
           onDelete={conversations.remove}
           onOpenSettings={() => setShowSettings(true)}
+          tokenUsage={tokenUsage}
         />
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -184,12 +143,6 @@ function ChatLayout() {
             providers={providers}
           />
         </div>
-
-        <TokenPanel
-          usage={tokenUsage}
-          collapsed={tokenCollapsed}
-          onToggleCollapse={() => setTokenCollapsed(!tokenCollapsed)}
-        />
       </div>
 
       {/* Settings Modal */}
@@ -204,11 +157,6 @@ function ChatLayout() {
           onTestConnection={handleTestConnection}
           onClose={() => setShowSettings(false)}
         />
-      )}
-
-      {/* Skill Panel */}
-      {showSkillPanel && (
-        <SkillPanel onClose={() => setShowSkillPanel(false)} />
       )}
 
       {/* Confirm Dialog */}
