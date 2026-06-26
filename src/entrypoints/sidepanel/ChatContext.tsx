@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import type { UIMessage, ConfirmRequest, TokenUsage } from './types';
+import type { AgentStatus, UIMessage, ConfirmRequest, TokenUsage } from './types';
 import { useConversations } from './hooks/useConversations';
 import { useAgent } from './hooks/useAgent';
 import { useBrowserState } from './hooks/useBrowserState';
@@ -11,24 +11,18 @@ const db = Database.getInstance();
 const manager = new ConversationManager(db);
 
 interface ChatContextValue {
-  // Conversations
   conversations: ReturnType<typeof useConversations>;
-  // Agent
   agent: ReturnType<typeof useAgent>;
-  // Browser
   browserState: ReturnType<typeof useBrowserState>;
-  // Messages for active conversation
   messages: UIMessage[];
   addMessage: (msg: UIMessage) => void;
   clearMessages: () => void;
-  // Loading / Error
   messagesLoading: boolean;
   messagesError: string | null;
-  // Token usage
   tokenUsage: TokenUsage;
-  // Confirm dialog
   confirmRequest: ConfirmRequest | null;
   resolveConfirm: (allowed: boolean) => void;
+  conversationStatuses: Record<string, AgentStatus>;
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -42,8 +36,29 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
+  const [conversationStatuses, setConversationStatuses] = useState<Record<string, AgentStatus>>({});
   const prevActiveIdRef = useRef<string | null>(null);
   const prevTokenResetIdRef = useRef<string | null>(null);
+
+  // 跟踪每个会话的 agent 状态
+  useEffect(() => {
+    if (conversations.activeId) {
+      setConversationStatuses((prev) => ({
+        ...prev,
+        [conversations.activeId!]: agent.status,
+      }));
+    }
+  }, [agent.status, conversations.activeId]);
+
+  // 跟踪每个会话的 agent 状态
+  useEffect(() => {
+    if (conversations.activeId) {
+      setConversationStatuses((prev) => ({
+        ...prev,
+        [conversations.activeId!]: agent.status,
+      }));
+    }
+  }, [agent.status, conversations.activeId]);
 
   const addMessage = useCallback((msg: UIMessage) => {
     setMessages((prev) => {
@@ -137,6 +152,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         tokenUsage,
         confirmRequest,
         resolveConfirm,
+        conversationStatuses,
       }}
     >
       {children}

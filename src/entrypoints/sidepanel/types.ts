@@ -26,6 +26,7 @@ export interface ConversationSummary {
   id: string;
   title: string;
   updatedAt: number;
+  status?: AgentStatus;
 }
 
 export interface AgentSettings {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ConversationSummary, AgentStatus } from '../types';
+import type { ConversationSummary, AgentStatus, TokenUsage } from '../types';
 import { formatDateTime, cn } from '../utils';
 
 interface Props {
@@ -14,6 +14,11 @@ interface Props {
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
   onOpenSettings: () => void;
+  tokenUsage?: TokenUsage;
+}
+
+function formatNum(n: number): string {
+  return n.toLocaleString();
 }
 
 const statusColors: Record<string, string> = {
@@ -42,6 +47,7 @@ export function ConversationSidebar({
   onRename,
   onDelete,
   onOpenSettings,
+  tokenUsage,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -60,14 +66,41 @@ export function ConversationSidebar({
 
   if (collapsed) {
     return (
-      <div className="border-r border-hairline bg-surface-soft w-10 flex flex-col items-center py-2">
+      <div className="border-r border-hairline bg-surface-soft w-12 flex flex-col items-center py-2 gap-3 shrink-0">
+        <button
+          type="button"
+          data-testid="new-conversation-button"
+          onClick={onNew}
+          className="text-mute hover:text-primary w-8 h-8 flex items-center justify-center rounded-md hover:bg-surface-card"
+          title="新建会话"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+        <div className="flex-1" />
+        <button
+          type="button"
+          data-testid="settings-button"
+          onClick={onOpenSettings}
+          className="text-mute hover:text-primary w-8 h-8 flex items-center justify-center rounded-md hover:bg-surface-card"
+          title="设置"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
         <button
           type="button"
           data-testid="conversation-sidebar-toggle"
           onClick={onToggleCollapse}
-          className="text-mute hover:text-ink text-sm"
+          className="text-mute hover:text-ink w-8 h-8 flex items-center justify-center rounded-md hover:bg-surface-card"
+          title="展开侧栏"
         >
-          ▶
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l-7 7 7 7" />
+          </svg>
         </button>
       </div>
     );
@@ -93,9 +126,12 @@ export function ConversationSidebar({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="text-mute hover:text-ink text-xs"
+            className="text-mute hover:text-ink w-6 h-6 flex items-center justify-center rounded hover:bg-surface-card"
+            title="收起侧栏"
           >
-            ◀
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7" />
+            </svg>
           </button>
         </div>
       </div>
@@ -144,10 +180,15 @@ export function ConversationSidebar({
                 />
               ) : (
                 <>
-                  <div className="text-sm text-ink truncate">{conv.title}</div>
+                  <div className="flex items-center gap-2">
+                    {conv.status && conv.status !== 'idle' && (
+                      <span className={`inline-block w-2 h-2 rounded-full shrink-0 ${statusColors[conv.status] ?? ''}`} />
+                    )}
+                    <div className="text-sm text-ink truncate flex-1">{conv.title}</div>
+                  </div>
                   <div className="flex items-center justify-between mt-0.5">
                     <span className="text-[10px] text-mute">
-                      {formatDateTime(conv.updatedAt)}
+                      {conv.status && conv.status !== 'idle' ? statusLabels[conv.status] ?? conv.status : formatDateTime(conv.updatedAt)}
                     </span>
                     <div className="hidden group-hover:flex gap-1">
                       <button
@@ -179,14 +220,23 @@ export function ConversationSidebar({
       </div>
 
       {/* Settings */}
-      <div className="border-t border-hairline px-3 py-2">
+      <div className="border-t border-hairline px-2 py-2 space-y-1">
+        {tokenUsage && (tokenUsage.prompt > 0 || tokenUsage.completion > 0) && (
+          <div className="text-[10px] text-mute text-center">
+            输入 {formatNum(tokenUsage.prompt)} / 输出 {formatNum(tokenUsage.completion)} / 总计 {formatNum(tokenUsage.prompt + tokenUsage.completion)}
+          </div>
+        )}
         <button
           type="button"
           data-testid="settings-button"
           onClick={onOpenSettings}
-          className="w-full text-xs text-mute hover:text-ink transition-colors text-left"
+          className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg bg-surface-card text-ink hover:bg-primary hover:text-on-primary border border-hairline hover:border-primary transition-all"
         >
-          [+] 设置
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          设置
         </button>
       </div>
     </div>
