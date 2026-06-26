@@ -9,7 +9,7 @@ import type { Skill } from '@/shared/types/skill';
 import type { IToolRegistry } from '@/registry/types';
 import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager } from '@/shared/types/conversation';
-import type { ProviderConfig, ILlmClient, ChatMessage, ChatCompletionResponse } from '@/shared/types/llm';
+import type { ProviderConfig, ILlmClient, ChatMessage, ChatCompletionResponse, StreamChunk } from '@/shared/types/llm';
 import { ContextBuilder } from './context-builder';
 import { SummaryManager } from './summary-manager';
 
@@ -88,17 +88,75 @@ export class AgentLoop implements IAgentRuntime {
         );
 
         const tools = this.toolRegistry.toOpenAISchema();
-        let response: ChatCompletionResponse;
+
+        // ── 流式调用 LLM ──
+        let streamingContent = '';
+        let finishReason: 'stop' | 'tool_calls' | 'length' | null = null;
+
+        // 累积流式 tool_calls delta（按 index 分组）
+        const toolCallDeltas = new Map<
+          number,
+          {
+            id?: string;
+            type?: string;
+            function?: { name?: string; arguments?: string };
+          }
+        >();
+
+        const streamChunkHandler = (chunk: StreamChunk) => {
+          const choice = chunk.choices?.[0];
+          if (!choice) return;
+
+          if (choice.finish_reason) {
+            finishReason = choice.finish_reason;
+          }
+
+          const delta = choice.delta;
+          if (delta.content) {
+            streamingContent += delta.content;
+            this.hooks?.onStreamChunk?.(delta.content);
+          }
+
+          if (delta.reasoning_content && this.hooks?.onReasoningChunk) {
+            this.hooks.onReasoningChunk(delta.reasoning_content);
+          }
+
+          if (delta.tool_calls) {
+            for (const tc of delta.tool_calls) {
+              const existing = toolCallDeltas.get(tc.index) ?? {};
+              toolCallDeltas.set(tc.index, {
+                id: tc.id ?? existing.id,
+                type: tc.type ?? existing.type,
+                function: {
+                  name: tc.function?.name ?? existing.function?.name ?? '',
+                  arguments:
+                    (existing.function?.arguments ?? '') +
+                    (tc.function?.arguments ?? ''),
+                },
+              });
+            }
+          }
+
+          // 流式响应的最后 chunk 可能包含 usage
+          if (chunk.usage) {
+            totalPrompt += chunk.usage.prompt_tokens;
+            totalCompletion += chunk.usage.completion_tokens;
+          }
+        };
 
         try {
-          response = await llmClient.chat(
+          await llmClient.chatStream(
             {
               model: input.providerConfig.model,
               messages,
               tools,
               reasoning_effort: this.config.reasoningEffort,
             },
+            streamChunkHandler,
             this.abortController.signal,
+            (reasoning: string) => {
+              this.hooks?.onReasoningChunk?.(reasoning);
+            },
           );
         } catch (err) {
           if ((err as Error).name === 'AbortError') {
@@ -108,37 +166,39 @@ export class AgentLoop implements IAgentRuntime {
           throw err;
         }
 
-        if (response.usage) {
-          totalPrompt += response.usage.prompt_tokens;
-          totalCompletion += response.usage.completion_tokens;
-        }
-
-        const choice = response.choices[0];
-        if (!choice) {
+        if (!finishReason) {
           finalMessage = 'LLM 未返回有效响应。';
           break;
         }
 
-        // 提取 reasoning_content（非流式响应中有些模型也会返回）
-        const reasoning = choice.message.reasoning_content;
-        if (reasoning && this.hooks?.onReasoningChunk) {
-          this.hooks.onReasoningChunk(reasoning);
-        }
+        if (finishReason === 'tool_calls' && toolCallDeltas.size > 0) {
+          // 流式构建 tool_calls
+          const streamToolCalls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> = [];
+          for (const [, delta] of toolCallDeltas) {
+            if (delta.id && delta.function?.name && delta.function.arguments) {
+              streamToolCalls.push({
+                id: delta.id,
+                type: 'function',
+                function: {
+                  name: delta.function.name,
+                  arguments: delta.function.arguments,
+                },
+              });
+            }
+          }
 
-        if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls) {
-          // 按 OpenAI 协议：tool(result) 消息前必须有对应的 assistant(tool_calls) 消息
           const assistantMsg = {
             role: 'assistant' as const,
-            content: choice.message.content ?? null,
-            tool_calls: choice.message.tool_calls,
+            content: streamingContent || null,
+            tool_calls: streamToolCalls,
           };
           messages.push(assistantMsg);
           // 持久化中间 assistant(tool_calls) 消息，确保刷新后 ContextBuilder 能重建完整序列
           await this.conversationManager.addMessage(input.conversationId, {
             id: crypto.randomUUID(),
             role: 'assistant',
-            content: choice.message.content ?? '',
-            toolCalls: choice.message.tool_calls.map((tc) => {
+            content: streamingContent ?? '',
+            toolCalls: streamToolCalls.map((tc) => {
               let parsedParams: Record<string, unknown>;
               try {
                 parsedParams = JSON.parse(tc.function.arguments);
@@ -155,7 +215,7 @@ export class AgentLoop implements IAgentRuntime {
             timestamp: Date.now(),
           });
 
-          for (const tc of choice.message.tool_calls) {
+          for (const tc of streamToolCalls) {
             let params: Record<string, unknown>;
             try {
               params = JSON.parse(tc.function.arguments);
@@ -298,7 +358,6 @@ export class AgentLoop implements IAgentRuntime {
               continue;
             }
 
-            // Run preflight before confirmation check to gather affected objects
             let affectedObjects: Array<{ type: string; title?: string; url?: string; reason?: string }> = [];
             let warnings: string[] = [];
             if (check.requiresPreflight && tool.preflight) {
@@ -307,7 +366,6 @@ export class AgentLoop implements IAgentRuntime {
               warnings = preflightResult.warnings ?? [];
             }
 
-            // User confirmation for high-risk operations
             if (check.requiresConfirmation && this.hooks?.onConfirm) {
               const confirmed = await this.hooks.onConfirm({
                 toolName: tc.function.name,
@@ -343,7 +401,36 @@ export class AgentLoop implements IAgentRuntime {
               }
             }
 
-            const result = await tool.execute(params);
+            let result: import('@/shared/types').ToolResult;
+            try {
+              result = await tool.execute(params);
+            } catch (err) {
+              toolCalls.push({
+                toolName: tc.function.name,
+                params,
+                result: { success: false, error: (err as Error).message },
+                riskLevel: check.riskLevel,
+                confirmed: check.requiresConfirmation,
+                timestamp: Date.now(),
+                toolCallId: tc.id,
+              });
+              const errorMsg = {
+                role: 'tool' as const,
+                tool_call_id: tc.id,
+                content: `错误: ${(err as Error).message}`,
+              };
+              messages.push(errorMsg);
+              await this.conversationManager.addMessage(input.conversationId, {
+                id: crypto.randomUUID(),
+                role: 'tool',
+                content: errorMsg.content,
+                toolCallId: tc.id,
+                timestamp: Date.now(),
+              });
+              this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
+              invalidRetries = 0;
+              continue;
+            }
             const filteredResult = this.guardrail.filterResultForRemote(
               tool,
               result,
@@ -381,11 +468,7 @@ export class AgentLoop implements IAgentRuntime {
           if (finalMessage) break;
           round++;
         } else {
-          finalMessage = choice.message.content ?? '';
-          // Emit stream chunks for stop responses
-          if (finalMessage && this.hooks?.onStreamChunk) {
-            this.emitStreamChunks(finalMessage);
-          }
+          finalMessage = streamingContent;
           break;
         }
       }
@@ -408,16 +491,6 @@ export class AgentLoop implements IAgentRuntime {
       return { finalMessage, toolCalls, tokenUsage: { prompt: totalPrompt, completion: totalCompletion } };
     } finally {
       this.abortController = null;
-    }
-  }
-
-  private emitStreamChunks(text: string): void {
-    const chunkSize = 15;
-    let i = 0;
-    while (i < text.length) {
-      const chunk = text.slice(i, i + chunkSize);
-      this.hooks?.onStreamChunk?.(chunk);
-      i += chunkSize;
     }
   }
 }

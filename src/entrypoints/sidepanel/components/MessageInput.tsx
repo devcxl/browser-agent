@@ -133,8 +133,14 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
   };
 
   return (
-    <div className="border-t border-hairline bg-canvas px-4 py-3">
-      <div className="flex items-end gap-3">
+    <div className="border-t border-hairline bg-canvas">
+      {isRunning && (
+        <div className="h-0.5 bg-hairline overflow-hidden">
+          <div className="h-full bg-primary w-1/3 animate-progress" />
+        </div>
+      )}
+      <div className="px-4 py-3">
+        <div className="flex items-end gap-3">
         {renderMicButton()}
         <textarea
           ref={textareaRef}
@@ -178,6 +184,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
             发送
           </button>
         )}
+      </div>
       </div>
     </div>
   );

@@ -33,3 +33,11 @@ html, body, #root {
   padding: 0;
   height: 100%;
 }
+
+@keyframes progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.animate-progress {
+  animation: progress 1.5s ease-in-out infinite;
+}

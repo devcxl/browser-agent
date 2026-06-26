@@ -106,9 +106,16 @@ export function MessageBubble({ message }: Props) {
           </div>
         )}
 
-        <div className="text-sm leading-relaxed">
+          <div className="text-sm leading-relaxed">
           {isUser ? (
             <div className="whitespace-pre-wrap break-words">{message.content}</div>
+          ) : isStreaming && !message.content ? (
+            <div className="flex items-center gap-1.5 text-mute">
+              <span className="inline-block w-1.5 h-1.5 bg-mute rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="inline-block w-1.5 h-1.5 bg-mute rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="inline-block w-1.5 h-1.5 bg-mute rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span className="ml-0.5 text-xs">思考中...</span>
+            </div>
           ) : (
             <div className="markdown-body break-words [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-1 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-2 [&_blockquote]:text-gray-600 [&_table]:my-2 [&_table]:border-collapse [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1 [&_hr]:my-2 [&_hr]:border-gray-300">
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
