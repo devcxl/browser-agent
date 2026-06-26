@@ -261,19 +261,6 @@ export function useAgent() {
         if (output.tokenUsage) {
           cbRef.current.onTokenUsage?.(output.tokenUsage);
         }
-        if (output.toolCalls.length > 0) {
-          // hooks 已通过 onToolCall 推送了所有工具调用，此处仅做二次兜底
-          for (const tc of output.toolCalls) {
-            cbRef.current.onMessage?.({
-              id: uid(),
-              role: 'tool',
-              content: tc.toolName,
-              toolCallDisplay: recordToDisplay(tc),
-              timestamp: Date.now(),
-              status: recordToDisplay(tc).status,
-            });
-          }
-        }
         assistantMsg.status = 'complete';
         cbRef.current.onMessage?.({ ...assistantMsg });
         setStatus('idle');
