@@ -79,10 +79,13 @@ async function getDeps(): Promise<AgentDeps> {
     registry.registerAll(createTabGroupsTools(rpc));
     registerPhase2Tools(registry, rpc);
     registry.registerAll(
-      createPageTools(async (params) => {
-        const result = await rpc.request('content.execute', params as Record<string, unknown>);
-        return { success: true, data: result };
-      }),
+      createPageTools(
+        async (params) => {
+          const result = await rpc.request('content.execute', params as Record<string, unknown>);
+          return { success: true, data: result };
+        },
+        rpc,
+      ),
     );
 
     // Skill 伪 tool：注册到 ToolRegistry 使 LLM 可通过 function calling 调用

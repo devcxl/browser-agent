@@ -115,6 +115,37 @@ export function initBackground(): {
     return contentBridge.sendToContent(tabId, params.method, params.params);
   });
 
+  // ── Screenshot ──────────────────────────────────────
+  router.register('tabs.captureScreenshot', async (p) => {
+    const params = p as any;
+    const format = (params.format ?? 'png') as 'png' | 'jpeg';
+    const quality = params.quality as number | undefined;
+
+    const tabs = await adapter.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (!tab?.windowId) {
+      return { success: false, error: '未找到当前活动标签页' };
+    }
+
+    const dataUrl = await (browser.tabs as any).captureVisibleTab(tab.windowId, { format, quality });
+    return { success: true, data: dataUrl };
+  });
+
+  // ── Markdown Viewer ─────────────────────────────────
+  router.register('page.viewMarkdown', async (p) => {
+    const params = p as any;
+    const markdown = params.markdown as string;
+    const title = (params.title as string) ?? 'Markdown Preview';
+
+    const viewId = crypto.randomUUID();
+    await adapter.storage.local.set({ [`markdown:${viewId}`]: markdown });
+
+    const url = (browser.runtime as any).getURL(`markdown-viewer.html?viewId=${viewId}`);
+    await adapter.tabs.create({ url, active: true });
+
+    return { success: true, data: { viewId, url } };
+  });
+
   // 管理已连接的 Chat Page Port
   const connectedPorts = new Set<ReturnType<typeof browser.runtime.connect>>();
 
