@@ -113,7 +113,12 @@ export class AgentLoop implements IAgentRuntime {
 
           const delta = choice.delta;
           if (delta.content) {
-            streamingContent += delta.content;
+            // 兼容两种流式模式：部分 provider 返回增量 delta，部分返回完整累积文本
+            if (delta.content.length > streamingContent.length && delta.content.startsWith(streamingContent)) {
+              streamingContent = delta.content;
+            } else {
+              streamingContent += delta.content;
+            }
             this.hooks?.onStreamChunk?.(delta.content);
           }
 

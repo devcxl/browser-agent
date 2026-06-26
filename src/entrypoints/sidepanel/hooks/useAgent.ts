@@ -181,11 +181,22 @@ export function useAgent() {
               assistantMsg.status = 'streaming';
               assistantMsg.timestamp = Date.now();
             }
-            assistantMsg.content += chunk;
+            // 兼容两种流式模式：部分 provider 返回增量 delta，部分返回完整累积文本
+            const existing = assistantMsg.content;
+            if (chunk.length > existing.length && chunk.startsWith(existing)) {
+              assistantMsg.content = chunk;
+            } else {
+              assistantMsg.content = existing + chunk;
+            }
             cbRef.current.onMessage?.({ ...assistantMsg });
           },
           onReasoningChunk: (chunk: string) => {
-            assistantMsg.reasoningContent = (assistantMsg.reasoningContent ?? '') + chunk;
+            const existing = assistantMsg.reasoningContent ?? '';
+            if (chunk.length > existing.length && chunk.startsWith(existing)) {
+              assistantMsg.reasoningContent = chunk;
+            } else {
+              assistantMsg.reasoningContent = existing + chunk;
+            }
             cbRef.current.onMessage?.({ ...assistantMsg });
           },
           onToolCall: (record: ToolCallRecord) => {
