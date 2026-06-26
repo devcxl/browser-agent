@@ -40,15 +40,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const prevActiveIdRef = useRef<string | null>(null);
   const prevTokenResetIdRef = useRef<string | null>(null);
 
-  // 跟踪每个会话的 agent 状态
+  // 跟踪每个会话的 agent 状态 — 使用 agent.runningConversationId 而非 activeId
   useEffect(() => {
-    if (conversations.activeId) {
-      setConversationStatuses((prev) => ({
-        ...prev,
-        [conversations.activeId!]: agent.status,
-      }));
+    const id = agent.runningConversationId;
+    if (id) {
+      setConversationStatuses((prev) => ({ ...prev, [id]: agent.status }));
     }
-  }, [agent.status, conversations.activeId]);
+  }, [agent.status, agent.runningConversationId]);
 
   // 跟踪每个会话的 agent 状态
   useEffect(() => {

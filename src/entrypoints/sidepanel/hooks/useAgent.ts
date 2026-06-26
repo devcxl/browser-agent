@@ -114,6 +114,7 @@ function recordToDisplay(record: ToolCallRecord): ToolCallDisplay {
 export function useAgent() {
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [runningConversationId, setRunningConversationId] = useState<string | null>(null);
   const cbRef = useRef<AgentCallbacks>({});
   const loopRef = useRef<IAgentRuntime | null>(null);
   const confirmResolveRef = useRef<((value: boolean) => void) | null>(null);
@@ -129,6 +130,7 @@ export function useAgent() {
       providerConfig: ProviderConfig,
       reasoningEffort?: import('@/shared/types').ReasoningEffort,
     ) => {
+      setRunningConversationId(conversationId);
       setStatus('running');
       setError(null);
 
@@ -266,12 +268,14 @@ export function useAgent() {
         }
         assistantMsg.status = 'complete';
         cbRef.current.onMessage?.({ ...assistantMsg });
+        setRunningConversationId(null);
         setStatus('idle');
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           assistantMsg.content += '\n\n*操作已中止*';
           assistantMsg.status = 'complete';
           cbRef.current.onMessage?.({ ...assistantMsg });
+          setRunningConversationId(null);
           setStatus('idle');
           return;
         }
@@ -279,6 +283,7 @@ export function useAgent() {
         assistantMsg.content = `错误: ${(err as Error).message}`;
         cbRef.current.onMessage?.({ ...assistantMsg });
         setError((err as Error).message);
+        setRunningConversationId(null);
         setStatus('idle');
       }
     },
@@ -294,5 +299,5 @@ export function useAgent() {
     confirmResolveRef.current = null;
   }, []);
 
-  return { status, error, run, abort, setCallbacks, resolveConfirm };
+  return { status, error, run, abort, setCallbacks, resolveConfirm, runningConversationId };
 }
