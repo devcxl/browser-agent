@@ -63,7 +63,7 @@ export class SkillSubscriptionStore {
         callback((subChange.newValue as SkillSubscription[]) ?? []);
       }
     };
-    this.storage.onChanged.addListener(handler);
-    return () => this.storage.onChanged.removeListener(handler);
+    browser.storage.onChanged.addListener(handler);
+    return () => browser.storage.onChanged.removeListener(handler);
   }
 }

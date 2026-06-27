@@ -101,8 +101,8 @@ export class ConfigStore implements IConfigStore {
       callback(typedChanges);
     };
 
-    this.storage.onChanged.addListener(handler);
-    return () => this.storage.onChanged.removeListener(handler);
+    browser.storage.onChanged.addListener(handler);
+    return () => browser.storage.onChanged.removeListener(handler);
   }
 
   // ── 工具方法 ────────────────────────────────────────

@@ -25,6 +25,9 @@ jobs:
       - name: Run tests
         run: npm run test:run
 
+      - name: Type check
+        run: npm run typecheck
+
       - name: Build & package Chrome
         run: npx wxt zip -b chrome
 

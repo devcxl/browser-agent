@@ -66,7 +66,6 @@ export type {
   OpenAIToolSchema,
   ToolDefinition,
   IToolRegistry,
-  ToolCallRecord,
 } from './tool';
 
 export type {

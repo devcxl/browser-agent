@@ -153,7 +153,7 @@ export class SkillStore implements ISkillStore {
         callback((skillsChange.newValue as Skill[]) ?? []);
       }
     };
-    this.storage.onChanged.addListener(handler);
-    return () => this.storage.onChanged.removeListener(handler);
+    browser.storage.onChanged.addListener(handler);
+    return () => browser.storage.onChanged.removeListener(handler);
   }
 }

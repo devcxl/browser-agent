@@ -356,7 +356,7 @@ export class AgentLoop implements IAgentRuntime {
                 toolCallId: tc.id,
                 timestamp: Date.now(),
               });
-              this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
+              this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]!);
               continue;
             }
 
@@ -398,7 +398,7 @@ export class AgentLoop implements IAgentRuntime {
                   toolCallId: tc.id,
                   timestamp: Date.now(),
                 });
-                this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
+                this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]!);
                 continue;
               }
             }
@@ -429,7 +429,7 @@ export class AgentLoop implements IAgentRuntime {
                 toolCallId: tc.id,
                 timestamp: Date.now(),
               });
-              this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
+              this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]!);
               invalidRetries = 0;
               continue;
             }
@@ -463,7 +463,7 @@ export class AgentLoop implements IAgentRuntime {
               timestamp: Date.now(),
             });
 
-            this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]);
+            this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]!);
             invalidRetries = 0;
           }
 

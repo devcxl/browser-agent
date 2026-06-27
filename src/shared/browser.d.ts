@@ -41,10 +41,31 @@ declare namespace browser.storage {
     get(keys?: string | string[] | Record<string, unknown> | null): Promise<Record<string, unknown>>;
     set(items: Record<string, unknown>): Promise<void>;
     remove(keys: string | string[]): Promise<void>;
+    clear(): Promise<void>;
+    onChanged: {
+      addListener(callback: (changes: Record<string, {
+        oldValue?: unknown;
+        newValue?: unknown;
+      }>, areaName: string) => void): void;
+      removeListener(callback: (changes: Record<string, {
+        oldValue?: unknown;
+        newValue?: unknown;
+      }>, areaName: string) => void): void;
+    };
   }
   const local: StorageArea;
   const sync: StorageArea;
   const session: StorageArea;
+  const onChanged: {
+    addListener(callback: (changes: Record<string, {
+      oldValue?: unknown;
+      newValue?: unknown;
+    }>, areaName: string) => void): void;
+    removeListener(callback: (changes: Record<string, {
+      oldValue?: unknown;
+      newValue?: unknown;
+    }>, areaName: string) => void): void;
+  };
 }
 
 declare namespace browser {

@@ -8,6 +8,10 @@ import type {
 export class ToolRegistry implements IToolRegistry {
   private tools = new Map<string, ToolDefinition>();
 
+  get size(): number {
+    return this.tools.size;
+  }
+
   register(tool: ToolDefinition): void {
     if (this.tools.has(tool.name)) {
       throw new Error(

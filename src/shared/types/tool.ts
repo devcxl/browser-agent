@@ -54,15 +54,20 @@ export interface ToolResult {
 
 // ==================== 工具定义 ====================
 
+/** Schema 属性定义（支持递归嵌套） */
+export interface SchemaProperty {
+  type: string;
+  description?: string;
+  enum?: string[];
+  items?: SchemaProperty;
+  properties?: Record<string, SchemaProperty>;
+  required?: string[];
+}
+
 /** OpenAI Function Calling Schema - parameters 部分 */
 export interface ToolParameterSchema {
   type: 'object';
-  properties: Record<string, {
-    type: string;
-    description?: string;
-    enum?: string[];
-    items?: { type: string };
-  }>;
+  properties: Record<string, SchemaProperty>;
   required?: string[];
 }
 
@@ -127,15 +132,4 @@ export interface IToolRegistry {
   unregisterCategory(category: ToolCategory): void;
   /** 已注册工具数量 */
   readonly size: number;
-}
-
-// ==================== 工具调用记录 ====================
-
-export interface ToolCallRecord {
-  toolName: string;
-  params: Record<string, unknown>;
-  result: ToolResult;
-  riskLevel: RiskLevel;
-  confirmed: boolean;
-  timestamp: number;
 }

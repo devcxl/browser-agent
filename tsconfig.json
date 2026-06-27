@@ -18,8 +18,8 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["chrome"]
+    "types": ["chrome", "vitest/globals"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist", "src/entrypoints"]
+  "exclude": ["node_modules", "dist", "src/entrypoints", "src/content", "src/**/__tests__"]
 }
