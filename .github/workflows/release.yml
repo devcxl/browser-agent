@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run tests
+        run: npm run test:run
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build & package Chrome
+        run: npx wxt zip -b chrome
+
+      - name: Build & package Firefox
+        run: npx wxt zip -b firefox --mv3
+
+      - name: Build & package sources
+        run: npx wxt zip
+
+      - name: Verify manifests
+        run: bash scripts/verify-manifest.sh
+
+      - name: Check size
+        run: bash scripts/check-size.sh
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1 || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            NOTES=$(git log "$PREV_TAG"..HEAD --oneline --no-decorate 2>/dev/null || echo "")
+          else
+            NOTES=$(git log --oneline --no-decorate 2>/dev/null || echo "")
+          fi
+          {
+            echo 'notes<<EOF'
+            echo "$NOTES"
+            echo
+            echo '---'
+            echo "构建时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.notes }}
+          draft: true
+          prerelease: false
+          files: |
+            dist/*.zip
