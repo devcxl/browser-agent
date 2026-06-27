@@ -50,6 +50,8 @@ export interface ProviderFormData {
   isLocalTrusted: boolean;
   /** STT 语音识别模型（可选） */
   sttModel?: string;
+  /** 音频格式（可选），留空则自动检测 */
+  audioFormat?: string;
 }
 
 export interface ConfirmRequest {

@@ -23,6 +23,8 @@ export interface ProviderConfig {
   timeoutMs?: number;
   /** STT 语音识别模型（可选，如 whisper-1），不填则不支持语音功能 */
   sttModel?: string;
+  /** 音频格式（可选），留空则自动检测浏览器支持的最佳格式 */
+  audioFormat?: string;
   /** 是否默认 Provider */
   isDefault?: boolean;
 }

@@ -32,14 +32,26 @@ export function SettingsPanel({
   const [testingIdx, setTestingIdx] = useState<number | null>(null);
   const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
 
-  const defaultForm: ProviderFormData = {
-    name: '',
-    endpoint: '',
-    apiKey: '',
-    model: '',
-    isLocalTrusted: false,
-    sttModel: '',
-  };
+const AUDIO_FORMATS = [
+  { value: '', label: '自动检测（推荐）' },
+  { value: 'audio/webm;codecs=opus', label: 'WebM Opus (Chrome/Firefox)' },
+  { value: 'audio/webm', label: 'WebM' },
+  { value: 'audio/mp4;codecs=mp4a.40.5', label: 'MP4 AAC (Safari)' },
+  { value: 'audio/mp4', label: 'MP4' },
+  { value: 'audio/aac', label: 'AAC' },
+  { value: 'audio/ogg;codecs=opus', label: 'OGG Opus' },
+  { value: 'audio/wav', label: 'WAV' },
+];
+
+const defaultForm: ProviderFormData = {
+  name: '',
+  endpoint: '',
+  apiKey: '',
+  model: '',
+  isLocalTrusted: false,
+  sttModel: '',
+  audioFormat: '',
+};
 
   const handleSaveProvider = () => {
     if (!editing) return;
@@ -51,6 +63,7 @@ export function SettingsPanel({
       model: editing.model,
       isLocalTrusted: editing.isLocalTrusted,
       sttModel: editing.sttModel || undefined,
+      audioFormat: editing.audioFormat || undefined,
     };
     if (editing.id) {
       onSaveProviders(providers.map((p) => (p.id === editing.id ? newProvider : p)));
@@ -251,7 +264,7 @@ export function SettingsPanel({
                     <div className="text-xs text-mute truncate">{p.endpoint} / {p.model}</div>
                     {p.sttModel && (
                       <div className="text-xs text-mute truncate mt-0.5">
-                        🎤 语音模型: {p.sttModel}
+                        🎤 语音模型: {p.sttModel}{p.audioFormat ? ` | 音频: ${p.audioFormat}` : ''}
                       </div>
                     )}
                   </div>
@@ -280,6 +293,7 @@ export function SettingsPanel({
                           model: p.model,
                           isLocalTrusted: p.isLocalTrusted,
                           sttModel: p.sttModel ?? '',
+                          audioFormat: p.audioFormat ?? '',
                         })
                       }
                       className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft"
@@ -335,6 +349,16 @@ export function SettingsPanel({
                     onChange={(e) => setEditing({ ...editing, sttModel: e.target.value })}
                     className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
+                  <select
+                    data-testid="provider-audio-format-select"
+                    value={editing.audioFormat ?? ''}
+                    onChange={(e) => setEditing({ ...editing, audioFormat: e.target.value })}
+                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink focus:outline-none focus:border-primary"
+                  >
+                    {AUDIO_FORMATS.map((fmt) => (
+                      <option key={fmt.value} value={fmt.value}>{fmt.label}</option>
+                    ))}
+                  </select>
                   <label className="flex items-center gap-2 text-sm text-mute">
                     <input
                       type="checkbox"
