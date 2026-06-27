@@ -1,12 +1,12 @@
 import type { ProviderConfig } from '@/shared/types';
-import { convertToMp3, mimeToExt } from './audio-utils';
+import { convertToWav, mimeToExt } from './audio-utils';
 
-const MP3_MIME = 'audio/mpeg';
+const WAV_MIME = 'audio/wav';
 
-function shouldConvertToMp3(blob: Blob, config: ProviderConfig): boolean {
+function shouldConvertToWav(blob: Blob, config: ProviderConfig): boolean {
   if (!config.sttModel) return false;
   const format = config.audioFormat;
-  if (!format) return true;
+  if (!format) return blob.type !== WAV_MIME;
   return format !== blob.type;
 }
 
@@ -60,8 +60,8 @@ export class SttClient {
   async transcribe(audioBlob: Blob, externalSignal?: AbortSignal): Promise<string> {
     const { signal, clear } = this.createTimeoutSignal(externalSignal);
     try {
-      const sendBlob = shouldConvertToMp3(audioBlob, this.config)
-        ? await convertToMp3(audioBlob)
+      const sendBlob = shouldConvertToWav(audioBlob, this.config)
+        ? await convertToWav(audioBlob)
         : audioBlob;
 
       const ext = mimeToExt(sendBlob.type);

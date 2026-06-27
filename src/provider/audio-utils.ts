@@ -1,5 +1,3 @@
-import { Mp3Encoder } from 'lamejs';
-
 function float32ToInt16(float32: Float32Array): Int16Array {
   const len = float32.length;
   const int16 = new Int16Array(len);
@@ -10,50 +8,54 @@ function float32ToInt16(float32: Float32Array): Int16Array {
   return int16;
 }
 
-export async function convertToMp3(audioBlob: Blob): Promise<Blob> {
-  try {
-    const arrayBuffer = await audioBlob.arrayBuffer();
+/**
+ * Encode PCM Int16 data as WAV (LPCM 16-bit mono).
+ * No external dependencies — just a RIFF header + raw samples.
+ */
+function encodeWav(samples: Int16Array, sampleRate: number): ArrayBuffer {
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataSize = samples.length * (bitsPerSample / 8);
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
 
-    const audioCtx = new AudioContext();
-    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-    audioCtx.close();
+  const writeStr = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
 
-    const channels = audioBuffer.numberOfChannels;
-    const sampleRate = audioBuffer.sampleRate;
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);            // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataSize, true);
 
-    const left = float32ToInt16(audioBuffer.getChannelData(0));
-    const right = channels > 1 ? float32ToInt16(audioBuffer.getChannelData(1)) : left;
+  const output = new Int16Array(buffer, 44, samples.length);
+  output.set(samples);
 
-    const encoder = new Mp3Encoder(channels, sampleRate, 128);
-    const mp3Chunks: Int8Array[] = [];
+  return buffer;
+}
 
-    const blockSize = 1152;
-    for (let i = 0; i < left.length; i += blockSize) {
-      const chunkLeft = left.subarray(i, i + blockSize);
-      const chunkRight = right.subarray(i, i + blockSize);
-      const mp3Buf = encoder.encodeBuffer(chunkLeft, chunkRight);
-      if (mp3Buf.length > 0) {
-        mp3Chunks.push(mp3Buf);
-      }
-    }
+export async function convertToWav(audioBlob: Blob): Promise<Blob> {
+  const arrayBuffer = await audioBlob.arrayBuffer();
+  const audioCtx = new OfflineAudioContext(1, 1, 16000);
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
-    const last = encoder.flush();
-    if (last.length > 0) {
-      mp3Chunks.push(last);
-    }
+  const sampleRate = audioBuffer.sampleRate;
+  const channelData = audioBuffer.getChannelData(0);
+  const samples = float32ToInt16(channelData);
+  const wavBuffer = encodeWav(samples, sampleRate);
 
-    const totalLen = mp3Chunks.reduce((sum, c) => sum + c.length, 0);
-    const merged = new Uint8Array(totalLen);
-    let offset = 0;
-    for (const chunk of mp3Chunks) {
-      merged.set(chunk, offset);
-      offset += chunk.length;
-    }
-
-    return new Blob([merged], { type: 'audio/mpeg' });
-  } catch {
-    return audioBlob;
-  }
+  return new Blob([wavBuffer], { type: 'audio/wav' });
 }
 
 export function mimeToExt(mime: string): string {

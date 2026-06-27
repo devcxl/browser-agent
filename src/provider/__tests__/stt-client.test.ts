@@ -54,6 +54,18 @@ describe('SttClient', () => {
   beforeEach(() => {
     config = makeConfig();
     client = new SttClient(config);
+
+    vi.stubGlobal('OfflineAudioContext', class {
+      constructor() {}
+      decodeAudioData() {
+        return Promise.resolve({
+          numberOfChannels: 1,
+          sampleRate: 48000,
+          getChannelData: () => new Float32Array(48000),
+        });
+      }
+      close() {}
+    });
   });
 
   afterEach(() => {
