@@ -1,18 +1,13 @@
 import type { ProviderConfig } from '@/shared/types';
+import { convertToMp3, mimeToExt } from './audio-utils';
 
-const MIME_TO_EXT: Record<string, string> = {
-  'audio/webm': 'webm',
-  'audio/ogg': 'ogg',
-  'audio/mp4': 'mp4',
-  'audio/aac': 'aac',
-  'audio/wav': 'wav',
-  'audio/x-wav': 'wav',
-  'audio/mpeg': 'mpeg',
-};
+const MP3_MIME = 'audio/mpeg';
 
-function mimeToExt(mime: string): string {
-  const base = mime.split(';')[0]!.trim();
-  return MIME_TO_EXT[base] ?? 'webm';
+function shouldConvertToMp3(blob: Blob, config: ProviderConfig): boolean {
+  if (!config.sttModel) return false;
+  const format = config.audioFormat;
+  if (!format) return true;
+  return format !== blob.type;
 }
 
 export class SttClient {
@@ -65,9 +60,13 @@ export class SttClient {
   async transcribe(audioBlob: Blob, externalSignal?: AbortSignal): Promise<string> {
     const { signal, clear } = this.createTimeoutSignal(externalSignal);
     try {
+      const sendBlob = shouldConvertToMp3(audioBlob, this.config)
+        ? await convertToMp3(audioBlob)
+        : audioBlob;
+
+      const ext = mimeToExt(sendBlob.type);
       const formData = new FormData();
-      const ext = mimeToExt(audioBlob.type);
-      formData.append('file', audioBlob, `audio.${ext}`);
+      formData.append('file', sendBlob, `audio.${ext}`);
       formData.append('model', this.config.sttModel ?? this.config.model);
 
       const response = await fetch(this.apiUrl, {

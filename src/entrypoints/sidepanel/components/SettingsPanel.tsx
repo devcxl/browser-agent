@@ -33,10 +33,10 @@ export function SettingsPanel({
   const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
 
 const AUDIO_FORMATS = [
-  { value: '', label: '自动检测（推荐）' },
-  { value: 'audio/webm;codecs=opus', label: 'WebM Opus (Chrome/Firefox)' },
+  { value: '', label: '自动（推荐）— 统一转为 MP3 发送' },
+  { value: 'audio/webm;codecs=opus', label: 'WebM Opus' },
   { value: 'audio/webm', label: 'WebM' },
-  { value: 'audio/mp4;codecs=mp4a.40.5', label: 'MP4 AAC (Safari)' },
+  { value: 'audio/mp4;codecs=mp4a.40.5', label: 'MP4 AAC' },
   { value: 'audio/mp4', label: 'MP4' },
   { value: 'audio/aac', label: 'AAC' },
   { value: 'audio/ogg;codecs=opus', label: 'OGG Opus' },
@@ -264,7 +264,7 @@ const defaultForm: ProviderFormData = {
                     <div className="text-xs text-mute truncate">{p.endpoint} / {p.model}</div>
                     {p.sttModel && (
                       <div className="text-xs text-mute truncate mt-0.5">
-                        🎤 语音模型: {p.sttModel}{p.audioFormat ? ` | 音频: ${p.audioFormat}` : ''}
+                        🎤 语音模型: {p.sttModel}{p.audioFormat ? ` | 输出: ${p.audioFormat}` : ' | 输出: MP3'}
                       </div>
                     )}
                   </div>
@@ -359,6 +359,7 @@ const defaultForm: ProviderFormData = {
                       <option key={fmt.value} value={fmt.value}>{fmt.label}</option>
                     ))}
                   </select>
+                  <p className="text-xs text-mute -mt-1">录音后统一转为指定格式再发送，留空则自动转 MP3</p>
                   <label className="flex items-center gap-2 text-sm text-mute">
                     <input
                       type="checkbox"

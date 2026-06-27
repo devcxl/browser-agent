@@ -106,7 +106,7 @@ export function useVoiceInput({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const mimeType = provider.audioFormat || selectBestMimeType();
+      const mimeType = selectBestMimeType();
       const recorder = new MediaRecorder(stream, { mimeType: mimeType || undefined });
       recorderRef.current = recorder;
       chunksRef.current = [];

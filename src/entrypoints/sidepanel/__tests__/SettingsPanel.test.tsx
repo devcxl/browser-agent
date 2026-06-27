@@ -164,7 +164,7 @@ describe('SettingsPanel - sttModel', () => {
     const props = makeProps({ providers: [provider] });
     render(<SettingsPanel {...props} />);
 
-    expect(screen.getByText('🎤 语音模型: whisper-1')).toBeInTheDocument();
+    expect(screen.getByText('🎤 语音模型: whisper-1 | 输出: MP3')).toBeInTheDocument();
   });
 
   it('Provider 列表卡片应在无 sttModel 时不显示语音模型信息', () => {
