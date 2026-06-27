@@ -55,7 +55,10 @@ describe('ConfigStore', () => {
   beforeEach(() => {
     browserMock = mockBrowserStorage();
     vi.stubGlobal('browser', {
-      storage: { local: browserMock.mock },
+      storage: {
+        local: browserMock.mock,
+        onChanged: browserMock.mock.onChanged,
+      },
     });
     ConfigStore.resetInstance();
   });

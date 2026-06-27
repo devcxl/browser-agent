@@ -1,5 +1,20 @@
 import type { ProviderConfig } from '@/shared/types';
 
+const MIME_TO_EXT: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/ogg': 'ogg',
+  'audio/mp4': 'mp4',
+  'audio/aac': 'aac',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/mpeg': 'mpeg',
+};
+
+function mimeToExt(mime: string): string {
+  const base = mime.split(';')[0]!.trim();
+  return MIME_TO_EXT[base] ?? 'webm';
+}
+
 export class SttClient {
   constructor(private config: ProviderConfig) {}
 
@@ -51,7 +66,8 @@ export class SttClient {
     const { signal, clear } = this.createTimeoutSignal(externalSignal);
     try {
       const formData = new FormData();
-      formData.append('file', audioBlob, 'audio.webm');
+      const ext = mimeToExt(audioBlob.type);
+      formData.append('file', audioBlob, `audio.${ext}`);
       formData.append('model', this.config.sttModel ?? this.config.model);
 
       const response = await fetch(this.apiUrl, {

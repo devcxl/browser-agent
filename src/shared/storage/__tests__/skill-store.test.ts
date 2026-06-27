@@ -92,7 +92,10 @@ describe('SkillStore', () => {
   beforeEach(() => {
     browserMock = mockBrowserStorage();
     vi.stubGlobal('browser', {
-      storage: { local: browserMock.mock },
+      storage: {
+        local: browserMock.mock,
+        onChanged: browserMock.mock.onChanged,
+      },
     });
     SkillStore.resetInstance();
   });

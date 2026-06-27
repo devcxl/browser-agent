@@ -23,6 +23,23 @@ function selectProvider(providers: ProviderConfig[]): ProviderConfig | null {
   return providers.find((p) => p.sttModel) ?? null;
 }
 
+const RECORDING_MIME_TYPES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/mp4;codecs=mp4a.40.5',
+  'audio/mp4',
+  'audio/aac',
+  'audio/ogg;codecs=opus',
+  'audio/wav',
+];
+
+function selectBestMimeType(): string {
+  for (const mime of RECORDING_MIME_TYPES) {
+    if (MediaRecorder.isTypeSupported(mime)) return mime;
+  }
+  return '';
+}
+
 function releaseStream(
   streamRef: React.MutableRefObject<MediaStream | null>,
   recorderRef: React.MutableRefObject<MediaRecorder | null>,
@@ -89,10 +106,8 @@ export function useVoiceInput({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : 'audio/webm;codecs=opus';
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const mimeType = selectBestMimeType();
+      const recorder = new MediaRecorder(stream, { mimeType: mimeType || undefined });
       recorderRef.current = recorder;
       chunksRef.current = [];
 
