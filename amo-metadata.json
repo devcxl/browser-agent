@@ -1,0 +1,34 @@
+{
+  "name": {
+    "en-US": "Browser Agent",
+    "zh-CN": "浏览器 AI 助手"
+  },
+  "summary": {
+    "en-US": "AI-powered browser agent — control tabs, bookmarks, history, downloads, cookies, and more with natural language.",
+    "zh-CN": "AI 驱动的浏览器智能助手 — 通过自然语言控制标签页、书签、历史记录、下载、Cookie 等。"
+  },
+  "description": {
+    "en-US": "Browser Agent is an AI-powered extension that brings natural language control to your browser.\n\nFeatures:\n- Tab & Window Management: open, close, group, move, switch tabs and windows\n- Page Operations: read content, extract Markdown, take screenshots, click elements\n- Bookmarks & History: search, create, organize bookmarks and browsing history\n- Downloads: search, open, cancel, pause, resume downloads\n- Cookies & Sessions: inspect, modify cookies; backup and restore sessions\n- Skills System: extend capabilities by subscribing to GitHub skill repositories\n- Voice Input: use speech-to-text for hands-free control\n- Privacy First: runs locally, your API key stays on your device\n\nPowered by any OpenAI-compatible LLM backend. Bring your own API key.",
+    "zh-CN": "Browser Agent 是一款 AI 驱动的浏览器扩展，让您通过自然语言控制浏览器。\n\n功能特性：\n- 标签页与窗口管理：打开、关闭、分组、移动、切换标签页和窗口\n- 页面操作：读取内容、提取 Markdown、截图、模拟点击元素\n- 书签与历史：搜索、创建、整理书签和浏览历史\n- 下载管理：搜索、打开、取消、暂停、恢复下载\n- Cookie 与会话：查看、修改 Cookie；备份和恢复浏览会话\n- 技能系统：订阅 GitHub 技能仓库扩展能力\n- 语音输入：支持语音转文字，解放双手\n- 隐私优先：本地运行，API 密钥仅存储在你的设备上\n\n支持任何兼容 OpenAI API 的 LLM 后端。需自备 API 密钥。"
+  },
+  "categories": {
+    "firefox": ["tabs", "web-development", "security-privacy"]
+  },
+  "requires_payment": false,
+  "homepage": {
+    "en-US": "https://github.com/devcxl/browser-agent"
+  },
+  "developer_comments": {
+    "en-US": "This extension uses an AI service (OpenAI-compatible API) to process natural language commands. Your browser data (tab titles, URLs, page content you explicitly request) is sent to the LLM provider you configure. No data is collected by the extension developer.\n\nAll API keys are stored locally in your browser's storage and never sent to any server other than the LLM endpoint you configure.",
+    "zh-CN": "本扩展使用 AI 服务（兼容 OpenAI API）处理自然语言指令。您的浏览器数据（标签页标题、URL、您明确请求的页面内容）会被发送到您配置的 LLM 提供商。扩展开发者不会收集任何数据。\n\n所有 API 密钥仅存储在您浏览器的本地存储中，不会发送到除您配置的 LLM 端点之外的任何服务器。"
+  },
+  "supported_locales": ["en-US", "zh-CN"],
+  "version": {
+    "license": "MIT",
+    "release_notes": {
+      "en-US": "Automated release from GitHub Actions.",
+      "zh-CN": "来自 GitHub Actions 的自动发布。"
+    },
+    "approval_notes": "Built from the source archive uploaded with this submission. The extension uses WXT to bundle the source code.\n\nBuild command: npm ci && npm run build:firefox\n\nThe output is in dist/firefox-mv3/. All bundled JavaScript is generated from the TypeScript source in src/ with no manual edits."
+  }
+}

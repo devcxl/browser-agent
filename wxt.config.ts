@@ -12,7 +12,6 @@ export default defineConfig({
 
     const permissions: string[] = [
       'tabs',
-      'tabGroups',
       'storage',
       'sessions',
       'alarms',
@@ -23,7 +22,7 @@ export default defineConfig({
     ];
 
     if (!isFirefox) {
-      permissions.push('windows');
+      permissions.push('windows', 'tabGroups');
     }
 
     if (isMv3) {
@@ -40,7 +39,6 @@ export default defineConfig({
     const manifest: Record<string, unknown> = {
       name: 'Browser Agent',
       description: 'AI-powered browser agent extension - manage tabs, bookmarks, history, and more with natural language',
-      version: '0.1.0',
       permissions,
       host_permissions: ['<all_urls>'],
       action: {
@@ -64,7 +62,7 @@ export default defineConfig({
       if (wxt.config.browser === 'firefox') {
         manifest.browser_specific_settings = {
           gecko: {
-            id: 'browser-agent@example.com',
+            id: 'browser-agent@devcxl.cn',
             strict_min_version: '128.0',
           },
         };
