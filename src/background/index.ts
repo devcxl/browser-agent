@@ -135,7 +135,6 @@ export function initBackground(): {
   router.register('page.viewMarkdown', async (p) => {
     const params = p as any;
     const markdown = params.markdown as string;
-    const title = (params.title as string) ?? 'Markdown Preview';
 
     const viewId = crypto.randomUUID();
     await adapter.storage.local.set({ [`markdown:${viewId}`]: markdown });

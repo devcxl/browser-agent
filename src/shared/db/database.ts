@@ -1,5 +1,5 @@
 import type { BrowserAgentDatabase, BrowserAgentDB } from './schema';
-import { DB_NAME, DB_VERSION, StoreNames, openBrowserAgentDB } from './schema';
+import { DB_NAME, StoreNames, openBrowserAgentDB } from './schema';
 
 /**
  * IndexedDB 数据库管理
