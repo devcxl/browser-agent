@@ -1,4 +1,4 @@
-import type { ProviderConfig, ILlmClient, ReasoningEffort } from './llm';
+import type { ProviderConfig, ReasoningEffort } from './llm';
 import type { LowSensitivityContext } from './browser';
 import type { RiskLevel, ToolResult } from './tool';
 import type { Skill } from './skill';

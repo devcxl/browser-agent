@@ -9,7 +9,7 @@ import type { Skill } from '@/shared/types/skill';
 import type { IToolRegistry } from '@/registry/types';
 import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager } from '@/shared/types/conversation';
-import type { ProviderConfig, ILlmClient, ChatMessage, ChatCompletionResponse, StreamChunk } from '@/shared/types/llm';
+import type { ProviderConfig, ILlmClient, StreamChunk } from '@/shared/types/llm';
 import { ContextBuilder } from './context-builder';
 import { SummaryManager } from './summary-manager';
 
