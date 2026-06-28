@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConversationManager } from '../conversation-manager';
 import type { Database } from '@/shared/db/database';
 import type { DbConversation, DbMessage, DbToolCallLog } from '@/shared/types';
-import type { StoredMessage, Conversation } from '@/shared/types/conversation';
+import type { StoredMessage } from '@/shared/types/conversation';
 import type { ILlmClient, ChatCompletionResponse } from '@/shared/types/llm';
 
 // ── Mock helpers ──

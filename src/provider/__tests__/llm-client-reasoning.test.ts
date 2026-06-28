@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LlmClient } from '../llm-client';
-import type { ProviderConfig, ChatCompletionRequest, StreamChunk } from '@/shared/types';
+import type { ProviderConfig, ChatCompletionRequest } from '@/shared/types';
 
 function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { initBackground } from '../index';
-import { getAdapter, resetAdapter } from '@/adapters';
+import { getAdapter } from '@/adapters';
 
 const contentBridgeMocks = vi.hoisted(() => ({
   sendToContent: vi.fn(),

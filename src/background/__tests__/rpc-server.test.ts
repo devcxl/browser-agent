@@ -107,7 +107,7 @@ describe('BackgroundRpcServer', () => {
     });
 
     it('should return METHOD_NOT_FOUND for unregistered method', async () => {
-      const server = new BackgroundRpcServer();
+      new BackgroundRpcServer();
 
       mockPort._receiveMessage({
         jsonrpc: '2.0',
@@ -159,7 +159,7 @@ describe('BackgroundRpcServer', () => {
     });
 
     it('should not throw for unregistered notification', () => {
-      const server = new BackgroundRpcServer();
+      new BackgroundRpcServer();
       expect(() => {
         mockPort._receiveMessage({ jsonrpc: '2.0', method: 'unknown' });
       }).not.toThrow();
@@ -240,7 +240,7 @@ describe('BackgroundRpcServer', () => {
 
   describe('message validation', () => {
     it('should ignore non-object messages', () => {
-      const server = new BackgroundRpcServer();
+      new BackgroundRpcServer();
       expect(() => {
         mockPort._receiveMessage(null);
         mockPort._receiveMessage('string');
@@ -249,7 +249,7 @@ describe('BackgroundRpcServer', () => {
     });
 
     it('should ignore messages without jsonrpc 2.0', () => {
-      const server = new BackgroundRpcServer();
+      new BackgroundRpcServer();
       expect(() => {
         mockPort._receiveMessage({ id: 1, result: 'x' });
       }).not.toThrow();
