@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { Mock } from 'vitest';
 import { ContextBuilder } from '../context-builder';
 import type { AgentConfig } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition } from '@/registry/types';

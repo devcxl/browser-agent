@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ContextBuilder } from '../context-builder';
 import type { AgentConfig } from '@/shared/types/agent';
-import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types';
+import type { IToolRegistry, ToolDefinition } from '@/registry/types';
 import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { LowSensitivityContext } from '@/shared/types/browser';
 

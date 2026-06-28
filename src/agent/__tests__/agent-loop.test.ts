@@ -1,12 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AgentLoop, type AgentLoopHooks } from '../agent-loop';
+import { AgentLoop } from '../agent-loop';
 import type { AgentConfig, AgentRunInput, ToolCallRecord } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types';
-import type { IGuardrail, GuardrailCheck, GuardrailContext } from '@/shared/types/guardrail';
-import type { IConversationManager, Conversation, StoredMessage } from '@/shared/types/conversation';
-import type { ILlmClient, ChatCompletionResponse, ChatMessage, ToolCallDelta } from '@/shared/types/llm';
+import type { IGuardrail, GuardrailCheck } from '@/shared/types/guardrail';
+import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
+import type { ILlmClient, ChatCompletionResponse, ToolCallDelta } from '@/shared/types/llm';
 import type { ProviderConfig, LowSensitivityContext, Skill } from '@/shared/types';
-import { ContextBuilder } from '../context-builder';
 
 // ==================== Mocks ====================
 
@@ -63,7 +62,6 @@ function createMockConversationManager(): IConversationManager {
 function createMockLlmClient(
   responses: ChatCompletionResponse[],
 ): ILlmClient {
-  const onChunkCallbacks: Array<(chunk: string) => void> = [];
   const mockChatStream = vi.fn().mockImplementation(
     async (
       _request: Parameters<ILlmClient['chatStream']>[0],
