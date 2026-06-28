@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SettingsPanel } from '../components/SettingsPanel';
 import type { ProviderConfig } from '@/shared/types';
-import type { AgentSettings, ExpertModeSettings } from '../types';
 
 // Mock stores used internally by SettingsPanel (skills tab)
 vi.mock('@/shared/github-skill-fetcher', () => ({

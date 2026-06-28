@@ -313,7 +313,7 @@ describe('useVoiceInput', () => {
   });
 
   it('stopRecording 时 provider 丢失 → error', async () => {
-    const { result, rerender } = renderHook(
+    const { result } = renderHook(
       ({ providers }: { providers: ProviderConfig[] }) =>
         useVoiceInput({ providers, onTranscribed: vi.fn() }),
       { initialProps: { providers: [makeProvider()] } },

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import type { ToolCallRecord } from '@/shared/types/agent';
 
 // Mock AgentLoop module - capture hooks passed to constructor
 let capturedHooks: any = null;
@@ -107,7 +106,7 @@ vi.mock('@/shared/storage', () => ({
 }));
 
 import { useAgent } from '../useAgent';
-import type { UIMessage, ConfirmRequest } from '../../types';
+import type { UIMessage } from '../../types';
 
 describe('useAgent', () => {
   beforeEach(() => {
@@ -239,7 +238,7 @@ describe('useAgent', () => {
 
   it('confirm 流程：onConfirm hook 被调用后 resolveConfirm 返回 true', async () => {
     // Make AgentLoop's run call the onConfirm hook to simulate high-risk tool
-    mockRun.mockImplementation(async (input: any) => {
+    mockRun.mockImplementation(async (_input: any) => {
       if (capturedHooks?.onConfirm) {
         const confirmed = await capturedHooks.onConfirm({
           toolName: 'tabs_close',
@@ -296,7 +295,7 @@ describe('useAgent', () => {
   });
 
   it('confirm 流程：拒绝后 AgentLoop 收到 false 并返回取消消息', async () => {
-    mockRun.mockImplementation(async (input: any) => {
+    mockRun.mockImplementation(async (_input: any) => {
       if (capturedHooks?.onConfirm) {
         const confirmed = await capturedHooks.onConfirm({
           toolName: 'tabs_close',
