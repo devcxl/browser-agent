@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getAdapter, resetAdapter } from '../index';
 import { ChromeAdapter } from '../chrome-adapter';
 import { FirefoxAdapter } from '../firefox-adapter';
