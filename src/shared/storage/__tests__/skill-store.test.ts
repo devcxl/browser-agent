@@ -19,11 +19,6 @@ function makeSkill(overrides: Partial<Skill> = {}): Skill {
   };
 }
 
-/** 元数据版本（不含 prompt/resources，模拟 chrome.storage.local 存储形态） */
-function metaSkill(overrides: Partial<Skill> = {}): Skill {
-  return { ...makeSkill(overrides), prompt: '', resources: [] };
-}
-
 /**
  * 创建 mock browser.storage.local
  * 与 config-store.test.ts 共享相同 mock 模式

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createPageGetContentTool } from '../page-get-content';
-import type { ToolResult } from '@/shared/types';
 
 describe('page_getContent tool', () => {
   it('should return tool definition with correct metadata', () => {

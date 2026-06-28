@@ -222,7 +222,7 @@ describe('JsonRpcClient', () => {
     });
 
     it('should return METHOD_NOT_FOUND for unregistered method', async () => {
-      const client = new JsonRpcClient();
+      new JsonRpcClient();
 
       mockPort._receiveMessage({
         jsonrpc: '2.0',
@@ -280,7 +280,7 @@ describe('JsonRpcClient', () => {
     });
 
     it('should not throw for unregistered notification', () => {
-      const client = new JsonRpcClient();
+      new JsonRpcClient();
 
       expect(() => {
         mockPort._receiveMessage({
@@ -359,7 +359,7 @@ describe('JsonRpcClient', () => {
       });
       vi.stubGlobal('browser', { runtime: { connect: connectSpy } });
 
-      const client = new JsonRpcClient(); // 第 1 次尝试
+      new JsonRpcClient(); // 第 1 次尝试
 
       // 10 次重连
       for (let i = 0; i < 10; i++) {
@@ -387,7 +387,7 @@ describe('JsonRpcClient', () => {
 
   describe('message validation', () => {
     it('should ignore non-object messages', () => {
-      const client = new JsonRpcClient();
+      new JsonRpcClient();
 
       expect(() => {
         mockPort._receiveMessage(null);
@@ -397,7 +397,7 @@ describe('JsonRpcClient', () => {
     });
 
     it('should ignore messages without jsonrpc "2.0"', () => {
-      const client = new JsonRpcClient();
+      new JsonRpcClient();
 
       expect(() => {
         mockPort._receiveMessage({ id: 1, result: 'x' });
