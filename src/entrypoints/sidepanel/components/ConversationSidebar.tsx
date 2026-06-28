@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ConversationSummary, AgentStatus, TokenUsage } from '../types';
+import type { ConversationSummary, TokenUsage } from '../types';
 import { formatDateTime, cn } from '../utils';
 
 interface Props {

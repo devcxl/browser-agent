@@ -32,7 +32,6 @@ export function ChatView({ messages }: Props) {
   // Simple virtual scroll for > 100 messages
   const useVirtual = messages.length > 100;
   let visibleMessages = messages;
-  let containerStyle: React.CSSProperties = {};
   let paddingTop = 0;
   let paddingBottom = 0;
 

@@ -13,7 +13,7 @@ import type { ProviderConfig } from '@/shared/types';
 const store = ConfigStore.getInstance();
 
 function ChatLayout() {
-  const { conversations, agent, browserState, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm, conversationStatuses } = useChat();
+  const { conversations, agent, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm, conversationStatuses } = useChat();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 

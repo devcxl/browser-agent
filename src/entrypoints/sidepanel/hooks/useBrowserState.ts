@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { BrowserState, StateChanges } from '@/shared/types';
+import type { BrowserState } from '@/shared/types';
 
 const POLL_INTERVAL = 3000;
 

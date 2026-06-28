@@ -1,4 +1,4 @@
-import type { RiskLevel, PreflightResult, ToolResult, ReasoningEffort } from '@/shared/types';
+import type { RiskLevel, ToolResult, ReasoningEffort } from '@/shared/types';
 
 export type AgentStatus = 'idle' | 'running' | 'streaming' | 'waitingConfirmation';
 

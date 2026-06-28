@@ -1,6 +1,5 @@
 import React from 'react';
 import type { TokenUsage } from '../types';
-import { cn } from '../utils';
 
 interface TokenPanelProps {
   usage: TokenUsage;
