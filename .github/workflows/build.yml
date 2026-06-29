@@ -1,14 +1,27 @@
-name: Build and Package
+name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [master, dev]
     tags: ['v*']
   pull_request:
-    branches: [main]
+    branches: [master]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
   test:
+    if: github.event_name == 'push'
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,11 +32,9 @@ jobs:
       - run: npm ci
       - run: npm run test:run
       - run: npx vitest run --coverage
-      - name: Check coverage
-        run: |
-          echo "Coverage check passed"
 
   build:
+    if: github.event_name == 'push'
     needs: test
     runs-on: ubuntu-latest
     strategy:
