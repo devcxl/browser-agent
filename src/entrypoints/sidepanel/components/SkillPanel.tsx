@@ -3,12 +3,14 @@ import type { Skill, SkillSubscription } from '@/shared/types';
 import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
 import { cn } from '../utils';
+import { useI18n } from '../i18n/useI18n';
 
 interface SkillPanelProps {
   onClose: () => void;
 }
 
 export function SkillPanel({ onClose }: SkillPanelProps) {
+  const { t } = useI18n();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [subscriptions, setSubscriptions] = useState<SkillSubscription[]>([]);
   const [subInput, setSubInput] = useState('');
@@ -38,7 +40,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
 
     const exists = subscriptions.find((s) => s.source === source);
     if (exists) {
-      setSyncStatus({ type: 'error', msg: '该订阅已存在' });
+      setSyncStatus({ type: 'error', msg: t('settings.skills.subscriptionExists') });
       return;
     }
 
@@ -57,7 +59,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
 
     // auto sync after adding
     await handleSync(sub);
-  }, [subInput, subscriptions, token]);
+  }, [subInput, subscriptions, token, t]);
 
   const handleSync = useCallback(async (sub: SkillSubscription) => {
     setSyncingId(sub.id);
@@ -95,13 +97,13 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
       }
 
       await subStore.update(sub.id, { lastSyncedAt: Date.now() });
-      setSyncStatus({ type: 'ok', msg: `同步完成，共 ${parsed.length} 个技能` });
+      setSyncStatus({ type: 'ok', msg: t('settings.skills.syncComplete', { count: parsed.length }) });
     } catch (err) {
-      setSyncStatus({ type: 'error', msg: `同步失败: ${(err as Error).message}` });
+      setSyncStatus({ type: 'error', msg: t('settings.skills.syncFailed', { error: (err as Error).message }) });
     } finally {
       setSyncingId(null);
     }
-  }, [skillStore, subStore, token]);
+  }, [skillStore, subStore, token, t]);
 
   const handleRemoveSubscription = useCallback(async (sub: SkillSubscription) => {
     // also remove associated skills
@@ -139,7 +141,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
     >
       <div className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-hairline shrink-0">
-          <h2 className="text-base font-semibold text-ink">技能管理</h2>
+          <h2 className="text-base font-semibold text-ink">{t('settings.skills.panelTitle')}</h2>
           <button
             type="button"
             data-testid="skill-panel-close"
@@ -153,13 +155,13 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {/* 订阅管理 */}
           <section>
-            <h3 className="text-sm font-semibold text-ink mb-2">订阅</h3>
+            <h3 className="text-sm font-semibold text-ink mb-2">{t('settings.skills.subscriptions')}</h3>
             <div className="flex gap-2 mb-3">
               <input
                 value={subInput}
                 onChange={(e) => setSubInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubscription(); }}
-                placeholder="输入 GitHub 仓库，如 owner/repo"
+                placeholder={t('settings.skills.placeholder')}
                 className="flex-1 px-3 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
               />
               <button
@@ -169,7 +171,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
                 disabled={!subInput.trim()}
                 className="px-3 py-1.5 text-sm rounded-md bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed shrink-0"
               >
-                添加
+                {t('settings.skills.add')}
               </button>
             </div>
 
@@ -180,7 +182,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
                 onClick={() => setShowToken(!showToken)}
                 className="text-xs text-mute hover:text-ink underline"
               >
-                {showToken ? '隐藏 Token' : '配置 GitHub Token（选填，提高 API 限流）'}
+                {showToken ? t('settings.skills.hideToken') : t('settings.skills.configToken')}
               </button>
             </div>
             {showToken && (
@@ -188,7 +190,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
                 <input
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder="ghp_xxx 或 github_pat_xxx"
+                  placeholder={t('settings.skills.tokenPlaceholder')}
                   type="password"
                   className="w-full px-3 py-1.5 text-xs border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                 />
@@ -207,7 +209,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
             )}
 
             {subscriptions.length === 0 && (
-              <p className="text-xs text-mute text-center py-3">暂无订阅，输入 GitHub 仓库地址添加</p>
+              <p className="text-xs text-mute text-center py-3">{t('settings.skills.noSubscriptions')}</p>
             )}
 
             <div className="space-y-2">
@@ -227,7 +229,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
                           </span>
                         )}
                         <span className="text-xs text-mute ml-2">
-                          {subSkills.length} 个技能
+                          {t('settings.skills.skillsCount', { count: subSkills.length })}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -238,7 +240,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
                           disabled={syncingId === sub.id}
                           className="px-2 py-1 text-xs rounded-md border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50"
                         >
-                          {syncingId === sub.id ? '同步中...' : '同步'}
+                          {syncingId === sub.id ? t('settings.skills.syncing') : t('settings.skills.sync')}
                         </button>
                         <button
                           type="button"
@@ -246,7 +248,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
                           onClick={() => handleRemoveSubscription(sub)}
                           className="px-2 py-1 text-xs rounded-md border border-danger/30 text-danger hover:bg-red-50"
                         >
-                          删除
+                          {t('settings.skills.delete')}
                         </button>
                       </div>
                     </div>
@@ -308,7 +310,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
           {/* 本地技能 */}
           {localSkills.length > 0 && (
             <section>
-              <h3 className="text-sm font-semibold text-ink mb-2">本地技能</h3>
+              <h3 className="text-sm font-semibold text-ink mb-2">{t('settings.skills.localSkills')}</h3>
               <div className="space-y-2">
                 {localSkills.map((skill) => (
                   <div
@@ -319,7 +321,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-ink">{skill.name}</span>
                         {skill.enabled && (
-                          <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">启用</span>
+                          <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">{t('settings.skills.enabled')}</span>
                         )}
                       </div>
                       {skill.description && (
@@ -351,7 +353,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
                         onClick={() => handleDeleteSkill(skill)}
                         className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50"
                       >
-                        删除
+                        {t('settings.skills.delete')}
                       </button>
                     </div>
                   </div>
