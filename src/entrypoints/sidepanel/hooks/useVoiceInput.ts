@@ -7,6 +7,7 @@ export type VoiceState = 'idle' | 'requesting' | 'recording' | 'transcribing' | 
 export interface UseVoiceInputOptions {
   providers: ProviderConfig[];
   onTranscribed: (text: string) => void;
+  t?: (key: string, vars?: Record<string, string | number>) => string;
 }
 
 export interface UseVoiceInputReturn {
@@ -56,6 +57,7 @@ function releaseStream(
 export function useVoiceInput({
   providers,
   onTranscribed,
+  t,
 }: UseVoiceInputOptions): UseVoiceInputReturn {
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -95,7 +97,7 @@ export function useVoiceInput({
 
     const provider = selectProvider(providers);
     if (!provider) {
-      setErrorMessage('未配置语音模型，请在设置中为 Provider 添加 sttModel');
+      setErrorMessage(t?.('voice.noSttModel') ?? '未配置语音模型，请在设置中为 Provider 添加 sttModel');
       setVoiceStateSync('error');
       return;
     }
@@ -125,11 +127,11 @@ export function useVoiceInput({
       releaseStream(streamRef, recorderRef, chunksRef);
       const error = err as DOMException;
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        setErrorMessage('麦克风权限被拒绝，请在浏览器设置中允许访问麦克风');
+        setErrorMessage(t?.('voice.micDenied') ?? '麦克风权限被拒绝，请在浏览器设置中允许访问麦克风');
       } else if (error.name === 'NotFoundError') {
-        setErrorMessage('未检测到麦克风设备');
+        setErrorMessage(t?.('voice.noMic') ?? '未检测到麦克风设备');
       } else {
-        setErrorMessage(`无法启动录音: ${error.message}`);
+        setErrorMessage(t?.('voice.startFailed', { message: error.message }) ?? `无法启动录音: ${error.message}`);
       }
       setVoiceStateSync('error');
     }
@@ -146,7 +148,7 @@ export function useVoiceInput({
       const provider = selectedProviderRef.current;
 
       if (!provider) {
-        setErrorMessage('Provider 配置丢失');
+        setErrorMessage(t?.('voice.providerLost') ?? 'Provider 配置丢失');
         setVoiceStateSync('error');
         releaseStream(streamRef, recorderRef, chunksRef);
         return;
@@ -158,7 +160,7 @@ export function useVoiceInput({
         onTranscribedRef.current(text);
         setVoiceStateSync('idle');
       } catch (err) {
-        setErrorMessage(`语音识别失败: ${(err as Error).message}`);
+        setErrorMessage(t?.('voice.transcribeFailed', { message: (err as Error).message }) ?? `语音识别失败: ${(err as Error).message}`);
         setVoiceStateSync('error');
       } finally {
         releaseStream(streamRef, recorderRef, chunksRef);
