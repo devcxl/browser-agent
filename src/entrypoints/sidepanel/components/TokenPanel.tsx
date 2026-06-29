@@ -1,5 +1,7 @@
 import React from 'react';
 import type { TokenUsage } from '../types';
+import { formatNum } from '../utils';
+import { useI18n } from '../i18n/useI18n';
 
 interface TokenPanelProps {
   usage: TokenUsage;
@@ -7,11 +9,8 @@ interface TokenPanelProps {
   onToggleCollapse: () => void;
 }
 
-function formatNumber(n: number): string {
-  return n.toLocaleString();
-}
-
 export function TokenPanel({ usage, collapsed, onToggleCollapse }: TokenPanelProps) {
+  const { t, locale } = useI18n();
   const hasData = usage.prompt > 0 || usage.completion > 0;
   const total = usage.prompt + usage.completion;
 
@@ -34,7 +33,7 @@ export function TokenPanel({ usage, collapsed, onToggleCollapse }: TokenPanelPro
   return (
     <div className="border-l border-hairline bg-surface-soft w-[220px] flex flex-col shrink-0">
       <div className="flex items-center justify-between px-3 py-2 border-b border-hairline">
-        <span className="text-xs font-medium text-mute">Token 用量</span>
+        <span className="text-xs font-medium text-mute">{t('token.title')}</span>
         <button
           type="button"
           onClick={onToggleCollapse}
@@ -47,20 +46,20 @@ export function TokenPanel({ usage, collapsed, onToggleCollapse }: TokenPanelPro
       </div>
       <div className="flex-1 p-3 space-y-2 text-xs">
         {!hasData ? (
-          <div className="text-ash text-center py-4">--</div>
+          <div className="text-ash text-center py-4">{t('token.noData')}</div>
         ) : (
           <>
             <div className="flex justify-between">
-              <span className="text-mute">输入</span>
-              <span className="text-ink font-mono">{formatNumber(usage.prompt)}</span>
+              <span className="text-mute">{t('token.input')}</span>
+              <span className="text-ink font-mono">{formatNum(usage.prompt, locale)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-mute">输出</span>
-              <span className="text-ink font-mono">{formatNumber(usage.completion)}</span>
+              <span className="text-mute">{t('token.output')}</span>
+              <span className="text-ink font-mono">{formatNum(usage.completion, locale)}</span>
             </div>
             <div className="border-t border-hairline pt-2 flex justify-between">
-              <span className="text-mute font-medium">总计</span>
-              <span className="text-ink font-mono font-medium">{formatNumber(total)}</span>
+              <span className="text-mute font-medium">{t('token.total')}</span>
+              <span className="text-ink font-mono font-medium">{formatNum(total, locale)}</span>
             </div>
           </>
         )}

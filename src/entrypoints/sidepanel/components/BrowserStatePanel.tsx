@@ -1,6 +1,7 @@
 import React from 'react';
 import type { BrowserState } from '@/shared/types';
-import { cn } from '../utils';
+import { cn, formatNum } from '../utils';
+import { useI18n } from '../i18n/useI18n';
 
 interface Props {
   state: BrowserState | null;
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCollapse }: Props) {
+  const { t, locale } = useI18n();
   return (
     <div
       data-testid="browser-state-panel"
@@ -24,7 +26,7 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
         onClick={onToggleCollapse}
         className="flex items-center justify-between px-3 py-2 border-b border-hairline text-xs font-medium text-mute hover:bg-surface-soft"
       >
-        {collapsed ? '◀' : <span>浏览器状态 ◀</span>}
+        {collapsed ? '◀' : <span>{t('browser.title')} ◀</span>}
       </button>
 
       {!collapsed && (
@@ -32,24 +34,24 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
           {loading && (
             <div className="flex items-center justify-center py-8 text-mute">
               <span className="inline-block w-3 h-3 border-2 border-ash border-t-primary rounded-full animate-spin mr-2" />
-              加载中...
+              {t('browser.loading')}
             </div>
           )}
 
           {error && (
             <div className="text-danger bg-red-50 rounded-md px-2 py-1">
-              错误: {error}
+              {t('browser.error')}: {error}
             </div>
           )}
 
           {!loading && !error && !state && (
-            <div className="text-mute text-center py-8">无数据</div>
+            <div className="text-mute text-center py-8">{t('browser.noData')}</div>
           )}
 
           {!loading && state && (
             <>
               <p className="text-[10px] font-semibold text-mute uppercase tracking-wider">
-                窗口 ({state.windows.length})
+                {t('browser.windows')} ({formatNum(state.windows.length, locale)})
               </p>
               {state.windows.map((w) => (
                 <div
@@ -61,11 +63,11 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
                 >
                   <div className="flex items-center gap-1">
                     <span className="text-ink font-medium truncate flex-1">
-                      {w.title ?? `窗口 ${w.id}`}
+                      {w.title ?? `${t('browser.windowLabel')} ${formatNum(w.id, locale)}`}
                     </span>
                     {w.focused && (
                       <span className="text-[9px] bg-primary text-on-primary px-1 rounded-full">
-                        活跃
+                        {t('browser.active')}
                       </span>
                     )}
                   </div>
@@ -74,7 +76,7 @@ export function BrowserStatePanel({ state, loading, error, collapsed, onToggleCo
               ))}
 
               <p className="text-[10px] font-semibold text-mute uppercase tracking-wider pt-2">
-                标签页 ({state.tabs.length})
+                {t('browser.tabs')} ({formatNum(state.tabs.length, locale)})
               </p>
               {state.tabs.map((t) => (
                 <div
