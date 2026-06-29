@@ -5,7 +5,19 @@ on:
     branches: [master, dev]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
   test:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,7 +30,7 @@ jobs:
       - run: npx vitest run --coverage
 
   build:
-    needs: test
+    needs: [lint, test]
     runs-on: ubuntu-latest
     strategy:
       matrix:
