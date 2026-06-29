@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import type { AgentSettings, ExpertModeSettings, ProviderFormData } from '../types';
 import type { Skill, SkillSubscription } from '@/shared/types';
@@ -44,6 +44,7 @@ const AUDIO_FORMATS = [
   { value: 'audio/ogg;codecs=opus', label: t('settings.provider.audioFormats.ogg_opus') },
   { value: 'audio/wav', label: t('settings.provider.audioFormats.wav') },
 ];
+];
 
 const defaultForm: ProviderFormData = {
   name: '',
@@ -54,6 +55,24 @@ const defaultForm: ProviderFormData = {
   sttModel: '',
   audioFormat: '',
 };
+
+export function SettingsPanel({
+  providers,
+  agentSettings,
+  expertMode,
+  onSaveProviders,
+  onSaveAgentSettings,
+  onSaveExpertMode,
+  onTestConnection,
+  onClose,
+}: Props) {
+  const { t, locale, setLanguage } = useI18n();
+  const [tab, setTab] = useState<'provider' | 'agent' | 'expert' | 'skills'>('provider');
+  const [editing, setEditing] = useState<ProviderFormData | null>(null);
+  const [testingIdx, setTestingIdx] = useState<number | null>(null);
+  const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
+
+  const audioFormats = AUDIO_FORMATS;
 
   const handleSaveProvider = () => {
     if (!editing) return;
@@ -223,6 +242,19 @@ const defaultForm: ProviderFormData = {
           </button>
         </div>
 
+        {/* Language selector */}
+        <div className="px-5 py-3 border-b border-hairline">
+          <label className="text-xs font-medium text-mute mr-2">{t('settings.language')}</label>
+          <select
+            value={locale}
+            onChange={(e) => setLanguage(e.target.value as 'zh-CN' | 'en')}
+            className="px-2 py-1 text-sm border border-hairline rounded-md bg-canvas text-ink"
+          >
+            <option value="zh-CN">中文</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+
         <div className="flex border-b border-hairline px-5">
           {(['provider', 'agent', 'expert', 'skills'] as const).map((tabKey) => (
             <button
@@ -237,7 +269,7 @@ const defaultForm: ProviderFormData = {
                   : 'border-transparent text-mute hover:text-ink',
               )}
             >
-              {tabKey === 'provider' ? t('settings.tabs.provider') : tabKey === 'agent' ? t('settings.tabs.agent') : tabKey === 'expert' ? t('settings.tabs.expert') : t('settings.tabs.skills')}
+              {t(`settings.tabs.${tabKey}`)}
             </button>
           ))}
 
@@ -279,7 +311,7 @@ const defaultForm: ProviderFormData = {
                     <div className="text-xs text-mute truncate">{p.endpoint} / {p.model}</div>
                     {p.sttModel && (
                       <div className="text-xs text-mute truncate mt-0.5">
-                        🎤 {t('settings.provider.voiceModel')}: {p.sttModel}{p.audioFormat ? ` | ${t('settings.provider.audioFormat')}: ${p.audioFormat}` : ` | ${t('settings.provider.audioFormat')}: WAV`}
+                        🎤 {t('settings.provider.voiceModel')}: {p.sttModel} | {t('settings.provider.audioFormat')}: {p.audioFormat || 'WAV'}
                       </div>
                     )}
                   </div>
@@ -370,7 +402,7 @@ const defaultForm: ProviderFormData = {
                     onChange={(e) => setEditing({ ...editing, audioFormat: e.target.value })}
                     className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink focus:outline-none focus:border-primary"
                   >
-                    {AUDIO_FORMATS.map((fmt) => (
+                    {audioFormats.map((fmt) => (
                       <option key={fmt.value} value={fmt.value}>{fmt.label}</option>
                     ))}
                   </select>
