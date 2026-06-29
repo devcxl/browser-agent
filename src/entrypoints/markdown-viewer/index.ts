@@ -157,7 +157,8 @@ async function main() {
   document.head.appendChild(styleEl);
 
   const html = await marked(content as string);
-  document.getElementById('root')!.innerHTML = `<div class="container">${html}</div>`;
+  const root = document.getElementById('root')!;
+  root.insertAdjacentHTML('afterbegin', `<div class="container">${html}</div>`);
 
   await browser.storage.local.remove(key);
 }

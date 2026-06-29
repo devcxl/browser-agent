@@ -72,11 +72,19 @@ export class FirefoxAdapter implements IBrowserAdapter {
       tabIds: number | number[];
       groupId?: number;
       createProperties?: { windowId?: number };
-    }): Promise<number> =>
-      this.browser.tabs.group(options),
+    }): Promise<number> => {
+      if (typeof this.browser.tabs.group !== 'function') {
+        return Promise.reject(new Error('tabs.group is not supported in this Firefox version'));
+      }
+      return this.browser.tabs.group(options);
+    },
 
-    ungroup: (tabIds: number | number[]): Promise<void> =>
-      this.browser.tabs.ungroup(tabIds),
+    ungroup: (tabIds: number | number[]): Promise<void> => {
+      if (typeof this.browser.tabs.ungroup !== 'function') {
+        return Promise.reject(new Error('tabs.ungroup is not supported in this Firefox version'));
+      }
+      return this.browser.tabs.ungroup(tabIds);
+    },
 
     getCurrent: (): Promise<Tab> =>
       this.browser.tabs.getCurrent(),
@@ -117,22 +125,39 @@ export class FirefoxAdapter implements IBrowserAdapter {
   };
 
   // ── TabGroups ──────────────────────────────────────
+  // Firefox 152+ 才支持 tabGroups API，低版本返回明确错误
 
   tabGroups = {
-    query: (queryInfo: TabGroupQueryInfo): Promise<TabGroup[]> =>
-      this.browser.tabGroups.query(queryInfo),
+    query: (queryInfo: TabGroupQueryInfo): Promise<TabGroup[]> => {
+      if (typeof this.browser.tabGroups?.query !== 'function') {
+        return Promise.reject(new Error('tabGroups API is not supported in this Firefox version'));
+      }
+      return this.browser.tabGroups.query(queryInfo);
+    },
 
-    get: (groupId: number): Promise<TabGroup> =>
-      this.browser.tabGroups.get(groupId),
+    get: (groupId: number): Promise<TabGroup> => {
+      if (typeof this.browser.tabGroups?.get !== 'function') {
+        return Promise.reject(new Error('tabGroups API is not supported in this Firefox version'));
+      }
+      return this.browser.tabGroups.get(groupId);
+    },
 
-    update: (groupId: number, updateProperties: TabGroupUpdateProperties): Promise<TabGroup> =>
-      this.browser.tabGroups.update(groupId, updateProperties),
+    update: (groupId: number, updateProperties: TabGroupUpdateProperties): Promise<TabGroup> => {
+      if (typeof this.browser.tabGroups?.update !== 'function') {
+        return Promise.reject(new Error('tabGroups API is not supported in this Firefox version'));
+      }
+      return this.browser.tabGroups.update(groupId, updateProperties);
+    },
 
     move: (
       groupId: number,
       moveProperties: { windowId?: number; index: number },
-    ): Promise<TabGroup> =>
-      this.browser.tabGroups.move(groupId, moveProperties),
+    ): Promise<TabGroup> => {
+      if (typeof this.browser.tabGroups?.move !== 'function') {
+        return Promise.reject(new Error('tabGroups API is not supported in this Firefox version'));
+      }
+      return this.browser.tabGroups.move(groupId, moveProperties);
+    },
   };
 
   // ── Notifications ──────────────────────────────────

@@ -89,7 +89,7 @@ export function convertToMarkdown(document: Document, clippedAt = new Date()): M
 
   const title = article.title || document.title || 'Untitled';
   const articleDocument = document.implementation.createHTMLDocument(title);
-  articleDocument.body.innerHTML = article.content;
+  articleDocument.body.insertAdjacentHTML('afterbegin', article.content);
 
   normalizeResourceUrls(articleDocument, document.location.href);
   normalizeTables(articleDocument);
@@ -162,7 +162,7 @@ function normalizeTables(document: Document) {
     const headerRow = document.createElement('tr');
     cells.forEach((cell) => {
       const th = document.createElement('th');
-      th.innerHTML = cell.innerHTML;
+      th.insertAdjacentHTML('afterbegin', cell.innerHTML);
       headerRow.appendChild(th);
     });
     thead.appendChild(headerRow);
