@@ -1,8 +1,10 @@
-name: CI
+name: CI (Lint + Test)
 
 on:
   push:
     branches: [master, dev]
+  pull_request:
+    branches: [master]
 
 jobs:
   lint:
@@ -28,26 +30,3 @@ jobs:
       - run: npm ci
       - run: npm run test:run
       - run: npx vitest run --coverage
-
-  build:
-    needs: [lint, test]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        browser: [chrome, firefox]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      - run: npm ci
-      - name: Build ${{ matrix.browser }}
-        run: npm run build:${{ matrix.browser }}
-      - name: Create zip
-        run: npm run zip
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: browser-agent-${{ matrix.browser }}
-          path: dist/*.zip
