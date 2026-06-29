@@ -6,6 +6,8 @@ import { ConversationSidebar } from './components/ConversationSidebar';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
+import { I18nProvider } from './i18n/I18nProvider';
+import { useI18n } from './i18n/useI18n';
 import { ConfigStore } from '@/shared/storage';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig } from '@/shared/types';
@@ -13,6 +15,7 @@ import type { ProviderConfig } from '@/shared/types';
 const store = ConfigStore.getInstance();
 
 function ChatLayout() {
+  const { t } = useI18n();
   const { conversations, agent, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm, conversationStatuses } = useChat();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -99,7 +102,7 @@ function ChatLayout() {
     <div className="h-full flex flex-col bg-canvas">
       {/* Header */}
       <header className="h-10 border-b border-hairline bg-canvas flex items-center justify-between px-4 shrink-0">
-        <span className="text-sm font-semibold text-ink tracking-wide">BrowserAgent</span>
+        <span className="text-sm font-semibold text-ink tracking-wide">{t('app.title')}</span>
       </header>
 
       {/* Main */}
@@ -173,10 +176,12 @@ function ChatLayout() {
 
 export default function App() {
   return (
-    <ErrorBoundary>
-      <ChatProvider>
-        <ChatLayout />
-      </ChatProvider>
-    </ErrorBoundary>
+    <I18nProvider>
+      <ErrorBoundary>
+        <ChatProvider>
+          <ChatLayout />
+        </ChatProvider>
+      </ErrorBoundary>
+    </I18nProvider>
   );
 }
