@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { ConversationSummary, TokenUsage } from '../types';
-import { formatDateTime, cn } from '../utils';
+import { formatDateTime, formatNum, cn } from '../utils';
+import { useI18n } from '../i18n/useI18n';
 
 interface Props {
   conversations: ConversationSummary[];
@@ -17,22 +18,11 @@ interface Props {
   tokenUsage?: TokenUsage;
 }
 
-function formatNum(n: number): string {
-  return n.toLocaleString();
-}
-
 const statusColors: Record<string, string> = {
   idle: 'bg-gray-400',
   running: 'bg-yellow-400 animate-pulse',
   streaming: 'bg-green-400 animate-pulse',
   waitingConfirmation: 'bg-orange-400',
-};
-
-const statusLabels: Record<string, string> = {
-  idle: '就绪',
-  running: '运行中...',
-  streaming: '输出中...',
-  waitingConfirmation: '等待确认',
 };
 
 export function ConversationSidebar({
@@ -49,6 +39,7 @@ export function ConversationSidebar({
   onOpenSettings,
   tokenUsage,
 }: Props) {
+  const { t, locale } = useI18n();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
 
@@ -72,7 +63,7 @@ export function ConversationSidebar({
           data-testid="conversation-sidebar-toggle"
           onClick={onToggleCollapse}
           className="text-mute hover:text-ink w-8 h-8 flex items-center justify-center rounded-md hover:bg-surface-card"
-          title="展开侧栏"
+          title={t('sidebar.expand')}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l-7 7 7 7" />
@@ -84,7 +75,7 @@ export function ConversationSidebar({
           data-testid="settings-button"
           onClick={onOpenSettings}
           className="text-mute hover:text-primary w-8 h-8 flex items-center justify-center rounded-md hover:bg-surface-card"
-          title="设置"
+          title={t('sidebar.settings')}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -102,7 +93,7 @@ export function ConversationSidebar({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-hairline">
-        <span className="text-sm font-semibold text-ink">会话</span>
+        <span className="text-sm font-semibold text-ink">{t('sidebar.title')}</span>
         <div className="flex items-center gap-1">
           <button
             type="button"
@@ -110,13 +101,13 @@ export function ConversationSidebar({
             onClick={onNew}
             className="px-2 py-1 text-xs rounded-full bg-primary text-on-primary hover:bg-primary-active"
           >
-            + 新建
+            {t('sidebar.newChat')}
           </button>
           <button
             type="button"
             onClick={onToggleCollapse}
             className="text-mute hover:text-ink w-6 h-6 flex items-center justify-center rounded hover:bg-surface-card"
-            title="收起侧栏"
+            title={t('sidebar.collapse')}
           >
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7" />
@@ -140,7 +131,7 @@ export function ConversationSidebar({
         )}
 
         {!loading && conversations.length === 0 && (
-          <div className="text-center py-8 text-mute text-xs">暂无会话</div>
+          <div className="text-center py-8 text-mute text-xs">{t('sidebar.noConversations')}</div>
         )}
 
         {!loading &&
@@ -177,7 +168,7 @@ export function ConversationSidebar({
                   </div>
                   <div className="flex items-center justify-between mt-0.5">
                     <span className="text-[10px] text-mute">
-                      {conv.status && conv.status !== 'idle' ? statusLabels[conv.status] ?? conv.status : formatDateTime(conv.updatedAt)}
+                      {conv.status && conv.status !== 'idle' ? t(`sidebar.status.${conv.status}`) : formatDateTime(conv.updatedAt, locale)}
                     </span>
                     <div className="hidden group-hover:flex gap-1">
                       <button
@@ -188,7 +179,7 @@ export function ConversationSidebar({
                         }}
                         className="text-[10px] text-mute hover:text-primary"
                       >
-                        重命名
+                        {t('sidebar.rename')}
                       </button>
                       <button
                         type="button"
@@ -198,7 +189,7 @@ export function ConversationSidebar({
                         }}
                         className="text-[10px] text-mute hover:text-danger"
                       >
-                        删除
+                        {t('sidebar.delete')}
                       </button>
                     </div>
                   </div>
@@ -212,7 +203,7 @@ export function ConversationSidebar({
       <div className="border-t border-hairline px-2 py-2 space-y-1">
         {tokenUsage && (tokenUsage.prompt > 0 || tokenUsage.completion > 0) && (
           <div className="text-[10px] text-mute text-center">
-            输入 {formatNum(tokenUsage.prompt)} / 输出 {formatNum(tokenUsage.completion)} / 总计 {formatNum(tokenUsage.prompt + tokenUsage.completion)}
+            {t('sidebar.input')} {formatNum(tokenUsage.prompt, locale)} / {t('sidebar.output')} {formatNum(tokenUsage.completion, locale)} / {t('sidebar.total')} {formatNum(tokenUsage.prompt + tokenUsage.completion, locale)}
           </div>
         )}
         <button
@@ -225,7 +216,7 @@ export function ConversationSidebar({
             <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          设置
+          {t('sidebar.settings')}
         </button>
       </div>
     </div>
