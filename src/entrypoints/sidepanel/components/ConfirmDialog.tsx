@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ConfirmRequest } from '../types';
+import { useI18n } from '../i18n/useI18n';
 
 interface Props {
   request: ConfirmRequest;
@@ -8,6 +9,8 @@ interface Props {
 }
 
 export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
+  const { t } = useI18n();
+
   return (
     <div
       data-testid="confirm-dialog"
@@ -15,9 +18,9 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
     >
       <div className="bg-canvas rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
         <div className="px-5 py-4 border-b border-hairline">
-          <h3 className="text-base font-semibold text-ink">确认操作</h3>
+          <h3 className="text-base font-semibold text-ink">{t('dialog.confirmTitle')}</h3>
           <p className="text-sm text-mute mt-0.5">
-            工具: <code className="bg-surface-soft px-1 rounded-md">{request.toolName}</code>
+            {t('dialog.tool')}: <code className="bg-surface-soft px-1 rounded-md">{request.toolName}</code>
           </p>
         </div>
 
@@ -25,14 +28,14 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
           {request.affectedObjects.length > 0 && (
             <div>
               <p className="text-xs font-medium text-mute mb-1.5 uppercase tracking-wide">
-                影响对象
+                {t('dialog.affectedObjects')}
               </p>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-left text-mute border-b border-hairline">
-                    <th className="pb-1 pr-2">类型</th>
-                    <th className="pb-1 pr-2">标题</th>
-                    <th className="pb-1">原因</th>
+                    <th className="pb-1 pr-2">{t('dialog.type')}</th>
+                    <th className="pb-1 pr-2">{t('dialog.title')}</th>
+                    <th className="pb-1">{t('dialog.reason')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -53,7 +56,7 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
           {request.warnings.length > 0 && (
             <div>
               <p className="text-xs font-medium text-orange-600 mb-1.5 uppercase tracking-wide">
-                警告
+                {t('dialog.warnings')}
               </p>
               <ul className="space-y-1">
                 {request.warnings.map((w, i) => (
@@ -73,7 +76,7 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
             onClick={onCancel}
             className="px-4 py-1.5 text-sm rounded-full border border-hairline-strong text-ink hover:bg-surface-soft"
           >
-            取消
+            {t('dialog.cancel')}
           </button>
           <button
             type="button"
@@ -81,7 +84,7 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
             onClick={onConfirm}
             className="px-4 py-1.5 text-sm rounded-full bg-primary text-on-primary hover:bg-primary-active"
           >
-            确认
+            {t('dialog.confirm')}
           </button>
         </div>
       </div>
