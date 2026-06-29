@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '../utils';
 import type { ProviderConfig } from '@/shared/types';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { useI18n } from '../i18n/useI18n';
 
 interface Props {
   onSend: (text: string) => void;
@@ -19,6 +20,7 @@ const SpinnerIcon = (
 );
 
 export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }: Props) {
+  const { t } = useI18n();
   const [text, setText] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -30,7 +32,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
   }, []);
 
   const { voiceState, errorMessage, voiceAvailable, startRecording, stopRecording, clearError } =
-    useVoiceInput({ providers, onTranscribed: handleTranscribed });
+    useVoiceInput({ providers, onTranscribed: handleTranscribed, t });
 
   const handleSend = () => {
     const trimmed = text.trim();
@@ -72,7 +74,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
               'text-mute hover:text-ink hover:border-primary',
               disabled && 'opacity-40 cursor-not-allowed',
             )}
-            title="语音输入"
+            title={t('chat.input.voiceInput')}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
@@ -85,7 +87,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
 
       case 'requesting':
         return (
-          <span data-testid="mic-button" className={cn(baseMicClass, 'text-mute')} title="正在请求麦克风权限...">
+          <span data-testid="mic-button" className={cn(baseMicClass, 'text-mute')} title={t('chat.input.requestingMic')}>
             {SpinnerIcon}
           </span>
         );
@@ -97,7 +99,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
             data-testid="mic-button"
             onClick={() => stopRecording()}
             className={cn(baseMicClass, 'border-danger bg-red-50 hover:bg-red-100')}
-            title="点击停止录音"
+            title={t('chat.input.stopRecording')}
           >
             <span className="w-3 h-3 rounded-full bg-danger animate-pulse" />
           </button>
@@ -105,7 +107,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
 
       case 'transcribing':
         return (
-          <span data-testid="mic-button" className={cn(baseMicClass, 'text-mute opacity-60')} title="正在识别语音...">
+          <span data-testid="mic-button" className={cn(baseMicClass, 'text-mute opacity-60')} title={t('chat.input.transcribing')}>
             {SpinnerIcon}
           </span>
         );
@@ -117,7 +119,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
             data-testid="mic-button"
             onClick={() => clearError()}
             className={cn(baseMicClass, 'text-warning hover:text-orange-600')}
-            title={errorMessage ?? '语音识别出错'}
+            title={errorMessage ?? t('chat.input.voiceError')}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -149,7 +151,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={disabled ? 'Agent 运行中...' : '输入消息... (Enter 发送, Shift+Enter 换行)'}
+          placeholder={disabled ? t('chat.input.disabledPlaceholder') : t('chat.input.placeholder')}
           rows={1}
           className={cn(
             'flex-1 resize-none rounded-md bg-surface-card text-ink text-sm p-3',
@@ -166,7 +168,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
             onClick={onAbort}
             className="px-5 py-2 rounded-full bg-danger text-on-primary text-sm font-medium hover:bg-danger-hover shrink-0"
           >
-            中止
+            {t('chat.input.abort')}
           </button>
         ) : (
           <button
@@ -174,6 +176,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
             data-testid="send-button"
             onClick={handleSend}
             disabled={!text.trim() || disabled}
+            aria-label={t('chat.input.send')}
             className={cn(
               'px-5 py-2 rounded-full text-sm font-medium shrink-0',
               text.trim() && !disabled
@@ -181,7 +184,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
                 : 'bg-hairline-soft text-ash cursor-not-allowed',
             )}
           >
-            发送
+            {t('chat.input.send')}
           </button>
         )}
       </div>
