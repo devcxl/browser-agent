@@ -1,6 +1,52 @@
 import { describe, it, expect } from 'vitest';
 import type { StoredMessage } from '@/shared/types';
-import { storedMessagesToUIMessages } from '../utils';
+import { storedMessagesToUIMessages, formatTime, formatDateTime, formatNum } from '../utils';
+
+describe('formatTime', () => {
+  it('formats with default locale (zh-CN)', () => {
+    const ts = new Date(2024, 0, 15, 14, 30, 0).getTime();
+    const result = formatTime(ts);
+    expect(result).toMatch(/14:30|02:30/);
+  });
+
+  it('formats with custom locale (en-US)', () => {
+    const ts = new Date(2024, 0, 15, 14, 30, 0).getTime();
+    const result = formatTime(ts, 'en-US');
+    expect(result).toMatch(/14:30|02:30/);
+  });
+});
+
+describe('formatDateTime', () => {
+  it('formats with default locale (zh-CN)', () => {
+    const ts = new Date(2024, 0, 15, 14, 30, 0).getTime();
+    const result = formatDateTime(ts);
+    expect(result).toContain('15');
+  });
+
+  it('formats with custom locale (en-US)', () => {
+    const ts = new Date(2024, 0, 15, 14, 30, 0).getTime();
+    const result = formatDateTime(ts, 'en-US');
+    expect(result).toContain('15');
+  });
+});
+
+describe('formatNum', () => {
+  it('formats number with default locale (zh-CN)', () => {
+    expect(formatNum(1234567)).toBe('1,234,567');
+  });
+
+  it('formats number with custom locale', () => {
+    expect(formatNum(1234567, 'de-DE')).toMatch(/1\.234\.567/);
+  });
+
+  it('formats zero', () => {
+    expect(formatNum(0)).toBe('0');
+  });
+
+  it('formats small number without separator', () => {
+    expect(formatNum(123)).toBe('123');
+  });
+});
 
 describe('storedMessagesToUIMessages', () => {
   it('converts user message', () => {

@@ -9,20 +9,25 @@ export function sanitizeText(text: string): string {
 }
 
 /** 格式化时间戳为 HH:mm */
-export function formatTime(ts: number): string {
+export function formatTime(ts: number, locale: string = 'zh-CN'): string {
   const d = new Date(ts);
-  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 }
 
 /** 格式化日期时间 */
-export function formatDateTime(ts: number): string {
+export function formatDateTime(ts: number, locale: string = 'zh-CN'): string {
   const d = new Date(ts);
-  return d.toLocaleString('zh-CN', {
+  return d.toLocaleString(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+/** 格式化数字（千位分隔） */
+export function formatNum(n: number, locale: string = 'zh-CN'): string {
+  return n.toLocaleString(locale);
 }
 
 /** 条件 class 合并 */
