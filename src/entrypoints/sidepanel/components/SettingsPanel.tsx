@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import type { AgentSettings, ExpertModeSettings, ProviderFormData } from '../types';
 import type { Skill, SkillSubscription } from '@/shared/types';
@@ -17,34 +17,6 @@ interface Props {
   onTestConnection: (provider: ProviderConfig) => Promise<boolean>;
   onClose: () => void;
 }
-
-export function SettingsPanel({
-  providers,
-  agentSettings,
-  expertMode,
-  onSaveProviders,
-  onSaveAgentSettings,
-  onSaveExpertMode,
-  onTestConnection,
-  onClose,
-}: Props) {
-  const [tab, setTab] = useState<'provider' | 'agent' | 'expert' | 'skills'>('provider');
-  const [editing, setEditing] = useState<ProviderFormData | null>(null);
-  const [testingIdx, setTestingIdx] = useState<number | null>(null);
-  const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
-  const { t, locale, setLanguage } = useI18n();
-
-const AUDIO_FORMATS = [
-  { value: '', label: t('settings.provider.audioFormats.auto') },
-  { value: 'audio/webm;codecs=opus', label: t('settings.provider.audioFormats.webm_opus') },
-  { value: 'audio/webm', label: t('settings.provider.audioFormats.webm') },
-  { value: 'audio/mp4;codecs=mp4a.40.5', label: t('settings.provider.audioFormats.mp4aac') },
-  { value: 'audio/mp4', label: t('settings.provider.audioFormats.mp4') },
-  { value: 'audio/aac', label: t('settings.provider.audioFormats.aac') },
-  { value: 'audio/ogg;codecs=opus', label: t('settings.provider.audioFormats.ogg_opus') },
-  { value: 'audio/wav', label: t('settings.provider.audioFormats.wav') },
-];
-];
 
 const defaultForm: ProviderFormData = {
   name: '',
@@ -72,7 +44,16 @@ export function SettingsPanel({
   const [testingIdx, setTestingIdx] = useState<number | null>(null);
   const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
 
-  const audioFormats = AUDIO_FORMATS;
+  const audioFormats = [
+    { value: '', label: t('settings.provider.audioFormats.auto') },
+    { value: 'audio/webm;codecs=opus', label: t('settings.provider.audioFormats.webm_opus') },
+    { value: 'audio/webm', label: t('settings.provider.audioFormats.webm') },
+    { value: 'audio/mp4;codecs=mp4a.40.5', label: t('settings.provider.audioFormats.mp4aac') },
+    { value: 'audio/mp4', label: t('settings.provider.audioFormats.mp4') },
+    { value: 'audio/aac', label: t('settings.provider.audioFormats.aac') },
+    { value: 'audio/ogg;codecs=opus', label: t('settings.provider.audioFormats.ogg_opus') },
+    { value: 'audio/wav', label: t('settings.provider.audioFormats.wav') },
+  ];
 
   const handleSaveProvider = () => {
     if (!editing) return;
@@ -126,7 +107,7 @@ export function SettingsPanel({
     const unsub1 = skillStore.onChange(setSkills);
     const unsub2 = subStore.onChange(() => subStore.getAll().then(setSubscriptions));
     return () => { unsub1(); unsub2(); };
-  }, []);
+  }, [skillStore, subStore]);
 
   const handleSyncRef = useCallback(async (sub: SkillSubscription) => {
     setSyncingId(sub.id);
@@ -170,7 +151,7 @@ export function SettingsPanel({
     } finally {
       setSyncingId(null);
     }
-  }, [token, t]);
+  }, [skillStore, subStore, token, t]);
 
   const handleAddSubscription = useCallback(async () => {
     const source = subInput.trim();
@@ -195,7 +176,7 @@ export function SettingsPanel({
     await subStore.add(sub);
     setSubInput('');
     await handleSyncRef(sub);
-  }, [subInput, subscriptions, handleSyncRef, t]);
+  }, [subInput, subscriptions, handleSyncRef, subStore, t]);
 
   const handleRemoveSubscription = useCallback(async (sub: SkillSubscription) => {
     const associated = skills.filter((s) => s.source === `github:${sub.source}`);
@@ -203,15 +184,15 @@ export function SettingsPanel({
       await skillStore.remove(skill.id);
     }
     await subStore.remove(sub.id);
-  }, [skills]);
+  }, [skills, skillStore, subStore]);
 
   const handleToggleSkill = useCallback(async (skill: Skill) => {
     await skillStore.update(skill.id, { enabled: !skill.enabled });
-  }, []);
+  }, [skillStore]);
 
   const handleDeleteSkill = useCallback(async (skill: Skill) => {
     await skillStore.remove(skill.id);
-  }, []);
+  }, [skillStore]);
 
   const skillsBySource = new Map<string, Skill[]>();
   const localSkills: Skill[] = [];
