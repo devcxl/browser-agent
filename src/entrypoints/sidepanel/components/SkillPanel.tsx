@@ -25,41 +25,14 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
   const load = useCallback(async () => {
     setSkills(await skillStore.getAll());
     setSubscriptions(await subStore.getAll());
-  }, []);
+  }, [skillStore, subStore]);
 
   useEffect(() => {
     load();
     const unsub1 = skillStore.onChange(setSkills);
     const unsub2 = subStore.onChange(() => subStore.getAll().then(setSubscriptions));
     return () => { unsub1(); unsub2(); };
-  }, []);
-
-  const handleAddSubscription = useCallback(async () => {
-    const source = subInput.trim();
-    if (!source) return;
-
-    const exists = subscriptions.find((s) => s.source === source);
-    if (exists) {
-      setSyncStatus({ type: 'error', msg: t('settings.skills.subscriptionExists') });
-      return;
-    }
-
-    const now = Date.now();
-    const sub: SkillSubscription = {
-      id: crypto.randomUUID(),
-      source,
-      type: 'github',
-      enabled: true,
-      lastSyncedAt: null,
-      createdAt: now,
-    };
-
-    await subStore.add(sub);
-    setSubInput('');
-
-    // auto sync after adding
-    await handleSync(sub);
-  }, [subInput, subscriptions, token, t]);
+  }, [load, skillStore, subStore]);
 
   const handleSync = useCallback(async (sub: SkillSubscription) => {
     setSyncingId(sub.id);
@@ -105,6 +78,33 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
     }
   }, [skillStore, subStore, token, t]);
 
+  const handleAddSubscription = useCallback(async () => {
+    const source = subInput.trim();
+    if (!source) return;
+
+    const exists = subscriptions.find((s) => s.source === source);
+    if (exists) {
+      setSyncStatus({ type: 'error', msg: t('settings.skills.subscriptionExists') });
+      return;
+    }
+
+    const now = Date.now();
+    const sub: SkillSubscription = {
+      id: crypto.randomUUID(),
+      source,
+      type: 'github',
+      enabled: true,
+      lastSyncedAt: null,
+      createdAt: now,
+    };
+
+    await subStore.add(sub);
+    setSubInput('');
+
+    // auto sync after adding
+    await handleSync(sub);
+  }, [subInput, subscriptions, handleSync, subStore, t]);
+
   const handleRemoveSubscription = useCallback(async (sub: SkillSubscription) => {
     // also remove associated skills
     const associated = skills.filter((s) => s.source === `github:${sub.source}`);
@@ -112,15 +112,15 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
       await skillStore.remove(skill.id);
     }
     await subStore.remove(sub.id);
-  }, [skills]);
+  }, [skills, skillStore, subStore]);
 
   const handleToggleSkill = useCallback(async (skill: Skill) => {
     await skillStore.update(skill.id, { enabled: !skill.enabled });
-  }, []);
+  }, [skillStore]);
 
   const handleDeleteSkill = useCallback(async (skill: Skill) => {
     await skillStore.remove(skill.id);
-  }, []);
+  }, [skillStore]);
 
   const skillsBySource = new Map<string, Skill[]>();
   const localSkills: Skill[] = [];
