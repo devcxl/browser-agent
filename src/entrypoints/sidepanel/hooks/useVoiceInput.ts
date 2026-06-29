@@ -135,7 +135,7 @@ export function useVoiceInput({
       }
       setVoiceStateSync('error');
     }
-  }, [providers, setVoiceStateSync]);
+  }, [providers, setVoiceStateSync, t]);
 
   const stopRecording = useCallback(() => {
     const recorder = recorderRef.current;
@@ -168,7 +168,7 @@ export function useVoiceInput({
     };
 
     recorder.stop();
-  }, [setVoiceStateSync]);
+  }, [setVoiceStateSync, t]);
 
   const cancelRecording = useCallback(() => {
     const recorder = recorderRef.current;

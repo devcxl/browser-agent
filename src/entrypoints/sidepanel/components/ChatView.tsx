@@ -25,11 +25,13 @@ export function ChatView({ messages }: Props) {
     setScrollTop(el.scrollTop);
   }, []);
 
+  const lastMsgContent = messages[messages.length - 1]?.content;
+
   useEffect(() => {
     if (autoScroll && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages.length, messages[messages.length - 1]?.content, autoScroll]);
+  }, [messages.length, lastMsgContent, autoScroll]);
 
   // Simple virtual scroll for > 100 messages
   const useVirtual = messages.length > 100;
