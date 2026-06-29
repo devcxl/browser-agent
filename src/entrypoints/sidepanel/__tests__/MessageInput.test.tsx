@@ -3,6 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageInput } from '../components/MessageInput';
+import { I18nProvider } from '../i18n/I18nProvider';
 import type { UseVoiceInputReturn } from '../hooks/useVoiceInput';
 import type { ProviderConfig } from '@/shared/types';
 
@@ -38,6 +39,10 @@ function getLatestMockReturn(): UseVoiceInputReturn & { __onTranscribed: (text: 
 
 const EMPTY_PROVIDERS: ProviderConfig[] = [];
 
+function wrappedRender(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
+
 describe('MessageInput', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -48,7 +53,7 @@ describe('MessageInput', () => {
 
   it('sends text on button click', async () => {
     const onSend = vi.fn();
-    render(
+    wrappedRender(
       <MessageInput onSend={onSend} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -63,7 +68,7 @@ describe('MessageInput', () => {
 
   it('sends text on Enter key', async () => {
     const onSend = vi.fn();
-    render(
+    wrappedRender(
       <MessageInput onSend={onSend} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -75,7 +80,7 @@ describe('MessageInput', () => {
 
   it('does not send empty input', async () => {
     const onSend = vi.fn();
-    render(
+    wrappedRender(
       <MessageInput onSend={onSend} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -87,7 +92,7 @@ describe('MessageInput', () => {
 
   it('does not send whitespace-only input', async () => {
     const onSend = vi.fn();
-    render(
+    wrappedRender(
       <MessageInput onSend={onSend} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -99,7 +104,7 @@ describe('MessageInput', () => {
   });
 
   it('shows abort button when running', () => {
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={true} isRunning={true} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -109,7 +114,7 @@ describe('MessageInput', () => {
 
   it('calls onAbort when abort button clicked', async () => {
     const onAbort = vi.fn();
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={onAbort} disabled={true} isRunning={true} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -119,7 +124,7 @@ describe('MessageInput', () => {
 
   it('clears input after sending', async () => {
     const onSend = vi.fn();
-    render(
+    wrappedRender(
       <MessageInput onSend={onSend} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -133,7 +138,7 @@ describe('MessageInput', () => {
 
   it('voiceAvailable === false 时不渲染麦克风按钮', () => {
     mockUseVoiceInput.mockReturnValue({ ...defaultMock(), voiceAvailable: false });
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -144,7 +149,7 @@ describe('MessageInput', () => {
     const startRecording = vi.fn().mockResolvedValue(undefined);
     mockUseVoiceInput.mockReturnValue({ ...defaultMock(), startRecording });
 
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -158,7 +163,7 @@ describe('MessageInput', () => {
     const stopRecording = vi.fn();
     mockUseVoiceInput.mockReturnValue({ ...defaultMock(), voiceState: 'recording', stopRecording });
 
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -170,7 +175,7 @@ describe('MessageInput', () => {
   it('transcribing 状态按钮不可交互（渲染为 span）', () => {
     mockUseVoiceInput.mockReturnValue({ ...defaultMock(), voiceState: 'transcribing' });
 
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -187,7 +192,7 @@ describe('MessageInput', () => {
       clearError,
     });
 
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -198,7 +203,7 @@ describe('MessageInput', () => {
   });
 
   it('转写成功后文本追加到 textarea', async () => {
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -216,7 +221,7 @@ describe('MessageInput', () => {
   it('disabled 为 true 时麦克风按钮也 disabled', () => {
     mockUseVoiceInput.mockReturnValue(defaultMock());
 
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={true} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -227,7 +232,7 @@ describe('MessageInput', () => {
   it('requesting 状态显示加载 spinner', () => {
     mockUseVoiceInput.mockReturnValue({ ...defaultMock(), voiceState: 'requesting' });
 
-    render(
+    wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 
@@ -239,7 +244,7 @@ describe('MessageInput', () => {
     const onSend = vi.fn();
     mockUseVoiceInput.mockReturnValue({ ...defaultMock(), voiceState: 'recording' });
 
-    render(
+    wrappedRender(
       <MessageInput onSend={onSend} onAbort={vi.fn()} disabled={false} isRunning={false} providers={EMPTY_PROVIDERS} />,
     );
 

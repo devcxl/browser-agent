@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SkillPanel } from '../components/SkillPanel';
+import { I18nProvider } from '../i18n/I18nProvider';
 import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import type { Skill, SkillSubscription } from '@/shared/types';
 
@@ -12,6 +13,10 @@ vi.mock('@/shared/github-skill-fetcher', () => ({
 }));
 
 // ==================== 测试辅助 ====================
+
+function wrappedRender(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
 
 function makeSkill(overrides: Partial<Skill> = {}): Skill {
   return {
@@ -115,7 +120,7 @@ describe('SkillPanel', () => {
   // ── 渲染 ──────────────────────────────────────────
 
   it('应正确渲染标题栏和关闭按钮', async () => {
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('skill-panel')).toBeDefined();
@@ -126,7 +131,7 @@ describe('SkillPanel', () => {
 
   it('点击关闭按钮应调用 onClose', async () => {
     const onClose = vi.fn();
-    render(<SkillPanel onClose={onClose} />);
+    wrappedRender(<SkillPanel onClose={onClose} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('skill-panel-close')).toBeDefined();
@@ -138,7 +143,7 @@ describe('SkillPanel', () => {
   // ── 空状态 ────────────────────────────────────────
 
   it('无订阅和技能时应显示空提示', async () => {
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('暂无订阅，输入 GitHub 仓库地址添加')).toBeDefined();
@@ -148,7 +153,7 @@ describe('SkillPanel', () => {
   // ── 订阅管理 ──────────────────────────────────────
 
   it('输入仓库地址后点击添加按钮应创建订阅', async () => {
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('subscription-add-btn')).toBeDefined();
@@ -165,7 +170,7 @@ describe('SkillPanel', () => {
   });
 
   it('输入为空时添加按钮应 disabled', async () => {
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       const btn = screen.getByTestId('subscription-add-btn') as HTMLButtonElement;
@@ -180,7 +185,7 @@ describe('SkillPanel', () => {
     ];
     subStoreMock.getAll.mockResolvedValue(subs);
 
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('owner/repo-a')).toBeDefined();
@@ -192,7 +197,7 @@ describe('SkillPanel', () => {
     const sub = makeSub({ id: 'sub-1', source: 'owner/repo' });
     subStoreMock.getAll.mockResolvedValue([sub]);
 
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('owner/repo')).toBeDefined();
@@ -212,7 +217,7 @@ describe('SkillPanel', () => {
     skillStoreMock.getAll.mockResolvedValue([skill]);
     subStoreMock.getAll.mockResolvedValue([sub]);
 
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('skill-toggle')).toBeDefined();
@@ -228,7 +233,7 @@ describe('SkillPanel', () => {
     skillStoreMock.getAll.mockResolvedValue([skill]);
     subStoreMock.getAll.mockResolvedValue([sub]);
 
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('skill-delete')).toBeDefined();
@@ -244,7 +249,7 @@ describe('SkillPanel', () => {
     const localSkill = makeSkill({ id: 's1', name: '本地技能', source: '' });
     skillStoreMock.getAll.mockResolvedValue([localSkill]);
 
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       const elements = screen.getAllByText('本地技能');
@@ -258,7 +263,7 @@ describe('SkillPanel', () => {
     const skill = makeSkill({ id: 's1', name: '已启用技能', enabled: true, source: '' });
     skillStoreMock.getAll.mockResolvedValue([skill]);
 
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('已启用技能')).toBeDefined();
@@ -270,7 +275,7 @@ describe('SkillPanel', () => {
 
   it('SkillSubscriptionStore.onChange 触发时应更新列表', async () => {
     subStoreMock.getAll.mockResolvedValue([]);
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByText('暂无订阅，输入 GitHub 仓库地址添加')).toBeDefined();
@@ -288,7 +293,7 @@ describe('SkillPanel', () => {
   // ── 组件卸载 ──────────────────────────────────────
 
   it('组件卸载时应取消订阅监听', async () => {
-    render(<SkillPanel onClose={vi.fn()} />);
+    wrappedRender(<SkillPanel onClose={vi.fn()} />);
 
     await waitFor(() => {
       expect(screen.getByTestId('skill-panel')).toBeDefined();

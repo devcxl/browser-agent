@@ -3,6 +3,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { ConversationSidebar } from '../components/ConversationSidebar';
+import { I18nProvider } from '../i18n/I18nProvider';
+
+function wrappedRender(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
 
 describe('ConversationSidebar', () => {
   const conversations = [
@@ -10,8 +15,8 @@ describe('ConversationSidebar', () => {
     { id: '2', title: '对话2', updatedAt: Date.now() - 10000 },
   ];
 
-  it('renders conversation list', () => {
-    render(
+  it('wrappedRenders conversation list', () => {
+    wrappedRender(
       <ConversationSidebar
         conversations={conversations}
         activeId={null}
@@ -33,7 +38,7 @@ describe('ConversationSidebar', () => {
   });
 
   it('highlights active conversation', () => {
-    render(
+    wrappedRender(
       <ConversationSidebar
         conversations={conversations}
         activeId="1"
@@ -55,7 +60,7 @@ describe('ConversationSidebar', () => {
 
   it('calls onSelect when item clicked', async () => {
     const onSelect = vi.fn();
-    render(
+    wrappedRender(
       <ConversationSidebar
         conversations={conversations}
         activeId={null}
@@ -77,7 +82,7 @@ describe('ConversationSidebar', () => {
 
   it('calls onNew when new button clicked', async () => {
     const onNew = vi.fn();
-    render(
+    wrappedRender(
       <ConversationSidebar
         conversations={conversations}
         activeId={null}
@@ -98,7 +103,7 @@ describe('ConversationSidebar', () => {
   });
 
   it('shows empty state', () => {
-    render(
+    wrappedRender(
       <ConversationSidebar
         conversations={[]}
         activeId={null}
@@ -118,7 +123,7 @@ describe('ConversationSidebar', () => {
   });
 
   it('shows loading state', () => {
-    render(
+    wrappedRender(
       <ConversationSidebar
         conversations={[]}
         activeId={null}
@@ -138,7 +143,7 @@ describe('ConversationSidebar', () => {
   });
 
   it('collapsed mode shows only toggle button', () => {
-    render(
+    wrappedRender(
       <ConversationSidebar
         conversations={conversations}
         activeId={null}

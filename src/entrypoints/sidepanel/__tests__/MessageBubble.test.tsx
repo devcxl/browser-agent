@@ -2,10 +2,15 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { MessageBubble } from '../components/MessageBubble';
+import { I18nProvider } from '../i18n/I18nProvider';
 import type { UIMessage } from '../types';
 
+function wrappedRender(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
+
 describe('MessageBubble', () => {
-  it('renders user message right-aligned', () => {
+  it('wrappedRenders user message right-aligned', () => {
     const msg: UIMessage = {
       id: '1',
       role: 'user',
@@ -14,14 +19,14 @@ describe('MessageBubble', () => {
       status: 'complete',
     };
 
-    const { container } = render(<MessageBubble message={msg} />);
+    const { container } = wrappedRender(<MessageBubble message={msg} />);
     // The outer flex container has justify-end for user
     const outer = container.firstChild as HTMLElement;
     expect(outer.className).toContain('justify-end');
     expect(screen.getByText('hello')).toBeDefined();
   });
 
-  it('renders assistant message left-aligned', () => {
+  it('wrappedRenders assistant message left-aligned', () => {
     const msg: UIMessage = {
       id: '2',
       role: 'assistant',
@@ -30,7 +35,7 @@ describe('MessageBubble', () => {
       status: 'complete',
     };
 
-    const { container } = render(<MessageBubble message={msg} />);
+    const { container } = wrappedRender(<MessageBubble message={msg} />);
     const outer = container.firstChild as HTMLElement;
     expect(outer.className).toContain('justify-start');
     expect(screen.getByText('response')).toBeDefined();
@@ -45,14 +50,14 @@ describe('MessageBubble', () => {
       status: 'streaming',
     };
 
-    render(<MessageBubble message={msg} />);
+    wrappedRender(<MessageBubble message={msg} />);
     expect(screen.getByText('streaming...')).toBeDefined();
     // Cursor indicator: should have an animate-pulse element
     const cursor = document.querySelector('.animate-pulse');
     expect(cursor).toBeDefined();
   });
 
-  it('renders tool message with toolCallDisplay using ToolCallCard', () => {
+  it('wrappedRenders tool message with toolCallDisplay using ToolCallCard', () => {
     const msg: UIMessage = {
       id: '4',
       role: 'tool',
@@ -68,11 +73,11 @@ describe('MessageBubble', () => {
       },
     };
 
-    render(<MessageBubble message={msg} />);
+    wrappedRender(<MessageBubble message={msg} />);
     expect(screen.getByText('tabs_query')).toBeDefined();
   });
 
-  it('renders tool message without toolCallDisplay in compact style', () => {
+  it('wrappedRenders tool message without toolCallDisplay in compact style', () => {
     const msg: UIMessage = {
       id: '5',
       role: 'tool',
@@ -80,7 +85,7 @@ describe('MessageBubble', () => {
       timestamp: Date.now(),
     };
 
-    const { container } = render(<MessageBubble message={msg} />);
+    const { container } = wrappedRender(<MessageBubble message={msg} />);
     const outer = container.firstChild as HTMLElement;
     expect(outer.className).toContain('justify-center');
     expect(screen.getByText('Tool executed')).toBeDefined();
@@ -96,7 +101,7 @@ describe('MessageBubble', () => {
         timestamp: Date.now(),
         status: 'complete',
       };
-      const { container } = render(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       expect(container.querySelector('h2')).toBeDefined();
     });
 
@@ -108,7 +113,7 @@ describe('MessageBubble', () => {
         timestamp: Date.now(),
         status: 'complete',
       };
-      const { container } = render(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       expect(container.querySelector('pre')).toBeDefined();
       expect(container.querySelector('pre')?.querySelector('code')).toBeDefined();
     });
@@ -121,7 +126,7 @@ describe('MessageBubble', () => {
         timestamp: Date.now(),
         status: 'complete',
       };
-      const { container } = render(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       expect(container.querySelector('code')).toBeDefined();
     });
 
@@ -133,7 +138,7 @@ describe('MessageBubble', () => {
         timestamp: Date.now(),
         status: 'complete',
       };
-      const { container } = render(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       expect(container.querySelector('ul')).toBeDefined();
       expect(container.querySelectorAll('li')).toHaveLength(2);
     });
@@ -146,7 +151,7 @@ describe('MessageBubble', () => {
         timestamp: Date.now(),
         status: 'complete',
       };
-      const { container } = render(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       const link = container.querySelector('a');
       expect(link).toBeDefined();
       expect(link?.getAttribute('href')).toBe('https://example.com');
@@ -160,7 +165,7 @@ describe('MessageBubble', () => {
         timestamp: Date.now(),
         status: 'complete',
       };
-      const { container } = render(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       const link = container.querySelector('a');
       // href 不应是 javascript: 协议
       const href = link?.getAttribute('href') ?? '';
@@ -175,7 +180,7 @@ describe('MessageBubble', () => {
         timestamp: Date.now(),
         status: 'complete',
       };
-      const { container } = render(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       expect(container.querySelector('script')).toBeNull();
     });
 
@@ -187,7 +192,7 @@ describe('MessageBubble', () => {
         timestamp: Date.now(),
         status: 'complete',
       };
-      const { container } = render(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       expect(container.querySelector('h2')).toBeNull();
       expect(screen.getByText('## 不是标题')).toBeDefined();
     });
