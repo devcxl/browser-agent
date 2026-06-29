@@ -1,0 +1,185 @@
+{
+  "common": {
+    "send": "Send",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "save": "Save",
+    "edit": "Edit",
+    "add": "Add",
+    "close": "Close",
+    "loading": "Loading...",
+    "error": "Error",
+    "noData": "No Data",
+    "enabled": "Enabled"
+  },
+  "app": {
+    "title": "BrowserAgent",
+    "loadingMessages": "Loading messages...",
+    "loadFailed": "Failed to load"
+  },
+  "sidebar": {
+    "title": "Conversations",
+    "newChat": "+ New Chat",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "settings": "Settings",
+    "noConversations": "No conversations",
+    "rename": "Rename",
+    "delete": "Delete",
+    "input": "Input",
+    "output": "Output",
+    "total": "Total",
+    "status": {
+      "idle": "Idle",
+      "running": "Running...",
+      "streaming": "Streaming...",
+      "waitingConfirmation": "Awaiting confirmation"
+    }
+  },
+  "chat": {
+    "emptyState": "Start a conversation, send a message to Browser Agent",
+    "input": {
+      "placeholder": "Type a message... (Enter to send, Shift+Enter for new line)",
+      "disabledPlaceholder": "Agent is running...",
+      "abort": "Abort",
+      "send": "Send",
+      "voiceInput": "Voice input",
+      "requestingMic": "Requesting microphone access...",
+      "stopRecording": "Click to stop recording",
+      "transcribing": "Transcribing...",
+      "voiceError": "Voice recognition error"
+    },
+    "message": {
+      "showReasoning": "Show reasoning",
+      "hideReasoning": "Hide reasoning",
+      "thinking": "Thinking...",
+      "params": "Parameters",
+      "result": "Result"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "tabs": {
+      "provider": "Provider",
+      "agent": "Agent",
+      "expert": "Expert Mode",
+      "skills": "Skills"
+    },
+    "provider": {
+      "noProviders": "No providers configured",
+      "add": "+ Add Provider",
+      "test": "Test",
+      "testing": "Testing...",
+      "trusted": "Trusted",
+      "voiceModel": "STT Model",
+      "audioFormat": "Output Format",
+      "audioFormatHint": "Convert recordings to the specified format before sending. Leave empty to auto-convert to WAV.",
+      "trustedLabel": "Local Trusted Provider (mark as trusted to send sensitive data)",
+      "save": "Save",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete",
+      "placeholder": {
+        "name": "Name",
+        "endpoint": "Endpoint (e.g. https://api.openai.com/v1)",
+        "apiKey": "API Key",
+        "model": "Model (e.g. gpt-4o)",
+        "sttModel": "STT Model (e.g. whisper-1)"
+      },
+      "audioFormats": {
+        "auto": "Auto (Recommended) — Convert to WAV",
+        "webm_opus": "WebM Opus",
+        "webm": "WebM",
+        "mp4aac": "MP4 AAC",
+        "mp4": "MP4",
+        "aac": "AAC",
+        "ogg_opus": "OGG Opus",
+        "wav": "WAV"
+      }
+    },
+    "agent": {
+      "maxToolRounds": "Max Tool Rounds",
+      "maxContextMessages": "Max Context Messages",
+      "reasoningEffort": "Reasoning Effort",
+      "reasoningEffortHint": "Controls LLM reasoning depth. Higher values are slower but more thorough. Only supported by reasoning models like DeepSeek, OpenAI o1/o3, etc.",
+      "systemPrompt": "System Prompt",
+      "reasoningOptions": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "max": "Maximum"
+      }
+    },
+    "expert": {
+      "title": "Expert Mode",
+      "subSwitchHint": "Sub-switch configuration (feature flag control)",
+      "addSwitch": "+ Add Sub-switch"
+    },
+    "skills": {
+      "panelTitle": "Skill Management",
+      "subscriptions": "Subscriptions",
+      "localSkills": "Local Skills",
+      "placeholder": "Enter GitHub repo, e.g. owner/repo",
+      "add": "Add",
+      "configToken": "Configure GitHub Token (optional, increases API rate limit)",
+      "hideToken": "Hide Token",
+      "tokenPlaceholder": "ghp_xxx or github_pat_xxx",
+      "noSubscriptions": "No subscriptions, enter a GitHub repo URL to add",
+    "noSubscriptionsAndSkills": "No subscriptions or skills, enter a GitHub repo URL to add",
+      "sync": "Sync",
+      "syncing": "Syncing...",
+      "delete": "Delete",
+      "skillsCount": "{count} skills",
+      "enabled": "Enabled",
+      "syncComplete": "Sync complete, {count} skills total",
+      "syncFailed": "Sync failed: {error}",
+      "subscriptionExists": "This subscription already exists"
+    }
+  },
+  "dialog": {
+    "confirmTitle": "Confirm Action",
+    "tool": "Tool",
+    "affectedObjects": "Affected Objects",
+    "type": "Type",
+    "title": "Title",
+    "reason": "Reason",
+    "warnings": "Warnings",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "browser": {
+    "title": "Browser State",
+    "loading": "Loading...",
+    "error": "Error",
+    "noData": "No Data",
+    "windows": "Windows",
+    "tabs": "Tabs",
+    "active": "Active",
+    "windowLabel": "Window"
+  },
+  "token": {
+    "title": "Token Usage",
+    "input": "Input",
+    "output": "Output",
+    "total": "Total",
+    "noData": "--"
+  },
+  "error": {
+    "renderError": "Render Error"
+  },
+  "markdown": {
+    "invalidLink": "Invalid link",
+    "contentExpired": "Content has expired or does not exist",
+    "previewTitle": "Preview"
+  },
+  "voice": {
+    "noSttModel": "No STT model configured. Please add sttModel to a Provider in settings.",
+    "micDenied": "Microphone permission denied. Please allow microphone access in browser settings.",
+    "noMic": "No microphone device detected",
+    "startFailed": "Failed to start recording: {message}",
+    "providerLost": "Provider configuration lost",
+    "transcribeFailed": "Speech recognition failed: {message}"
+  }
+}

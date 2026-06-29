@@ -1,0 +1,185 @@
+{
+  "common": {
+    "send": "发送",
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "save": "保存",
+    "edit": "编辑",
+    "add": "添加",
+    "close": "关闭",
+    "loading": "加载中...",
+    "error": "出错",
+    "noData": "无数据",
+    "enabled": "启用"
+  },
+  "app": {
+    "title": "BrowserAgent",
+    "loadingMessages": "加载消息中...",
+    "loadFailed": "加载失败"
+  },
+  "sidebar": {
+    "title": "会话",
+    "newChat": "+ 新建",
+    "collapse": "收起侧栏",
+    "expand": "展开侧栏",
+    "settings": "设置",
+    "noConversations": "暂无会话",
+    "rename": "重命名",
+    "delete": "删除",
+    "input": "输入",
+    "output": "输出",
+    "total": "总计",
+    "status": {
+      "idle": "就绪",
+      "running": "运行中...",
+      "streaming": "输出中...",
+      "waitingConfirmation": "等待确认"
+    }
+  },
+  "chat": {
+    "emptyState": "开始对话，发送消息给 Browser Agent",
+    "input": {
+      "placeholder": "输入消息... (Enter 发送, Shift+Enter 换行)",
+      "disabledPlaceholder": "Agent 运行中...",
+      "abort": "中止",
+      "send": "发送",
+      "voiceInput": "语音输入",
+      "requestingMic": "正在请求麦克风权限...",
+      "stopRecording": "点击停止录音",
+      "transcribing": "正在识别语音...",
+      "voiceError": "语音识别出错"
+    },
+    "message": {
+      "showReasoning": "查看思考过程",
+      "hideReasoning": "收起思考过程",
+      "thinking": "思考中...",
+      "params": "参数",
+      "result": "结果"
+    }
+  },
+  "settings": {
+    "title": "设置",
+    "language": "界面语言",
+    "tabs": {
+      "provider": "Provider",
+      "agent": "Agent",
+      "expert": "Expert Mode",
+      "skills": "Skills"
+    },
+    "provider": {
+      "noProviders": "暂无 Provider 配置",
+      "add": "+ 添加 Provider",
+      "test": "测试",
+      "testing": "测试中...",
+      "trusted": "Trusted",
+      "voiceModel": "语音模型",
+      "audioFormat": "输出格式",
+      "audioFormatHint": "录音后统一转为指定格式再发送，留空则自动转 WAV",
+      "trustedLabel": "Local Trusted Provider（标记为本地可信，可发送敏感数据）",
+      "save": "保存",
+      "cancel": "取消",
+      "edit": "编辑",
+      "delete": "删除",
+      "placeholder": {
+        "name": "名称",
+        "endpoint": "Endpoint (e.g. https://api.openai.com/v1)",
+        "apiKey": "API Key",
+        "model": "模型 (e.g. gpt-4o)",
+        "sttModel": "语音模型 (e.g. whisper-1)"
+      },
+      "audioFormats": {
+        "auto": "自动（推荐）— 统一转为 WAV 发送",
+        "webm_opus": "WebM Opus",
+        "webm": "WebM",
+        "mp4aac": "MP4 AAC",
+        "mp4": "MP4",
+        "aac": "AAC",
+        "ogg_opus": "OGG Opus",
+        "wav": "WAV"
+      }
+    },
+    "agent": {
+      "maxToolRounds": "最大工具调用轮次",
+      "maxContextMessages": "上下文最大消息数",
+      "reasoningEffort": "思考强度",
+      "reasoningEffortHint": "控制 LLM 推理深度，越高越慢但越深入。仅支持 DeepSeek、OpenAI o1/o3 等推理模型。",
+      "systemPrompt": "系统提示词",
+      "reasoningOptions": {
+        "low": "Low（低）",
+        "medium": "Medium（中）",
+        "high": "High（高）",
+        "max": "Max（最大）"
+      }
+    },
+    "expert": {
+      "title": "Expert Mode",
+      "subSwitchHint": "子开关配置（功能灰度控制）",
+      "addSwitch": "+ 添加子开关"
+    },
+    "skills": {
+      "panelTitle": "技能管理",
+      "subscriptions": "订阅",
+      "localSkills": "本地技能",
+      "placeholder": "输入 GitHub 仓库，如 owner/repo",
+      "add": "添加",
+      "configToken": "配置 GitHub Token（选填，提高 API 限流）",
+      "hideToken": "隐藏 Token",
+      "tokenPlaceholder": "ghp_xxx 或 github_pat_xxx",
+      "noSubscriptions": "暂无订阅，输入 GitHub 仓库地址添加",
+    "noSubscriptionsAndSkills": "暂无订阅和技能，输入 GitHub 仓库地址添加",
+      "sync": "同步",
+      "syncing": "同步中...",
+      "delete": "删除",
+      "skillsCount": "{count} 个技能",
+      "enabled": "启用",
+      "syncComplete": "同步完成，共 {count} 个技能",
+      "syncFailed": "同步失败: {error}",
+      "subscriptionExists": "该订阅已存在"
+    }
+  },
+  "dialog": {
+    "confirmTitle": "确认操作",
+    "tool": "工具",
+    "affectedObjects": "影响对象",
+    "type": "类型",
+    "title": "标题",
+    "reason": "原因",
+    "warnings": "警告",
+    "confirm": "确认",
+    "cancel": "取消"
+  },
+  "browser": {
+    "title": "浏览器状态",
+    "loading": "加载中...",
+    "error": "错误",
+    "noData": "无数据",
+    "windows": "窗口",
+    "tabs": "标签页",
+    "active": "活跃",
+    "windowLabel": "窗口"
+  },
+  "token": {
+    "title": "Token 用量",
+    "input": "输入",
+    "output": "输出",
+    "total": "总计",
+    "noData": "--"
+  },
+  "error": {
+    "renderError": "渲染出错"
+  },
+  "markdown": {
+    "invalidLink": "无效链接",
+    "contentExpired": "内容已过期或不存在",
+    "previewTitle": "预览"
+  },
+  "voice": {
+    "noSttModel": "未配置语音模型，请在设置中为 Provider 添加 sttModel",
+    "micDenied": "麦克风权限被拒绝，请在浏览器设置中允许访问麦克风",
+    "noMic": "未检测到麦克风设备",
+    "startFailed": "无法启动录音: {message}",
+    "providerLost": "Provider 配置丢失",
+    "transcribeFailed": "语音识别失败: {message}"
+  }
+}
