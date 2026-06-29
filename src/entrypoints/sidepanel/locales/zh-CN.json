@@ -127,6 +127,7 @@
       "hideToken": "隐藏 Token",
       "tokenPlaceholder": "ghp_xxx 或 github_pat_xxx",
       "noSubscriptions": "暂无订阅，输入 GitHub 仓库地址添加",
+    "noSubscriptionsAndSkills": "暂无订阅和技能，输入 GitHub 仓库地址添加",
       "sync": "同步",
       "syncing": "同步中...",
       "delete": "删除",
@@ -174,11 +175,11 @@
     "previewTitle": "预览"
   },
   "voice": {
-    "noSttModel": "未配置语音识别模型",
-    "micDenied": "麦克风权限被拒绝",
+    "noSttModel": "未配置语音模型，请在设置中为 Provider 添加 sttModel",
+    "micDenied": "麦克风权限被拒绝，请在浏览器设置中允许访问麦克风",
     "noMic": "未检测到麦克风设备",
-    "startFailed": "录音启动失败",
-    "providerLost": "Provider 配置已变更或丢失",
-    "transcribeFailed": "语音识别失败"
+    "startFailed": "无法启动录音: {message}",
+    "providerLost": "Provider 配置丢失",
+    "transcribeFailed": "语音识别失败: {message}"
   }
 }

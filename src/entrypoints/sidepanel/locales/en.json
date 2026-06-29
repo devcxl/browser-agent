@@ -127,6 +127,7 @@
       "hideToken": "Hide Token",
       "tokenPlaceholder": "ghp_xxx or github_pat_xxx",
       "noSubscriptions": "No subscriptions, enter a GitHub repo URL to add",
+    "noSubscriptionsAndSkills": "No subscriptions or skills, enter a GitHub repo URL to add",
       "sync": "Sync",
       "syncing": "Syncing...",
       "delete": "Delete",
@@ -174,11 +175,11 @@
     "previewTitle": "Preview"
   },
   "voice": {
-    "noSttModel": "No STT model configured",
-    "micDenied": "Microphone permission denied",
+    "noSttModel": "No STT model configured. Please add sttModel to a Provider in settings.",
+    "micDenied": "Microphone permission denied. Please allow microphone access in browser settings.",
     "noMic": "No microphone device detected",
-    "startFailed": "Failed to start recording",
-    "providerLost": "Provider configuration has changed or is missing",
-    "transcribeFailed": "Speech recognition failed"
+    "startFailed": "Failed to start recording: {message}",
+    "providerLost": "Provider configuration lost",
+    "transcribeFailed": "Speech recognition failed: {message}"
   }
 }

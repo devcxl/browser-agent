@@ -122,6 +122,7 @@ export interface MessageSchema {
       hideToken: string;
       tokenPlaceholder: string;
       noSubscriptions: string;
+      noSubscriptionsAndSkills: string;
       sync: string;
       syncing: string;
       delete: string;
