@@ -1,5 +1,30 @@
 import { marked } from 'marked';
 
+type MarkdownMessages = {
+  invalidLink: string;
+  contentExpired: string;
+  previewTitle: string;
+};
+
+async function getMarkdownMessages(): Promise<MarkdownMessages> {
+  const { preferences } = await browser.storage.local.get('preferences');
+  const lang = preferences?.language === 'en' ? 'en' : 'zh-CN';
+  if (lang === 'en') {
+    const mod = await import('../sidepanel/locales/en.json');
+    return {
+      invalidLink: mod.markdown.invalidLink,
+      contentExpired: mod.markdown.contentExpired,
+      previewTitle: mod.markdown.previewTitle,
+    };
+  }
+  const mod = await import('../sidepanel/locales/zh-CN.json');
+  return {
+    invalidLink: mod.markdown.invalidLink,
+    contentExpired: mod.markdown.contentExpired,
+    previewTitle: mod.markdown.previewTitle,
+  };
+}
+
 const STYLE = `
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -136,21 +161,23 @@ const STYLE = `
 `;
 
 async function main() {
+  const messages = await getMarkdownMessages();
+
   const params = new URLSearchParams(location.search);
   const viewId = params.get('viewId');
   if (!viewId) {
-    document.getElementById('root')!.textContent = '无效链接';
+    document.getElementById('root')!.textContent = messages.invalidLink;
     return;
   }
 
   const key = `markdown:${viewId}`;
   const { [key]: content } = await browser.storage.local.get(key);
   if (!content) {
-    document.getElementById('root')!.textContent = '内容已过期或不存在';
+    document.getElementById('root')!.textContent = messages.contentExpired;
     return;
   }
 
-  document.title = 'Markdown Preview';
+  document.title = messages.previewTitle;
 
   const styleEl = document.createElement('style');
   styleEl.textContent = STYLE;
