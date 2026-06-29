@@ -32,7 +32,7 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
   }, []);
 
   const { voiceState, errorMessage, voiceAvailable, startRecording, stopRecording, clearError } =
-    useVoiceInput({ providers, onTranscribed: handleTranscribed });
+    useVoiceInput({ providers, onTranscribed: handleTranscribed, t });
 
   const handleSend = () => {
     const trimmed = text.trim();
