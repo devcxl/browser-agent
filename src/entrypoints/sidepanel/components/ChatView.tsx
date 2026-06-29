@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import type { UIMessage } from '../types';
 import { MessageBubble } from './MessageBubble';
+import { useI18n } from '../i18n/useI18n';
 
 interface Props {
   messages: UIMessage[];
@@ -10,6 +11,7 @@ const OVERSCAN = 10;
 const ITEM_HEIGHT = 80;
 
 export function ChatView({ messages }: Props) {
+  const { t } = useI18n();
   const bottomRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
@@ -61,7 +63,7 @@ export function ChatView({ messages }: Props) {
         <>
           {messages.length === 0 && (
             <div className="flex-1 flex items-center justify-center text-mute text-sm">
-                开始对话，发送消息给 Browser Agent
+                 {t('chat.emptyState')}
             </div>
           )}
           {messages.map((msg) => (

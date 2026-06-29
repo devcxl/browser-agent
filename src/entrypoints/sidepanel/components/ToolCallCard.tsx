@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import type { ToolCallDisplay } from '../types';
 import { cn, riskColor, truncate } from '../utils';
+import { useI18n } from '../i18n/useI18n';
 
 interface Props {
   call: ToolCallDisplay;
 }
 
 export function ToolCallCard({ call }: Props) {
+  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
   const statusIcon = () => {
@@ -47,14 +49,14 @@ export function ToolCallCard({ call }: Props) {
       {expanded && (
         <div className="px-2.5 py-2 bg-surface-soft border-t border-hairline space-y-1.5">
           <div>
-            <span className="font-medium text-mute">参数: </span>
+            <span className="font-medium text-mute">{t('chat.message.params')}: </span>
             <code className="text-body break-all">
               {truncate(JSON.stringify(call.params), 200)}
             </code>
           </div>
           {call.result && (
             <div>
-              <span className="font-medium text-mute">结果: </span>
+                <span className="font-medium text-mute">{t('chat.message.result')}: </span>
               <code className="text-body break-all">
                 {call.result.success
                   ? truncate(JSON.stringify(call.result.data ?? 'ok'), 200)
