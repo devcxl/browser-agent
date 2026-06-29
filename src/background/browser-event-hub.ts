@@ -80,6 +80,7 @@ export class BrowserEventHub {
 
       this.notifyCallback?.(state);
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('[BrowserEventHub] syncState failed:', err);
     }
   }

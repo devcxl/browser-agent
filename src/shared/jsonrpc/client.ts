@@ -118,6 +118,7 @@ export class JsonRpcClient implements IJsonRpcClient {
       this._connected = true;
       this.reconnectAttempts = 0;
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('[JsonRpcClient] Failed to connect:', err);
       this.scheduleReconnect();
     }
@@ -170,11 +171,13 @@ export class JsonRpcClient implements IJsonRpcClient {
   private scheduleReconnect(): void {
     if (this.reconnectTimer) return;
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      // eslint-disable-next-line no-console
       console.error('[JsonRpcClient] Max reconnect attempts reached');
       return;
     }
 
     this.reconnectAttempts++;
+    // eslint-disable-next-line no-console
     console.log(`[JsonRpcClient] Reconnecting (attempt ${this.reconnectAttempts})...`);
 
     this.reconnectTimer = setTimeout(() => {

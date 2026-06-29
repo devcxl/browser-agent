@@ -49,6 +49,7 @@ export class Database {
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
       request.onblocked = () => {
+        // eslint-disable-next-line no-console
         console.warn('[Database] Delete blocked by open connections');
         resolve();
       };

@@ -17,28 +17,31 @@ function resolveMessage(obj: Record<string, unknown>, key: string): string {
   let current: unknown = obj;
   for (const k of keys) {
     if (current === null || current === undefined || typeof current !== 'object') {
+      // eslint-disable-next-line no-console
       console.warn(`[i18n] key "${key}" not found (intermediate "${k}" is not an object)`);
       return key;
     }
-    current = (current as Record<string, unknown>)[k];
-  }
-  if (typeof current !== 'string') {
-    console.warn(`[i18n] key "${key}" not found or not a string`);
-    return key;
-  }
-  return current;
-}
-
-function applyVars(template: string, vars?: Record<string, string | number>): string {
-  if (!vars) return template;
-  return template.replace(/\{(\w+)\}/g, (_, key: string) => {
-    if (vars[key] === undefined) {
-      console.warn(`[i18n] variable "{${key}}" not provided`);
-      return `{${key}}`;
+      current = (current as Record<string, unknown>)[k];
     }
-    return String(vars[key]);
-  });
-}
+    if (typeof current !== 'string') {
+      // eslint-disable-next-line no-console
+      console.warn(`[i18n] key "${key}" not found or not a string`);
+      return key;
+    }
+    return current;
+  }
+
+  function applyVars(template: string, vars?: Record<string, string | number>): string {
+    if (!vars) return template;
+    return template.replace(/\{(\w+)\}/g, (_, key: string) => {
+      if (vars[key] === undefined) {
+        // eslint-disable-next-line no-console
+        console.warn(`[i18n] variable "{${key}}" not provided`);
+        return `{${key}}`;
+      }
+      return String(vars[key]);
+    });
+  }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>('zh-CN');
