@@ -4,10 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageInput } from '../components/MessageInput';
 import { I18nProvider } from '../i18n/I18nProvider';
+import { mockBrowserStorage } from './test-utils';
 import type { UseVoiceInputReturn } from '../hooks/useVoiceInput';
 import type { ProviderConfig } from '@/shared/types';
 
 // ── Module-level mocks (vi.mock is hoisted above imports) ──
+
+beforeEach(() => { mockBrowserStorage(); });
 
 const mockUseVoiceInput = vi.fn();
 vi.mock('../hooks/useVoiceInput', () => ({

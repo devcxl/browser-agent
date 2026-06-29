@@ -4,10 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SkillPanel } from '../components/SkillPanel';
 import { I18nProvider } from '../i18n/I18nProvider';
+import { mockBrowserStorage } from './test-utils';
 import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import type { Skill, SkillSubscription } from '@/shared/types';
 
 // Mock github-skill-fetcher to avoid real network calls
+
+beforeEach(() => { mockBrowserStorage(); });
 vi.mock('@/shared/github-skill-fetcher', () => ({
   fetchSkillsFromGitHub: vi.fn().mockResolvedValue([]),
 }));
