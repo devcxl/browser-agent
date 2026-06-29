@@ -5,6 +5,7 @@ import type { Skill, SkillSubscription } from '@/shared/types';
 import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
 import { cn } from '../utils';
+import { useI18n } from '../i18n/useI18n';
 
 interface Props {
   providers: ProviderConfig[];
@@ -31,16 +32,17 @@ export function SettingsPanel({
   const [editing, setEditing] = useState<ProviderFormData | null>(null);
   const [testingIdx, setTestingIdx] = useState<number | null>(null);
   const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
+  const { t, locale, setLanguage } = useI18n();
 
 const AUDIO_FORMATS = [
-  { value: '', label: '自动（推荐）— 统一转为 WAV 发送' },
-  { value: 'audio/webm;codecs=opus', label: 'WebM Opus' },
-  { value: 'audio/webm', label: 'WebM' },
-  { value: 'audio/mp4;codecs=mp4a.40.5', label: 'MP4 AAC' },
-  { value: 'audio/mp4', label: 'MP4' },
-  { value: 'audio/aac', label: 'AAC' },
-  { value: 'audio/ogg;codecs=opus', label: 'OGG Opus' },
-  { value: 'audio/wav', label: 'WAV' },
+  { value: '', label: t('settings.provider.audioFormats.auto') },
+  { value: 'audio/webm;codecs=opus', label: t('settings.provider.audioFormats.webm_opus') },
+  { value: 'audio/webm', label: t('settings.provider.audioFormats.webm') },
+  { value: 'audio/mp4;codecs=mp4a.40.5', label: t('settings.provider.audioFormats.mp4aac') },
+  { value: 'audio/mp4', label: t('settings.provider.audioFormats.mp4') },
+  { value: 'audio/aac', label: t('settings.provider.audioFormats.aac') },
+  { value: 'audio/ogg;codecs=opus', label: t('settings.provider.audioFormats.ogg_opus') },
+  { value: 'audio/wav', label: t('settings.provider.audioFormats.wav') },
 ];
 
 const defaultForm: ProviderFormData = {
@@ -143,13 +145,13 @@ const defaultForm: ProviderFormData = {
       }
 
       await subStore.update(sub.id, { lastSyncedAt: Date.now() });
-      setSyncStatus({ type: 'ok', msg: `同步完成，共 ${parsed.length} 个技能` });
+      setSyncStatus({ type: 'ok', msg: t('settings.skills.syncComplete', { count: parsed.length }) });
     } catch (err) {
-      setSyncStatus({ type: 'error', msg: `同步失败: ${(err as Error).message}` });
+      setSyncStatus({ type: 'error', msg: t('settings.skills.syncFailed', { error: (err as Error).message }) });
     } finally {
       setSyncingId(null);
     }
-  }, [token]);
+  }, [token, t]);
 
   const handleAddSubscription = useCallback(async () => {
     const source = subInput.trim();
@@ -157,7 +159,7 @@ const defaultForm: ProviderFormData = {
 
     const exists = subscriptions.find((s) => s.source === source);
     if (exists) {
-      setSyncStatus({ type: 'error', msg: '该订阅已存在' });
+      setSyncStatus({ type: 'error', msg: t('settings.skills.subscriptionExists') });
       return;
     }
 
@@ -174,7 +176,7 @@ const defaultForm: ProviderFormData = {
     await subStore.add(sub);
     setSubInput('');
     await handleSyncRef(sub);
-  }, [subInput, subscriptions, handleSyncRef]);
+  }, [subInput, subscriptions, handleSyncRef, t]);
 
   const handleRemoveSubscription = useCallback(async (sub: SkillSubscription) => {
     const associated = skills.filter((s) => s.source === `github:${sub.source}`);
@@ -211,7 +213,7 @@ const defaultForm: ProviderFormData = {
     >
       <div className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] max-h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-hairline">
-          <h2 className="text-base font-semibold text-ink">设置</h2>
+          <h2 className="text-base font-semibold text-ink">{t('settings.title')}</h2>
           <button
             type="button"
             onClick={onClose}
@@ -222,29 +224,42 @@ const defaultForm: ProviderFormData = {
         </div>
 
         <div className="flex border-b border-hairline px-5">
-          {(['provider', 'agent', 'expert', 'skills'] as const).map((t) => (
+          {(['provider', 'agent', 'expert', 'skills'] as const).map((tabKey) => (
             <button
-              key={t}
+              key={tabKey}
               type="button"
-              data-testid={t === 'provider' ? 'settings-provider-tab' : undefined}
-              onClick={() => setTab(t)}
+              data-testid={tabKey === 'provider' ? 'settings-provider-tab' : undefined}
+              onClick={() => setTab(tabKey)}
               className={cn(
                 'px-3 py-2 text-sm font-medium border-b-2 transition-colors',
-                tab === t
+                tab === tabKey
                   ? 'border-primary text-ink'
                   : 'border-transparent text-mute hover:text-ink',
               )}
             >
-              {t === 'provider' ? 'Provider' : t === 'agent' ? 'Agent' : t === 'expert' ? 'Expert Mode' : 'Skills'}
+              {tabKey === 'provider' ? t('settings.tabs.provider') : tabKey === 'agent' ? t('settings.tabs.agent') : tabKey === 'expert' ? t('settings.tabs.expert') : t('settings.tabs.skills')}
             </button>
           ))}
+
+        </div>
+
+        <div className="flex items-center gap-2 px-5 py-2 border-b border-hairline">
+          <label className="text-xs font-medium text-mute">{t('settings.language')}</label>
+          <select
+            value={locale}
+            onChange={(e) => setLanguage(e.target.value as 'zh-CN' | 'en')}
+            className="px-2 py-1 text-xs border border-hairline rounded-md bg-canvas text-ink"
+          >
+            <option value="zh-CN">中文</option>
+            <option value="en">English</option>
+          </select>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {tab === 'provider' && (
             <div className="space-y-3">
               {providers.length === 0 && !editing && (
-                <p className="text-sm text-mute">暂无 Provider 配置</p>
+                <p className="text-sm text-mute">{t('settings.provider.noProviders')}</p>
               )}
 
               {providers.map((p, idx) => (
@@ -257,14 +272,14 @@ const defaultForm: ProviderFormData = {
                       <span className="text-sm font-medium text-ink">{p.name}</span>
                       {p.isLocalTrusted && (
                         <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">
-                          Trusted
+                          {t('settings.provider.trusted')}
                         </span>
                       )}
                     </div>
                     <div className="text-xs text-mute truncate">{p.endpoint} / {p.model}</div>
                     {p.sttModel && (
                       <div className="text-xs text-mute truncate mt-0.5">
-                        🎤 语音模型: {p.sttModel}{p.audioFormat ? ` | 输出: ${p.audioFormat}` : ' | 输出: WAV'}
+                        🎤 {t('settings.provider.voiceModel')}: {p.sttModel}{p.audioFormat ? ` | ${t('settings.provider.audioFormat')}: ${p.audioFormat}` : ` | ${t('settings.provider.audioFormat')}: WAV`}
                       </div>
                     )}
                   </div>
@@ -275,7 +290,7 @@ const defaultForm: ProviderFormData = {
                       disabled={testingIdx === idx}
                       className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50"
                     >
-                      {testingIdx === idx ? '测试中...' : '测试'}
+                      {testingIdx === idx ? t('settings.provider.testing') : t('settings.provider.test')}
                     </button>
                     {testResult[idx] && (
                       <span className={testResult[idx] === 'ok' ? 'text-success text-xs' : 'text-danger text-xs'}>
@@ -298,14 +313,14 @@ const defaultForm: ProviderFormData = {
                       }
                       className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft"
                     >
-                      编辑
+                      {t('settings.provider.edit')}
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteProvider(p.id)}
                       className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50"
                     >
-                      删除
+                      {t('settings.provider.delete')}
                     </button>
                   </div>
                 </div>
@@ -315,14 +330,14 @@ const defaultForm: ProviderFormData = {
                 <div className="border border-hairline rounded-xl p-3 space-y-2 bg-surface-soft">
                   <input
                     data-testid="provider-name-input"
-                    placeholder="名称"
+                    placeholder={t('settings.provider.placeholder.name')}
                     value={editing.name}
                     onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                     className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
                   <input
                     data-testid="provider-endpoint-input"
-                    placeholder="Endpoint (e.g. https://api.openai.com/v1)"
+                    placeholder={t('settings.provider.placeholder.endpoint')}
                     value={editing.endpoint}
                     onChange={(e) => setEditing({ ...editing, endpoint: e.target.value })}
                     className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
@@ -330,21 +345,21 @@ const defaultForm: ProviderFormData = {
                   <input
                     data-testid="provider-apikey-input"
                     type="password"
-                    placeholder="API Key"
+                    placeholder={t('settings.provider.placeholder.apiKey')}
                     value={editing.apiKey}
                     onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })}
                     className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
                   <input
                     data-testid="provider-model-input"
-                    placeholder="模型 (e.g. gpt-4o)"
+                    placeholder={t('settings.provider.placeholder.model')}
                     value={editing.model}
                     onChange={(e) => setEditing({ ...editing, model: e.target.value })}
                     className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                   />
                   <input
                     data-testid="provider-stt-model-input"
-                    placeholder="语音模型 (e.g. whisper-1)"
+                    placeholder={t('settings.provider.placeholder.sttModel')}
                     value={editing.sttModel ?? ''}
                     onChange={(e) => setEditing({ ...editing, sttModel: e.target.value })}
                     className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
@@ -359,14 +374,14 @@ const defaultForm: ProviderFormData = {
                       <option key={fmt.value} value={fmt.value}>{fmt.label}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-mute -mt-1">录音后统一转为指定格式再发送，留空则自动转 WAV</p>
+                  <p className="text-xs text-mute -mt-1">{t('settings.provider.audioFormatHint')}</p>
                   <label className="flex items-center gap-2 text-sm text-mute">
                     <input
                       type="checkbox"
                       checked={editing.isLocalTrusted}
                       onChange={(e) => setEditing({ ...editing, isLocalTrusted: e.target.checked })}
                     />
-                    Local Trusted Provider（标记为本地可信，可发送敏感数据）
+                    {t('settings.provider.trustedLabel')}
                   </label>
                   <div className="flex gap-2 pt-1">
                     <button
@@ -376,14 +391,14 @@ const defaultForm: ProviderFormData = {
                       disabled={!editing.name || !editing.endpoint || !editing.apiKey || !editing.model}
                       className="px-3 py-1 text-sm rounded-full bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed"
                     >
-                      保存
+                      {t('settings.provider.save')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setEditing(null)}
                       className="px-3 py-1 text-sm rounded-full border border-hairline-strong text-mute hover:bg-surface-soft"
                     >
-                      取消
+                      {t('settings.provider.cancel')}
                     </button>
                   </div>
                 </div>
@@ -396,7 +411,7 @@ const defaultForm: ProviderFormData = {
                   onClick={() => setEditing(defaultForm)}
                   className="w-full py-2 text-sm rounded-xl border-2 border-dashed border-ash text-mute hover:border-ink hover:text-ink"
                 >
-                  + 添加 Provider
+                  {t('settings.provider.add')}
                 </button>
               )}
             </div>
@@ -405,7 +420,7 @@ const defaultForm: ProviderFormData = {
           {tab === 'agent' && (
             <div className="space-y-3">
               <label className="block">
-                <span className="text-sm text-mute">最大工具调用轮次</span>
+                <span className="text-sm text-mute">{t('settings.agent.maxToolRounds')}</span>
                 <input
                   type="number"
                   value={agentSettings.maxToolRounds}
@@ -418,7 +433,7 @@ const defaultForm: ProviderFormData = {
                 />
               </label>
               <label className="block">
-                <span className="text-sm text-mute">上下文最大消息数</span>
+                <span className="text-sm text-mute">{t('settings.agent.maxContextMessages')}</span>
                 <input
                   type="number"
                   value={agentSettings.maxContextMessages}
@@ -431,7 +446,7 @@ const defaultForm: ProviderFormData = {
                 />
               </label>
               <label className="block">
-                <span className="text-sm text-mute">思考强度</span>
+                <span className="text-sm text-mute">{t('settings.agent.reasoningEffort')}</span>
                 <select
                   value={agentSettings.reasoningEffort}
                   onChange={(e) =>
@@ -439,17 +454,17 @@ const defaultForm: ProviderFormData = {
                   }
                   className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
                 >
-                  <option value="low">Low（低）</option>
-                  <option value="medium">Medium（中）</option>
-                  <option value="high">High（高）</option>
-                  <option value="max">Max（最大）</option>
+                  <option value="low">{t('settings.agent.reasoningOptions.low')}</option>
+                  <option value="medium">{t('settings.agent.reasoningOptions.medium')}</option>
+                  <option value="high">{t('settings.agent.reasoningOptions.high')}</option>
+                  <option value="max">{t('settings.agent.reasoningOptions.max')}</option>
                 </select>
                 <p className="text-xs text-mute mt-1">
-                  控制 LLM 推理深度，越高越慢但越深入。仅支持 DeepSeek、OpenAI o1/o3 等推理模型。
+                  {t('settings.agent.reasoningEffortHint')}
                 </p>
               </label>
               <label className="block">
-                <span className="text-sm text-mute">系统提示词</span>
+                <span className="text-sm text-mute">{t('settings.agent.systemPrompt')}</span>
                 <textarea
                   value={agentSettings.systemPrompt}
                   onChange={(e) =>
@@ -473,11 +488,11 @@ const defaultForm: ProviderFormData = {
                   }
                   className="rounded-sm"
                 />
-                <span className="text-sm font-medium text-ink">Expert Mode</span>
+                <span className="text-sm font-medium text-ink">{t('settings.expert.title')}</span>
               </label>
               {expertMode.enabled && (
                 <div className="ml-5 space-y-2 border-l-2 border-hairline-strong pl-3">
-                  <p className="text-xs text-mute">子开关配置（功能灰度控制）</p>
+                  <p className="text-xs text-mute">{t('settings.expert.subSwitchHint')}</p>
                   {Object.entries(expertMode.switches).map(([key, val]) => (
                     <label key={key} className="flex items-center gap-2">
                       <input
@@ -504,7 +519,7 @@ const defaultForm: ProviderFormData = {
                     }
                     className="text-xs text-primary hover:text-primary-active"
                   >
-                    + 添加子开关
+                    {t('settings.expert.addSwitch')}
                   </button>
                 </div>
               )}
@@ -518,7 +533,7 @@ const defaultForm: ProviderFormData = {
                   value={subInput}
                   onChange={(e) => setSubInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubscription(); }}
-                  placeholder="输入 GitHub 仓库，如 owner/repo"
+                  placeholder={t('settings.skills.placeholder')}
                   className="flex-1 px-3 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                 />
                 <button
@@ -527,7 +542,7 @@ const defaultForm: ProviderFormData = {
                   disabled={!subInput.trim()}
                   className="px-3 py-1.5 text-sm rounded-md bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed shrink-0"
                 >
-                  添加
+                  {t('settings.skills.add')}
                 </button>
               </div>
 
@@ -537,7 +552,7 @@ const defaultForm: ProviderFormData = {
                   onClick={() => setShowToken(!showToken)}
                   className="text-xs text-mute hover:text-ink underline"
                 >
-                  {showToken ? '隐藏 Token' : '配置 GitHub Token（选填，提高 API 限流）'}
+                  {showToken ? t('settings.skills.hideToken') : t('settings.skills.configToken')}
                 </button>
               </div>
 
@@ -545,7 +560,7 @@ const defaultForm: ProviderFormData = {
                 <input
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
-                  placeholder="ghp_xxx 或 github_pat_xxx"
+                  placeholder={t('settings.skills.tokenPlaceholder')}
                   type="password"
                   className="w-full px-3 py-1.5 text-xs border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                 />
@@ -563,7 +578,7 @@ const defaultForm: ProviderFormData = {
               )}
 
               {subscriptions.length === 0 && localSkills.length === 0 && (
-                <p className="text-xs text-mute text-center py-3">暂无订阅和技能，输入 GitHub 仓库地址添加</p>
+                <p className="text-xs text-mute text-center py-3">{t('settings.skills.noSubscriptionsAndSkills')}</p>
               )}
 
               {/* Subscriptions */}
@@ -579,7 +594,7 @@ const defaultForm: ProviderFormData = {
                             {new Date(sub.lastSyncedAt).toLocaleString('zh-CN')}
                           </span>
                         )}
-                        <span className="text-xs text-mute ml-2">{subSkills.length} 个技能</span>
+                        <span className="text-xs text-mute ml-2">{t('settings.skills.skillsCount', { count: subSkills.length })}</span>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
@@ -588,14 +603,14 @@ const defaultForm: ProviderFormData = {
                           disabled={syncingId === sub.id}
                           className="px-2 py-1 text-xs rounded-md border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50"
                         >
-                          {syncingId === sub.id ? '同步中...' : '同步'}
+                          {syncingId === sub.id ? t('settings.skills.syncing') : t('settings.skills.sync')}
                         </button>
                         <button
                           type="button"
                           onClick={() => handleRemoveSubscription(sub)}
                           className="px-2 py-1 text-xs rounded-md border border-danger/30 text-danger hover:bg-red-50"
                         >
-                          删除
+                          {t('settings.skills.delete')}
                         </button>
                       </div>
                     </div>
@@ -646,7 +661,7 @@ const defaultForm: ProviderFormData = {
               {/* Local skills */}
               {localSkills.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium text-ink mb-2">本地技能</h4>
+                  <h4 className="text-sm font-medium text-ink mb-2">{t('settings.skills.localSkills')}</h4>
                   <div className="space-y-2">
                     {localSkills.map((skill) => (
                       <div key={skill.id} className="flex items-center justify-between border border-hairline rounded-xl px-3 py-2">
@@ -654,7 +669,7 @@ const defaultForm: ProviderFormData = {
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-ink">{skill.name}</span>
                             {skill.enabled && (
-                              <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">启用</span>
+                              <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">{t('settings.skills.enabled')}</span>
                             )}
                           </div>
                           {skill.description && (
@@ -684,7 +699,7 @@ const defaultForm: ProviderFormData = {
                             onClick={() => handleDeleteSkill(skill)}
                             className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50"
                           >
-                            删除
+                            {t('settings.skills.delete')}
                           </button>
                         </div>
                       </div>
