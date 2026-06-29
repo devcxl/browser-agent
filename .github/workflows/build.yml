@@ -42,10 +42,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Build ${{ matrix.browser }}
-        run: npm run build:${{ matrix.browser }}
-      - name: Create zip
-        run: npm run zip
+      - name: Build & zip ${{ matrix.browser }}
+        run: npm run zip:${{ matrix.browser }}
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
