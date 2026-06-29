@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom';
-import { vi, beforeEach, afterEach } from 'vitest';
+import { vi, beforeEach } from 'vitest';
 
 const storage: Record<string, unknown> = {};
 
@@ -26,8 +26,6 @@ const onChanged = {
   removeListener: vi.fn(),
 };
 
-let mockCleanup: (() => void) | null = null;
-
 beforeEach(() => {
   vi.stubGlobal('browser', {
     storage: { local, onChanged },
@@ -38,9 +36,5 @@ beforeEach(() => {
       onConnect: { addListener: vi.fn(), removeListener: vi.fn() },
     },
   });
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
   Object.keys(storage).forEach((k) => delete storage[k]);
 });
