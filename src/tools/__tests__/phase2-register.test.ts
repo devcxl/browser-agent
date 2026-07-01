@@ -38,13 +38,13 @@ describe('registerPhase2Tools', () => {
     registry = createMockRegistry();
   });
 
-  it('注册 31 个工具', () => {
+  it('注册 46 个工具', () => {
     registerPhase2Tools(registry, rpc);
     const allTools = registry.getAllTools();
-    expect(allTools).toHaveLength(31);
+    expect(allTools).toHaveLength(46);
   });
 
-  it('覆盖所有 6 个 category', () => {
+  it('覆盖所有 12 个 category', () => {
     registerPhase2Tools(registry, rpc);
     const allTools = registry.getAllTools();
 
@@ -60,6 +60,14 @@ describe('registerPhase2Tools', () => {
     expect(categories.has('notifications')).toBe(true);
     expect(categories.has('storage')).toBe(true);
     expect(categories.has('system')).toBe(true);
+
+    // expert 工具
+    expect(categories.has('management')).toBe(true);
+    expect(categories.has('privacy')).toBe(true);
+    expect(categories.has('proxy')).toBe(true);
+    expect(categories.has('debugger')).toBe(true);
+    expect(categories.has('declarativeNetRequest')).toBe(true);
+    expect(categories.has('identity')).toBe(true);
   });
 
   it('cookies 工具数量正确', () => {
@@ -102,8 +110,8 @@ describe('registerPhase2Tools', () => {
     }
   });
 
-  it('registerAll 被调用 6 次（6 个域）', () => {
+  it('registerAll 被调用 7 次（7 个域）', () => {
     registerPhase2Tools(registry, rpc);
-    expect(registry.registerAll).toHaveBeenCalledTimes(6);
+    expect(registry.registerAll).toHaveBeenCalledTimes(7);
   });
 });

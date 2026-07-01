@@ -5,6 +5,7 @@ import { createDownloadsTools } from './downloads';
 import { createCookiesTools } from './cookies';
 import { createSessionsTools } from './sessions';
 import { createMiscTools } from './misc';
+import { createExpertTools } from './expert';
 
 export function registerPhase2Tools(registry: IToolRegistry, rpc: IJsonRpcClient): void {
   registry.registerAll(createBookmarksTools(rpc));
@@ -13,4 +14,5 @@ export function registerPhase2Tools(registry: IToolRegistry, rpc: IJsonRpcClient
   registry.registerAll(createCookiesTools(rpc));
   registry.registerAll(createSessionsTools(rpc));
   registry.registerAll(createMiscTools(rpc));
+  registry.registerAll(createExpertTools(rpc));
 }
