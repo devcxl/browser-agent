@@ -28,7 +28,7 @@ import type {
   SessionFilter,
   Session,
 } from '@/shared/types';
-import type { IBrowserAdapter } from './types';
+import type { IBrowserAdapter, ExtensionInfo } from './types';
 import { BrowserEvent } from './types';
 
 /**
@@ -276,4 +276,129 @@ export class ChromeAdapter implements IBrowserAdapter {
         throw new Error(`Unknown event namespace: ${namespace}`);
     }
   }
+
+  // ── Management ──────────────────────────────────────
+
+  management = {
+    getAll: async (): Promise<ExtensionInfo[]> => {
+      const infos = await chrome.management.getAll();
+      return infos.map(i => ({
+        id: i.id, name: i.name, version: i.version,
+        enabled: i.enabled, type: i.type, description: i.description,
+        mayDisable: i.mayDisable,
+        icons: i.icons?.map(ic => ({ size: ic.size, url: ic.url })),
+        optionsUrl: i.optionsUrl,
+        hostPermissions: i.hostPermissions,
+        permissions: i.permissions,
+      }));
+    },
+
+    get: async (id: string): Promise<ExtensionInfo> => {
+      const i = await chrome.management.get(id);
+      return {
+        id: i.id, name: i.name, version: i.version,
+        enabled: i.enabled, type: i.type, description: i.description,
+        mayDisable: i.mayDisable,
+        icons: i.icons?.map(ic => ({ size: ic.size, url: ic.url })),
+        optionsUrl: i.optionsUrl,
+        hostPermissions: i.hostPermissions,
+        permissions: i.permissions,
+      };
+    },
+
+    setEnabled: async (id: string, enabled: boolean): Promise<void> => {
+      await chrome.management.setEnabled(id, enabled);
+    },
+  };
+
+  // ── Privacy ─────────────────────────────────────────
+
+  privacy = {
+    getNetworkSettings: async (): Promise<Record<string, unknown>> => {
+      const ipPolicy = await (chrome.privacy.network.webRTCIPHandlingPolicy.get as any)({});
+      const saltedRemote = await (chrome.privacy.network.webRTCNonProxiedUdpEnabled.get as any)({});
+      return {
+        webRTCIPHandlingPolicy: (ipPolicy as any).value,
+        webRTCNonProxiedUdpEnabled: (saltedRemote as any).value,
+      };
+    },
+
+    setNetworkSetting: async (key: string, value: unknown): Promise<void> => {
+      const scope = 'CONTROLLABLE_BY_THIS_EXTENSION';
+      if (key === 'webRTCIPHandlingPolicy') {
+        await (chrome.privacy.network.webRTCIPHandlingPolicy.set as any)({ value, scope });
+      } else if (key === 'webRTCNonProxiedUdpEnabled') {
+        await (chrome.privacy.network.webRTCNonProxiedUdpEnabled.set as any)({ value, scope });
+      }
+    },
+  };
+
+  // ── Proxy ───────────────────────────────────────────
+
+  proxy = {
+    getSettings: async (): Promise<Record<string, unknown>> => {
+      const cfg = await (chrome.proxy.settings.get as any)({});
+      return cfg;
+    },
+
+    setSettings: async (config: Record<string, unknown>): Promise<void> => {
+      await (chrome.proxy.settings.set as any)(config);
+    },
+
+    clear: async (): Promise<void> => {
+      await (chrome.proxy.settings.clear as any)({});
+    },
+  };
+
+  // ── Debugger ─────────────────────────────────────────
+
+  debugger = {
+    getTargets: async (): Promise<{ id: string; tabId?: number; title: string; url: string; attached: boolean }[]> => {
+      const targets = await chrome.debugger.getTargets();
+      return targets.map(t => ({
+        id: t.id,
+        tabId: t.tabId,
+        title: t.title ?? '',
+        url: t.url ?? '',
+        attached: t.attached,
+      }));
+    },
+
+    attach: async (targetId: string): Promise<void> => {
+      await chrome.debugger.attach({ targetId }, '1.3');
+    },
+
+    detach: async (targetId: string): Promise<void> => {
+      await chrome.debugger.detach({ targetId });
+    },
+  };
+
+  // ── DeclarativeNetRequest ───────────────────────────
+
+  declarativeNetRequest = {
+    getDynamicRules: async (): Promise<chrome.declarativeNetRequest.Rule[]> => {
+      return chrome.declarativeNetRequest.getDynamicRules();
+    },
+
+    addDynamicRules: async (rules: chrome.declarativeNetRequest.Rule[]): Promise<void> => {
+      await chrome.declarativeNetRequest.updateDynamicRules({ addRules: rules, removeRuleIds: [] });
+    },
+
+    removeDynamicRules: async (ruleIds: number[]): Promise<void> => {
+      await chrome.declarativeNetRequest.updateDynamicRules({ addRules: [], removeRuleIds: ruleIds });
+    },
+  };
+
+  // ── Identity ─────────────────────────────────────────
+
+  identity = {
+    getAuthToken: async (details?: { interactive?: boolean; account?: { id: string } }): Promise<{ token: string }> => {
+      const result = await chrome.identity.getAuthToken(details as any);
+      return { token: result.token ?? '' };
+    },
+
+    removeCachedToken: async (token: string): Promise<void> => {
+      await chrome.identity.removeCachedAuthToken({ token });
+    },
+  };
 }

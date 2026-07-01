@@ -28,7 +28,7 @@ import type {
   SessionFilter,
   Session,
 } from '@/shared/types';
-import type { IBrowserAdapter } from './types';
+import type { IBrowserAdapter, ExtensionInfo } from './types';
 import { BrowserEvent } from './types';
 
 /**
@@ -130,7 +130,7 @@ export class FirefoxAdapter implements IBrowserAdapter {
   tabGroups = {
     query: (queryInfo: TabGroupQueryInfo): Promise<TabGroup[]> => {
       if (typeof this.browser.tabGroups?.query !== 'function') {
-        return Promise.reject(new Error('tabGroups API is not supported in this Firefox version'));
+        return Promise.resolve([]);
       }
       return this.browser.tabGroups.query(queryInfo);
     },
@@ -303,4 +303,148 @@ export class FirefoxAdapter implements IBrowserAdapter {
     if (!ns) return undefined;
     return ns[eventName];
   }
+
+  // ── Management ──────────────────────────────────────
+
+  management = {
+    getAll: async (): Promise<ExtensionInfo[]> => {
+      if (typeof this.browser?.management?.getAll !== 'function') {
+        return [];
+      }
+      const infos = await this.browser.management.getAll();
+      return infos.map((i: any) => ({
+        id: i.id, name: i.name, version: i.version,
+        enabled: i.enabled, type: i.type, description: i.description,
+        mayDisable: i.mayDisable,
+        icons: i.icons?.map((ic: any) => ({ size: ic.size, url: ic.url })),
+        optionsUrl: i.optionsUrl,
+        hostPermissions: i.hostPermissions,
+        permissions: i.permissions,
+      }));
+    },
+
+    get: async (id: string): Promise<ExtensionInfo> => {
+      if (typeof this.browser?.management?.get !== 'function') {
+        throw new Error('management API is not supported in this Firefox version');
+      }
+      const i = await this.browser.management.get(id);
+      return {
+        id: i.id, name: i.name, version: i.version,
+        enabled: i.enabled, type: i.type, description: i.description,
+        mayDisable: i.mayDisable,
+        icons: i.icons?.map((ic: any) => ({ size: ic.size, url: ic.url })),
+        optionsUrl: i.optionsUrl,
+        hostPermissions: i.hostPermissions,
+        permissions: i.permissions,
+      };
+    },
+
+    setEnabled: async (id: string, enabled: boolean): Promise<void> => {
+      if (typeof this.browser?.management?.setEnabled !== 'function') {
+        throw new Error('management API is not supported in this Firefox version');
+      }
+      await this.browser.management.setEnabled(id, enabled);
+    },
+  };
+
+  // ── Privacy ─────────────────────────────────────────
+
+  privacy = {
+    getNetworkSettings: async (): Promise<Record<string, unknown>> => {
+      if (typeof this.browser?.privacy?.network?.webRTCIPHandlingPolicy?.get !== 'function') {
+        return {};
+      }
+      const ipPolicy = await this.browser.privacy.network.webRTCIPHandlingPolicy.get({});
+      const saltedRemote = await this.browser.privacy.network.webRTCNonProxiedUdpEnabled.get({});
+      return {
+        webRTCIPHandlingPolicy: ipPolicy.value,
+        webRTCNonProxiedUdpEnabled: saltedRemote.value,
+      };
+    },
+
+    setNetworkSetting: async (key: string, value: unknown): Promise<void> => {
+      if (typeof this.browser?.privacy?.network !== 'object') {
+        throw new Error('privacy API is not supported in this Firefox version');
+      }
+      const scope = 'CONTROLLABLE_BY_THIS_EXTENSION';
+      if (key === 'webRTCIPHandlingPolicy') {
+        await this.browser.privacy.network.webRTCIPHandlingPolicy.set({ value, scope });
+      } else if (key === 'webRTCNonProxiedUdpEnabled') {
+        await this.browser.privacy.network.webRTCNonProxiedUdpEnabled.set({ value, scope });
+      }
+    },
+  };
+
+  // ── Proxy ───────────────────────────────────────────
+
+  proxy = {
+    getSettings: async (): Promise<Record<string, unknown>> => {
+      if (typeof this.browser?.proxy?.settings?.get !== 'function') {
+        return {};
+      }
+      const cfg = await this.browser.proxy.settings.get({});
+      return cfg;
+    },
+
+    setSettings: async (config: Record<string, unknown>): Promise<void> => {
+      if (typeof this.browser?.proxy?.settings?.set !== 'function') {
+        throw new Error('proxy API is not supported in this Firefox version');
+      }
+      await this.browser.proxy.settings.set(config);
+    },
+
+    clear: async (): Promise<void> => {
+      if (typeof this.browser?.proxy?.settings?.clear !== 'function') {
+        throw new Error('proxy API is not supported in this Firefox version');
+      }
+      await this.browser.proxy.settings.clear({});
+    },
+  };
+
+  // ── Debugger ─────────────────────────────────────────
+  // Firefox 不支持 chrome.debugger API
+
+  debugger = {
+    getTargets: async (): Promise<{ id: string; tabId?: number; title: string; url: string; attached: boolean }[]> => {
+      return [];
+    },
+
+    attach: async (_targetId: string): Promise<void> => {
+      throw new Error('debugger API is not supported in Firefox');
+    },
+
+    detach: async (_targetId: string): Promise<void> => {
+      throw new Error('debugger API is not supported in Firefox');
+    },
+  };
+
+  // ── DeclarativeNetRequest ───────────────────────────
+  // Firefox 不支持 declarativeNetRequest API
+
+  declarativeNetRequest = {
+    getDynamicRules: async (): Promise<chrome.declarativeNetRequest.Rule[]> => {
+      return [];
+    },
+
+    addDynamicRules: async (_rules: chrome.declarativeNetRequest.Rule[]): Promise<void> => {
+      throw new Error('declarativeNetRequest API is not supported in Firefox');
+    },
+
+    removeDynamicRules: async (_ruleIds: number[]): Promise<void> => {
+      throw new Error('declarativeNetRequest API is not supported in Firefox');
+    },
+  };
+
+  // ── Identity ─────────────────────────────────────────
+  // Firefox 不支持 chrome.identity API
+
+  identity = {
+    getAuthToken: async (): Promise<{ token: string }> => {
+      throw new Error('identity API is not supported in Firefox');
+    },
+
+    removeCachedToken: async (_token: string): Promise<void> => {
+      throw new Error('identity API is not supported in Firefox');
+    },
+  };
 }

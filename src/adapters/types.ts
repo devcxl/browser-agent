@@ -29,6 +29,22 @@ import type {
   Session,
 } from '@/shared/types';
 
+// ==================== ExtensionInfo ====================
+
+export interface ExtensionInfo {
+  id: string;
+  name: string;
+  version: string;
+  enabled: boolean;
+  type: string;
+  description?: string;
+  mayDisable?: boolean;
+  icons?: { size: number; url: string }[];
+  optionsUrl?: string;
+  hostPermissions?: string[];
+  permissions?: string[];
+}
+
 // ==================== IBrowserAdapter ====================
 
 export interface IBrowserAdapter {
@@ -161,6 +177,52 @@ export interface IBrowserAdapter {
   clipboard: {
     read(): Promise<string>;
     write(text: string): Promise<void>;
+  };
+
+  // ── Management ──────────────────────────────────────
+
+  management: {
+    getAll(): Promise<ExtensionInfo[]>;
+    get(id: string): Promise<ExtensionInfo>;
+    setEnabled(id: string, enabled: boolean): Promise<void>;
+  };
+
+  // ── Privacy ─────────────────────────────────────────
+
+  privacy: {
+    getNetworkSettings(): Promise<Record<string, unknown>>;
+    setNetworkSetting(key: string, value: unknown): Promise<void>;
+  };
+
+  // ── Proxy ───────────────────────────────────────────
+
+  proxy: {
+    getSettings(): Promise<Record<string, unknown>>;
+    setSettings(config: Record<string, unknown>): Promise<void>;
+    clear(): Promise<void>;
+  };
+
+  // ── Debugger ───────────────────────────────────────
+
+  debugger: {
+    getTargets(): Promise<{ id: string; tabId?: number; title: string; url: string; attached: boolean }[]>;
+    attach(targetId: string): Promise<void>;
+    detach(targetId: string): Promise<void>;
+  };
+
+  // ── DeclarativeNetRequest ─────────────────────────
+
+  declarativeNetRequest: {
+    getDynamicRules(): Promise<chrome.declarativeNetRequest.Rule[]>;
+    addDynamicRules(rules: chrome.declarativeNetRequest.Rule[]): Promise<void>;
+    removeDynamicRules(ruleIds: number[]): Promise<void>;
+  };
+
+  // ── Identity ──────────────────────────────────────
+
+  identity: {
+    getAuthToken(details?: { interactive?: boolean; account?: { id: string } }): Promise<{ token: string }>;
+    removeCachedToken(token: string): Promise<void>;
   };
 }
 
