@@ -103,6 +103,7 @@ export type {
   StorageSchema,
   AgentSettings,
   ExpertModeSettings,
+  ExpertApiDomain,
   UserPreferences,
   DbConversation,
   DbMessage,
@@ -111,6 +112,6 @@ export type {
   IConfigStore,
 } from './storage';
 
-export { DB_NAME, DB_VERSION } from './storage';
+export { DB_NAME, DB_VERSION, EXPERT_API_DOMAINS } from './storage';
 
 export type { Skill, ISkillStore, SkillResource, SkillSubscription } from './skill';

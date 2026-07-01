@@ -44,6 +44,20 @@ export interface ExpertModeSettings {
   switches: Record<string, boolean>;
 }
 
+/** Expert Mode 支持的 API 域列表 */
+export const EXPERT_API_DOMAINS = [
+  'proxy',
+  'debugger',
+  'management',
+  'privacy',
+  'webRequest',
+  'declarativeNetRequest',
+  'nativeMessaging',
+  'identity',
+] as const;
+
+export type ExpertApiDomain = typeof EXPERT_API_DOMAINS[number];
+
 export interface UserPreferences {
   /** UI 主题 */
   theme: 'light' | 'dark' | 'system';

@@ -21,7 +21,13 @@ export type ToolCategory =
   | 'sidePanel'
   | 'alarms'
   | 'system'
-  | 'expert';
+  | 'expert'
+  | 'management'
+  | 'privacy'
+  | 'proxy'
+  | 'debugger'
+  | 'declarativeNetRequest'
+  | 'identity';
 
 /** 数据敏感级别 */
 export type SensitivityLevel = 'low' | 'sensitive' | 'critical';
@@ -103,6 +109,8 @@ export interface ToolDefinition {
   resultSensitivity: SensitivityLevel;
   /** Expert Mode 专用标记 */
   expertOnly?: boolean;
+  /** Expert API 域，标识此工具对应哪个 Expert 开关（expertOnly 时必填） */
+  expertSwitch?: string;
   /** 执行函数 */
   execute: (params: Record<string, unknown>) => Promise<ToolResult>;
   /** Preflight 函数（高风险工具必须实现） */

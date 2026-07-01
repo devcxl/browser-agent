@@ -2,6 +2,7 @@ import type { ProviderConfig, ReasoningEffort } from './llm';
 import type { LowSensitivityContext } from './browser';
 import type { RiskLevel, ToolResult } from './tool';
 import type { Skill } from './skill';
+import type { ExpertModeSettings } from './storage';
 
 // ==================== Agent 配置 ====================
 
@@ -27,6 +28,8 @@ export interface AgentRunInput {
   abortSignal?: AbortSignal;
   /** 可用技能列表，用于 skill tool call 拦截和 context 注入 */
   skills?: Skill[];
+  /** Expert Mode 设置 */
+  expertModeSettings?: ExpertModeSettings;
 }
 
 export interface AgentRunOutput {
