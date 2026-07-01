@@ -12,6 +12,7 @@ export default defineConfig({
 
     const permissions: string[] = [
       'tabs',
+      'tabGroups',
       'storage',
       'sessions',
       'alarms',
@@ -22,8 +23,10 @@ export default defineConfig({
     ];
 
     if (!isFirefox) {
-      permissions.push('windows', 'tabGroups');
+      permissions.push('windows');
     }
+
+    permissions.push('management', 'privacy', 'proxy');
 
     if (isMv3) {
       permissions.push('scripting');
@@ -33,6 +36,7 @@ export default defineConfig({
       permissions.push(
         'sidePanel', 'clipboardRead', 'clipboardWrite',
         'notifications', 'contextMenus',
+        'debugger', 'declarativeNetRequest', 'identity',
       );
     }
 
