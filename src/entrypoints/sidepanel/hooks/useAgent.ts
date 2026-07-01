@@ -9,6 +9,7 @@ import type { IGuardrail } from '@/shared/types/guardrail';
 import type { IConversationManager } from '@/shared/types/conversation';
 import type { IJsonRpcClient } from '@/shared/types';
 import { uid } from '../utils';
+import { ConfigStore } from '@/shared/storage';
 
 import type { ISkillStore } from '@/shared/types/skill';
 
@@ -258,6 +259,9 @@ export function useAgent() {
         const enabledSkills = await skillStore.getEnabled();
         const readySkills = await skillStore.loadReady(enabledSkills);
 
+        // 从 ConfigStore 读取 Expert Mode 设置
+        const expertModeSettings = await ConfigStore.getInstance().get('expertModeSettings');
+
         const output = await loop.run({
           conversationId,
           userMessage,
@@ -268,6 +272,7 @@ export function useAgent() {
             tabGroups: [],
           },
           skills: readySkills,
+          expertModeSettings,
         });
 
         // 兜底：hooks 未覆盖的场景（如 maxToolRounds 终止、无效工具等）

@@ -65,7 +65,8 @@
       "provider": "Provider",
       "agent": "Agent",
       "expert": "Expert Mode",
-      "skills": "Skills"
+      "skills": "Skills",
+      "language": "Language"
     },
     "provider": {
       "noProviders": "No providers configured",
@@ -114,8 +115,17 @@
     },
     "expert": {
       "title": "Expert Mode",
-      "subSwitchHint": "Sub-switch configuration (feature flag control)",
-      "addSwitch": "+ Add Sub-switch"
+      "subSwitchHint": "Enable specific API domains after turning on Expert Mode",
+      "domains": {
+        "proxy": "Control browser proxy settings",
+        "debugger": "Attach DevTools debugger to inspect page JavaScript execution",
+        "management": "Manage extension installation, uninstallation, enable/disable",
+        "privacy": "Read and modify browser privacy settings",
+        "webRequest": "Intercept and modify network requests",
+        "declarativeNetRequest": "Declarative network request rules, block or redirect requests",
+        "nativeMessaging": "Communicate with native applications",
+        "identity": "OAuth2 identity authentication"
+      }
     },
     "skills": {
       "panelTitle": "Skill Management",

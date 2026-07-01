@@ -6,6 +6,7 @@ import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
 import { cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
+import { EXPERT_API_DOMAINS } from '@/shared/types';
 
 interface Props {
   providers: ProviderConfig[];
@@ -39,7 +40,7 @@ export function SettingsPanel({
   onClose,
 }: Props) {
   const { t, locale, setLanguage } = useI18n();
-  const [tab, setTab] = useState<'provider' | 'agent' | 'expert' | 'skills'>('provider');
+  const [tab, setTab] = useState<'provider' | 'agent' | 'expert' | 'skills' | 'language'>('provider');
   const [editing, setEditing] = useState<ProviderFormData | null>(null);
   const [testingIdx, setTestingIdx] = useState<number | null>(null);
   const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
@@ -223,21 +224,8 @@ export function SettingsPanel({
           </button>
         </div>
 
-        {/* Language selector */}
-        <div className="px-5 py-3 border-b border-hairline">
-          <label className="text-xs font-medium text-mute mr-2">{t('settings.language')}</label>
-          <select
-            value={locale}
-            onChange={(e) => setLanguage(e.target.value as 'zh-CN' | 'en')}
-            className="px-2 py-1 text-sm border border-hairline rounded-md bg-canvas text-ink"
-          >
-            <option value="zh-CN">中文</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-
         <div className="flex border-b border-hairline px-5">
-          {(['provider', 'agent', 'expert', 'skills'] as const).map((tabKey) => (
+          {(['provider', 'agent', 'expert', 'skills', 'language'] as const).map((tabKey) => (
             <button
               key={tabKey}
               type="button"
@@ -254,18 +242,6 @@ export function SettingsPanel({
             </button>
           ))}
 
-        </div>
-
-        <div className="flex items-center gap-2 px-5 py-2 border-b border-hairline">
-          <label className="text-xs font-medium text-mute">{t('settings.language')}</label>
-          <select
-            value={locale}
-            onChange={(e) => setLanguage(e.target.value as 'zh-CN' | 'en')}
-            className="px-2 py-1 text-xs border border-hairline rounded-md bg-canvas text-ink"
-          >
-            <option value="zh-CN">中文</option>
-            <option value="en">English</option>
-          </select>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -506,34 +482,25 @@ export function SettingsPanel({
               {expertMode.enabled && (
                 <div className="ml-5 space-y-2 border-l-2 border-hairline-strong pl-3">
                   <p className="text-xs text-mute">{t('settings.expert.subSwitchHint')}</p>
-                  {Object.entries(expertMode.switches).map(([key, val]) => (
-                    <label key={key} className="flex items-center gap-2">
+                  {EXPERT_API_DOMAINS.map((domain) => (
+                    <div key={domain} className="flex items-start gap-2 py-1">
                       <input
                         type="checkbox"
-                        checked={val}
+                        checked={expertMode.switches[domain] ?? false}
                         onChange={(e) =>
                           onSaveExpertMode({
                             ...expertMode,
-                            switches: { ...expertMode.switches, [key]: e.target.checked },
+                            switches: { ...expertMode.switches, [domain]: e.target.checked },
                           })
                         }
-                        className="rounded-sm"
+                        className="mt-0.5 rounded-sm shrink-0"
                       />
-                      <span className="text-sm text-mute">{key}</span>
-                    </label>
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium text-ink">{domain}</span>
+                        <p className="text-xs text-mute leading-tight">{t(`settings.expert.domains.${domain}` as any)}</p>
+                      </div>
+                    </div>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onSaveExpertMode({
-                        ...expertMode,
-                        switches: { ...expertMode.switches, 'new-switch': false },
-                      })
-                    }
-                    className="text-xs text-primary hover:text-primary-active"
-                  >
-                    {t('settings.expert.addSwitch')}
-                  </button>
                 </div>
               )}
             </div>
@@ -720,6 +687,22 @@ export function SettingsPanel({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {tab === 'language' && (
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-sm font-medium text-ink">{t('settings.language')}</span>
+                <select
+                  value={locale}
+                  onChange={(e) => setLanguage(e.target.value as 'zh-CN' | 'en')}
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                >
+                  <option value="zh-CN">中文</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
             </div>
           )}
         </div>

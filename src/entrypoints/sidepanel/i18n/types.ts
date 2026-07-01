@@ -110,7 +110,16 @@ export interface MessageSchema {
     expert: {
       title: string;
       subSwitchHint: string;
-      addSwitch: string;
+      domains: {
+        proxy: string;
+        debugger: string;
+        management: string;
+        privacy: string;
+        webRequest: string;
+        declarativeNetRequest: string;
+        nativeMessaging: string;
+        identity: string;
+      };
     };
     skills: {
       panelTitle: string;

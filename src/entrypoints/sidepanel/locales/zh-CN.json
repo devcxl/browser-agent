@@ -65,7 +65,8 @@
       "provider": "Provider",
       "agent": "Agent",
       "expert": "Expert Mode",
-      "skills": "Skills"
+      "skills": "Skills",
+      "language": "语言"
     },
     "provider": {
       "noProviders": "暂无 Provider 配置",
@@ -114,8 +115,17 @@
     },
     "expert": {
       "title": "Expert Mode",
-      "subSwitchHint": "子开关配置（功能灰度控制）",
-      "addSwitch": "+ 添加子开关"
+      "subSwitchHint": "开启 Expert Mode 后，逐个开启以下 API 域",
+      "domains": {
+        "proxy": "控制浏览器代理设置",
+        "debugger": "附加 DevTools 调试器，检查页面 JavaScript 执行",
+        "management": "管理扩展安装、卸载、启用/禁用",
+        "privacy": "读取和修改浏览器隐私设置",
+        "webRequest": "拦截和修改网络请求",
+        "declarativeNetRequest": "声明式网络请求规则，屏蔽或重定向请求",
+        "nativeMessaging": "与本地原生应用通信",
+        "identity": "OAuth2 身份认证"
+      }
     },
     "skills": {
       "panelTitle": "技能管理",
