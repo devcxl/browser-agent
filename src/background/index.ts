@@ -12,6 +12,12 @@ import { StorageProxy } from './proxies/storage-proxy';
 import { BrowserEventHub } from './browser-event-hub';
 import { CapabilityDetector } from './capability-detector';
 import { ContentBridge } from './content-bridge';
+import { ManagementProxy } from './proxies/management-proxy';
+import { PrivacyProxy } from './proxies/privacy-proxy';
+import { ProxySettingsProxy } from './proxies/proxy-proxy';
+import { DebuggerProxy } from './proxies/debugger-proxy';
+import { DnrProxy } from './proxies/dnr-proxy';
+import { IdentityProxy } from './proxies/identity-proxy';
 import { getAdapter } from '@/adapters';
 
 export function initBackground(): {
@@ -33,6 +39,12 @@ export function initBackground(): {
   const eventHub = new BrowserEventHub(adapter);
   const capabilityDetector = new CapabilityDetector(adapter);
   const contentBridge = new ContentBridge();
+  const managementProxy = new ManagementProxy(adapter);
+  const privacyProxy = new PrivacyProxy(adapter);
+  const proxySettingsProxy = new ProxySettingsProxy(adapter);
+  const debuggerProxy = new DebuggerProxy(adapter);
+  const dnrProxy = new DnrProxy(adapter);
+  const identityProxy = new IdentityProxy(adapter);
 
   const resolveContentTabId = async (tabId: unknown): Promise<number> => {
     if (typeof tabId === 'number') return tabId;
@@ -144,6 +156,34 @@ export function initBackground(): {
 
     return { success: true, data: { viewId, url } };
   });
+
+  // ── Expert: Management ─────────────────────────────
+  router.register('management.getAll', () => managementProxy.getAll());
+  router.register('management.get', (p) => managementProxy.get(p as any));
+  router.register('management.setEnabled', (p) => managementProxy.setEnabled(p as any));
+
+  // ── Expert: Privacy ────────────────────────────────
+  router.register('privacy.getNetworkSettings', () => privacyProxy.getNetworkSettings());
+  router.register('privacy.setNetworkSetting', (p) => privacyProxy.setNetworkSetting(p as any));
+
+  // ── Expert: Proxy ──────────────────────────────────
+  router.register('proxy.getSettings', () => proxySettingsProxy.getSettings());
+  router.register('proxy.setSettings', (p) => proxySettingsProxy.setSettings(p as any));
+  router.register('proxy.clear', () => proxySettingsProxy.clear());
+
+  // ── Expert: Debugger ──────────────────────────────
+  router.register('debugger.getTargets', () => debuggerProxy.getTargets());
+  router.register('debugger.attach', (p) => debuggerProxy.attach(p as any));
+  router.register('debugger.detach', (p) => debuggerProxy.detach(p as any));
+
+  // ── Expert: DeclarativeNetRequest ─────────────────
+  router.register('dnr.getDynamicRules', () => dnrProxy.getDynamicRules());
+  router.register('dnr.addDynamicRules', (p) => dnrProxy.addDynamicRules(p as any));
+  router.register('dnr.removeDynamicRules', (p) => dnrProxy.removeDynamicRules(p as any));
+
+  // ── Expert: Identity ──────────────────────────────
+  router.register('identity.getAuthToken', (p) => identityProxy.getAuthToken(p as any));
+  router.register('identity.clearCachedToken', (p) => identityProxy.clearCachedToken(p as any));
 
   // 管理已连接的 Chat Page Port
   const connectedPorts = new Set<ReturnType<typeof browser.runtime.connect>>();
