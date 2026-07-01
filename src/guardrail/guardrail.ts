@@ -33,6 +33,17 @@ export class Guardrail implements IGuardrail {
       };
     }
 
+    if (tool.expertOnly && tool.expertSwitch && !context.expertSwitches[tool.expertSwitch]) {
+      return {
+        allowed: false,
+        riskLevel: 'critical',
+        requiresPreflight: false,
+        requiresConfirmation: false,
+        reason: `工具 ${toolName} 需要开启 Expert API: ${tool.expertSwitch}`,
+        dataSensitivity: tool.resultSensitivity,
+      };
+    }
+
     return this.evaluateRisk(tool, context);
   }
 
@@ -62,6 +73,9 @@ export class Guardrail implements IGuardrail {
       case 'critical':
         if (!context.expertModeEnabled) {
           return { ...base, allowed: false, reason: 'Critical 操作需要 Expert Mode' };
+        }
+        if (tool.expertSwitch && !context.expertSwitches[tool.expertSwitch]) {
+          return { ...base, allowed: false, reason: `Critical 操作需要开启 Expert API: ${tool.expertSwitch}` };
         }
         base.requiresPreflight = true;
         base.requiresConfirmation = true;

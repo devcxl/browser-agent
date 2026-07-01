@@ -322,8 +322,8 @@ export class AgentLoop implements IAgentRuntime {
 
             const guardrailContext: GuardrailContext = {
               isLocalTrusted: input.providerConfig.isLocalTrusted,
-              expertModeEnabled: false,
-              expertSwitches: {},
+              expertModeEnabled: input.expertModeSettings?.enabled ?? false,
+              expertSwitches: input.expertModeSettings?.switches ?? {},
               sessionGrants: { sensitiveDataAllowed: false },
             };
 
