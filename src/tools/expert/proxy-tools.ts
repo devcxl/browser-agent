@@ -1,4 +1,4 @@
-import type { IJsonRpcClient, ToolDefinition, PreflightResult } from '@/shared/types';
+import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
 
 export function createProxyGetSettingsTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
