@@ -1,127 +1,141 @@
 # Browser Agent Extension
 
-> AI 驱动的浏览器 Agent 扩展 — 通过自然语言管理标签页、窗口、书签、历史记录、下载、Cookie 等浏览器数据。
+<p align="center">
+  <a href="README.zh.md">中文文档</a> | <a href="README.md">English</a>
+</p>
 
-## 特性
+<p align="center">
+  <em>AI-powered browser agent extension — control tabs, windows, bookmarks, history, downloads, cookies, and more with natural language.</em>
+</p>
 
-- 🧠 **自然语言交互** — 在侧边栏聊天界面中用自然语言控制浏览器
-- 🗂️ **全方位浏览器管理** — 标签页、窗口、分组、书签、历史、下载、Cookie、会话等
-- 🔒 **Guardrail 安全机制** — 敏感操作需用户确认，防止误操作
-- 🎯 **双浏览器支持** — Chrome (MV3) + Firefox 同时支持
-- 🧩 **可扩展工具系统** — 分阶段注册，支持 Expert Mode
-- 🎤 **语音输入** — 支持语音交互（开发中）
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/devcxl/browser-agent" alt="License"></a>
+  <a href="https://github.com/devcxl/browser-agent/releases"><img src="https://img.shields.io/github/v/release/devcxl/browser-agent" alt="Release"></a>
+  <a href="https://github.com/devcxl/browser-agent/actions"><img src="https://img.shields.io/github/actions/workflow/status/devcxl/browser-agent/build.yml" alt="Build"></a>
+  <a href="https://chrome.google.com/webstore"><img src="https://img.shields.io/badge/Chrome-MV3-blue" alt="Chrome"></a>
+  <a href="https://addons.mozilla.org"><img src="https://img.shields.io/badge/Firefox-MV2-orange" alt="Firefox"></a>
+</p>
 
-## 快速开始
+## Features
+
+- 🧠 **Natural Language** — Control your browser via a sidebar chat interface
+- 🗂️ **Full Browser Management** — Tabs, windows, groups, bookmarks, history, downloads, cookies, sessions, and more
+- 🔒 **Safety Guardrails** — Sensitive operations require user confirmation to prevent accidents
+- 🎯 **Cross-Browser** — Supports both Chrome (MV3) and Firefox
+- 🧩 **Extensible Tool System** — Phased registration with Expert Mode support
+- 🎤 **Voice Input** — Voice interaction support (in development)
+
+## Quick Start
 
 ```bash
-# 安装依赖
+# Install dependencies
 npm install
 
-# 开发模式（Chrome）
+# Dev mode (Chrome)
 npm run dev:chrome
 
-# 开发模式（Firefox）
+# Dev mode (Firefox)
 npm run dev:firefox
 
-# 构建
+# Build
 npm run build
 
-# 构建所有浏览器版本
+# Build all browser versions
 npm run build:all
 
-# 运行测试
+# Run tests
 npm run test:run
 
 # Lint
 npm run lint
 
-# 类型检查
+# Type check
 npm run typecheck
 ```
 
-## 技术栈
+## Tech Stack
 
-| 类别 | 技术 |
-|------|------|
-| 框架 | [WXT](https://wxt.dev) — Next-gen Web Extension Framework |
+| Category | Technology |
+|----------|-----------|
+| Framework | [WXT](https://wxt.dev) — Next-gen Web Extension Framework |
 | UI | React 18 + TypeScript |
-| 样式 | TailwindCSS v4 |
-| 构建 | Vite |
-| 测试 | Vitest + Playwright + Testing Library |
+| Styling | TailwindCSS v4 |
+| Build | Vite |
+| Testing | Vitest + Playwright + Testing Library |
 | Lint | ESLint + Prettier |
 
-## 项目结构
+## Project Structure
 
 ```
 src/
-├── adapters/        # Chrome/Firefox 浏览器适配层
-├── agent/           # Agent 循环、上下文构建、系统提示词
-├── background/      # Service Worker 后台逻辑
-├── chat/            # 聊天相关逻辑
+├── adapters/        # Chrome/Firefox browser adapter layer
+├── agent/           # Agent loop, context, system prompts
+├── background/      # Service Worker logic
+├── chat/            # Chat logic
 ├── content/         # Content Script
-├── conversation/    # 会话管理
-├── entrypoints/     # WXT 入口
+├── conversation/    # Conversation management
+├── entrypoints/     # WXT entrypoints
 │   ├── background.ts
 │   ├── content.ts
-│   └── sidepanel/   # 侧边栏 UI (App.tsx + 组件)
-├── guardrail/       # 安全护栏、操作确认
-├── provider/        # LLM 客户端、语音识别客户端
-├── registry/        # 工具注册
-├── tools/           # 浏览器 API 工具
-│   ├── tabs/        # 标签页操作
-│   ├── bookmarks/   # 书签操作
-│   ├── cookies/     # Cookie 操作
-│   ├── downloads/   # 下载管理
-│   ├── history/     # 历史记录
-│   ├── sessions/    # 会话快照
-│   ├── windows/     # 窗口管理
-│   ├── tabgroups/   # 标签组分
-│   ├── page/        # 页面内容读取
-│   └── misc/        # 其他工具
-├── types/           # 类型定义
-└── shared/          # 共享工具函数
+│   └── sidepanel/   # Sidebar UI (App.tsx + components)
+├── guardrail/       # Safety guardrails, confirmation
+├── provider/        # LLM & voice recognition clients
+├── registry/        # Tool registration
+├── tools/           # Browser API tools
+│   ├── tabs/        # Tab operations
+│   ├── bookmarks/   # Bookmark operations
+│   ├── cookies/     # Cookie operations
+│   ├── downloads/   # Download management
+│   ├── history/     # History
+│   ├── sessions/    # Session snapshots
+│   ├── windows/     # Window management
+│   ├── tabgroups/   # Tab groups
+│   ├── page/        # Page content reading
+│   └── misc/        # Miscellaneous
+├── types/           # Type definitions
+└── shared/          # Shared utilities
 ```
 
-## 构建产物
+## Build Outputs
 
-| 浏览器 | Manifest | 输出目录 |
-|--------|----------|----------|
+| Browser | Manifest | Output |
+|---------|----------|--------|
 | Chrome | MV3 | `.output/chrome-mv3/` |
 | Firefox | MV2 | `.output/firefox-mv2/` |
 
 ```bash
-# 打包为 zip
+# Package as zip
 npm run zip
 
-# 全量构建 + 校验
+# Full build + verification
 npm run pre-release
 ```
 
-## 能力覆盖
+## Capabilities
 
-**默认能力：** tabs, windows, tabGroups, bookmarks, history, downloads, sessions, page content, cookies, storage, clipboard, notifications, contextMenus, sidePanel (Chrome), alarms
+**Default:** tabs, windows, tabGroups, bookmarks, history, downloads, sessions, page content, cookies, storage, clipboard, notifications, contextMenus, sidePanel (Chrome), alarms
 
-**Expert Mode（手动开启）：** proxy, privacy, management, debugger, webRequest, declarativeNetRequest, nativeMessaging, identity
+**Expert Mode (manual enable):** proxy, privacy, management, debugger, webRequest, declarativeNetRequest, nativeMessaging, identity
 
-## 开发指南
+## Development Guide
 
 ```bash
-# 运行测试（watch 模式）
+# Run tests (watch mode)
 npm run test
 
-# 运行特定测试
+# Run specific tests
 npx vitest run src/tools/tabs
 
-# E2E 测试
+# E2E tests
 npx playwright test
 
-# 格式化代码
+# Format code
 npm run format
 ```
 
-## 文档
+## Documentation
 
 - [PRD](docs/prd/PRD.md)
-- [设计文档](docs/design/)
-- [Review 记录](docs/review/)
-- [问题诊断](docs/dev/)
+- [Design Docs](docs/design/)
+- [Review Records](docs/review/)
+- [Issue Diagnosis](docs/dev/)
