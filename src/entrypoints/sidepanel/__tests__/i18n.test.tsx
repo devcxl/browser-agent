@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { I18nProvider } from '../i18n/I18nProvider';
 import { useI18n } from '../i18n/useI18n';
@@ -103,8 +103,10 @@ describe('I18nProvider + useI18n', () => {
       </I18nProvider>,
     );
 
-    expect(await screen.findByTestId('locale')).toHaveTextContent('en');
-    expect(await screen.findByTestId('common-send')).toHaveTextContent('Send');
+    await waitFor(() => {
+      expect(screen.getByTestId('locale')).toHaveTextContent('en');
+    });
+    expect(screen.getByTestId('common-send')).toHaveTextContent('Send');
   });
 
   it('replaces template variables in locale strings', async () => {
