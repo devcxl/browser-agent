@@ -26,17 +26,23 @@ export default defineConfig({
       permissions.push('windows');
     }
 
-    permissions.push('management', 'privacy', 'proxy');
+    permissions.push('privacy', 'proxy');
 
     if (isMv3) {
       permissions.push('scripting');
     }
 
+    const optional_permissions: string[] = ['management'];
+
     if (!isFirefox) {
       permissions.push(
-        'sidePanel', 'clipboardRead', 'clipboardWrite',
+        'sidePanel',
         'notifications', 'contextMenus',
-        'debugger', 'declarativeNetRequest', 'identity',
+        'declarativeNetRequest',
+      );
+      optional_permissions.push(
+        'clipboardRead', 'clipboardWrite',
+        'debugger',
       );
     }
 
@@ -44,6 +50,7 @@ export default defineConfig({
       name: 'Browser Agent',
       description: 'AI-powered browser agent extension - manage tabs, bookmarks, history, and more with natural language',
       permissions,
+      optional_permissions,
       host_permissions: ['<all_urls>'],
       action: {
         default_title: 'Browser Agent',
