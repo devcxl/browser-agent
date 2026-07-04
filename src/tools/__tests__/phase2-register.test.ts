@@ -38,13 +38,13 @@ describe('registerPhase2Tools', () => {
     registry = createMockRegistry();
   });
 
-  it('注册 46 个工具', () => {
+  it('注册 44 个工具', () => {
     registerPhase2Tools(registry, rpc);
     const allTools = registry.getAllTools();
-    expect(allTools).toHaveLength(46);
+    expect(allTools).toHaveLength(44);
   });
 
-  it('覆盖所有 12 个 category', () => {
+  it('覆盖所有 10 个 category', () => {
     registerPhase2Tools(registry, rpc);
     const allTools = registry.getAllTools();
 
@@ -67,7 +67,6 @@ describe('registerPhase2Tools', () => {
     expect(categories.has('proxy')).toBe(true);
     expect(categories.has('debugger')).toBe(true);
     expect(categories.has('declarativeNetRequest')).toBe(true);
-    expect(categories.has('identity')).toBe(true);
   });
 
   it('cookies 工具数量正确', () => {

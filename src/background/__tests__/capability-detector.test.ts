@@ -38,7 +38,6 @@ const ALL_APIS: Record<string, any> = {
   webRequest: {},
   declarativeNetRequest: {},
   runtime: { connectNative: {} },
-  identity: {},
 };
 
 describe('CapabilityDetector', () => {
@@ -71,11 +70,11 @@ describe('CapabilityDetector', () => {
       expect(caps.cookies).toBe(true);
     });
 
-    it('覆盖全部 22 个能力域', () => {
+    it('覆盖全部 21 个能力域', () => {
       const detector = new CapabilityDetector(adapter);
       const caps = detector.detect();
       const keys = Object.keys(caps);
-      expect(keys).toHaveLength(22);
+      expect(keys).toHaveLength(21);
       for (const v of Object.values(caps)) {
         expect(typeof v).toBe('boolean');
       }

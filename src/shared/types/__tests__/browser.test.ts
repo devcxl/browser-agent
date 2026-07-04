@@ -161,7 +161,7 @@ describe('Browser types', () => {
   });
 
   describe('Capabilities', () => {
-    it('should have all 22 boolean fields', () => {
+    it('should have all 21 boolean fields', () => {
       const caps: Capabilities = {
         tabs: true,
         windows: true,
@@ -184,10 +184,9 @@ describe('Browser types', () => {
         webRequest: false,
         declarativeNetRequest: false,
         nativeMessaging: false,
-        identity: false,
       };
       const fields = Object.keys(caps) as (keyof Capabilities)[];
-      expect(fields).toHaveLength(22);
+      expect(fields).toHaveLength(21);
     });
   });
 

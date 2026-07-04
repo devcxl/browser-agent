@@ -34,6 +34,7 @@ function makeContext(overrides: Partial<GuardrailContext> = {}): GuardrailContex
     isLocalTrusted: false,
     expertModeEnabled: false,
     expertSwitches: {},
+    grantedPermissions: [],
     sessionGrants: { sensitiveDataAllowed: false },
     ...overrides,
   };

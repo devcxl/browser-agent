@@ -12,6 +12,7 @@ describe('Guardrail types', () => {
         isLocalTrusted: false,
         expertModeEnabled: false,
         expertSwitches: {},
+        grantedPermissions: [],
         sessionGrants: { sensitiveDataAllowed: false },
       };
       expect(ctx.isLocalTrusted).toBe(false);
