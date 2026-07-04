@@ -324,6 +324,7 @@ export class AgentLoop implements IAgentRuntime {
               isLocalTrusted: input.providerConfig.isLocalTrusted,
               expertModeEnabled: input.expertModeSettings?.enabled ?? false,
               expertSwitches: input.expertModeSettings?.switches ?? {},
+              grantedPermissions: input.grantedPermissions ?? [],
               sessionGrants: { sensitiveDataAllowed: false },
             };
 

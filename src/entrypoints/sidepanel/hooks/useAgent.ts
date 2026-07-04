@@ -262,6 +262,17 @@ export function useAgent() {
         // 从 ConfigStore 读取 Expert Mode 设置
         const expertModeSettings = await ConfigStore.getInstance().get('expertModeSettings');
 
+        // 检测已授予的可选权限
+        let grantedPermissions: string[] = [];
+        try {
+          const result = await chrome.permissions.contains({
+            permissions: ['management', 'debugger', 'clipboardRead', 'clipboardWrite'],
+          });
+          if (result) grantedPermissions = ['management', 'debugger', 'clipboardRead', 'clipboardWrite'];
+        } catch {
+          grantedPermissions = [];
+        }
+
         const output = await loop.run({
           conversationId,
           userMessage,
@@ -273,6 +284,7 @@ export function useAgent() {
           },
           skills: readySkills,
           expertModeSettings,
+          grantedPermissions,
         });
 
         // 兜底：hooks 未覆盖的场景（如 maxToolRounds 终止、无效工具等）

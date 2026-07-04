@@ -1,6 +1,7 @@
 import type { ToolDefinition, ToolResult } from '../registry/types';
 import type { GuardrailCheck, GuardrailContext, IGuardrail } from '../shared/types/guardrail';
 import type { IToolRegistry } from '../registry/types';
+import { getRequiredPermissions } from '../shared/permissions';
 
 export class Guardrail implements IGuardrail {
   constructor(private toolRegistry: IToolRegistry) {}
@@ -40,6 +41,19 @@ export class Guardrail implements IGuardrail {
         requiresPreflight: false,
         requiresConfirmation: false,
         reason: `工具 ${toolName} 需要开启 Expert API: ${tool.expertSwitch}`,
+        dataSensitivity: tool.resultSensitivity,
+      };
+    }
+
+    const requiredPerms = getRequiredPermissions(tool.category);
+    const missing = requiredPerms.filter((p) => !context.grantedPermissions.includes(p));
+    if (missing.length > 0) {
+      return {
+        allowed: false,
+        riskLevel: tool.riskLevel,
+        requiresPreflight: false,
+        requiresConfirmation: false,
+        reason: `需要额外权限: ${missing.join(', ')}。请在扩展设置中启用对应权限以使用此工具`,
         dataSensitivity: tool.resultSensitivity,
       };
     }
