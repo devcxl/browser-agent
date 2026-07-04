@@ -92,15 +92,16 @@ jobs:
           PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1 || echo "")
           if [ -n "$PREV_TAG" ]; then
             NOTES=$(git log "$PREV_TAG"..HEAD --oneline --no-decorate 2>/dev/null || echo "")
+            COMPARE_URL="https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}"
           else
             NOTES=$(git log --oneline --no-decorate 2>/dev/null || echo "")
+            COMPARE_URL="https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}"
           fi
           {
             echo 'notes<<EOF'
             echo "$NOTES"
             echo
-            echo '---'
-            echo "构建时间: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "变更详情: $COMPARE_URL"
             echo 'EOF'
           } >> "$GITHUB_OUTPUT"
 

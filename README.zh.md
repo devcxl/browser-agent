@@ -1,4 +1,6 @@
-# Browser Agent Extension
+<p align="center">
+  <strong>Browser Agent Extension</strong>
+</p>
 
 <p align="center">
   <a href="README.md">English</a> | <a href="README.zh.md">中文文档</a>
