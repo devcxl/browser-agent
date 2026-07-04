@@ -1,6 +1,4 @@
-<p align="center">
-  <strong>Browser Agent Extension</strong>
-</p>
+<h1 align="center">Browser Agent Extension</h1>
 
 <p align="center">
   <a href="README.zh.md">中文文档</a> | <a href="README.md">English</a>
