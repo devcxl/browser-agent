@@ -103,6 +103,15 @@ vi.mock('@/shared/storage', () => ({
       loadReady: vi.fn().mockResolvedValue([]),
     }),
   },
+  ConfigStore: {
+    getInstance: vi.fn().mockReturnValue({
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      getAll: vi.fn(),
+      patch: vi.fn(),
+      onChange: vi.fn(),
+    }),
+  },
 }));
 
 import { useAgent } from '../useAgent';
