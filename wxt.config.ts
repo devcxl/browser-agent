@@ -52,9 +52,6 @@ export default defineConfig({
       permissions,
       optional_permissions,
       host_permissions: ['<all_urls>'],
-      action: {
-        default_title: 'Browser Agent',
-      },
     };
 
     if (isFirefox) {
@@ -63,6 +60,24 @@ export default defineConfig({
       };
     } else {
       manifest.side_panel = { default_path: 'sidepanel.html' };
+      manifest.action = {
+        default_title: 'Browser Agent',
+      };
+    }
+
+    manifest.icons = {
+      16: 'logo-16.png',
+      32: 'logo-32.png',
+      48: 'logo-48.png',
+      128: 'logo-128.png',
+    };
+    if (!isFirefox) {
+      (manifest.action as Record<string, unknown>).default_icon = {
+        16: 'logo-16.png',
+        32: 'logo-32.png',
+        48: 'logo-48.png',
+        128: 'logo-128.png',
+      };
     }
 
     return manifest;
