@@ -118,7 +118,6 @@ export interface MessageSchema {
         webRequest: string;
         declarativeNetRequest: string;
         nativeMessaging: string;
-        identity: string;
       };
     };
     skills: {

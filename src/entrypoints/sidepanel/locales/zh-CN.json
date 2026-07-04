@@ -123,8 +123,7 @@
         "privacy": "读取和修改浏览器隐私设置",
         "webRequest": "拦截和修改网络请求",
         "declarativeNetRequest": "声明式网络请求规则，屏蔽或重定向请求",
-        "nativeMessaging": "与本地原生应用通信",
-        "identity": "OAuth2 身份认证"
+        "nativeMessaging": "与本地原生应用通信"
       }
     },
     "skills": {

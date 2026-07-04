@@ -123,8 +123,7 @@
         "privacy": "Read and modify browser privacy settings",
         "webRequest": "Intercept and modify network requests",
         "declarativeNetRequest": "Declarative network request rules, block or redirect requests",
-        "nativeMessaging": "Communicate with native applications",
-        "identity": "OAuth2 identity authentication"
+        "nativeMessaging": "Communicate with native applications"
       }
     },
     "skills": {

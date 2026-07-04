@@ -217,13 +217,6 @@ export interface IBrowserAdapter {
     addDynamicRules(rules: chrome.declarativeNetRequest.Rule[]): Promise<void>;
     removeDynamicRules(ruleIds: number[]): Promise<void>;
   };
-
-  // ── Identity ──────────────────────────────────────
-
-  identity: {
-    getAuthToken(details?: { interactive?: boolean; account?: { id: string } }): Promise<{ token: string }>;
-    removeCachedToken(token: string): Promise<void>;
-  };
 }
 
 // ==================== 浏览器事件枚举 ====================

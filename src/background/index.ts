@@ -17,7 +17,6 @@ import { PrivacyProxy } from './proxies/privacy-proxy';
 import { ProxySettingsProxy } from './proxies/proxy-proxy';
 import { DebuggerProxy } from './proxies/debugger-proxy';
 import { DnrProxy } from './proxies/dnr-proxy';
-import { IdentityProxy } from './proxies/identity-proxy';
 import { getAdapter } from '@/adapters';
 
 export function initBackground(): {
@@ -44,7 +43,6 @@ export function initBackground(): {
   const proxySettingsProxy = new ProxySettingsProxy(adapter);
   const debuggerProxy = new DebuggerProxy(adapter);
   const dnrProxy = new DnrProxy(adapter);
-  const identityProxy = new IdentityProxy(adapter);
 
   const resolveContentTabId = async (tabId: unknown): Promise<number> => {
     if (typeof tabId === 'number') return tabId;
@@ -180,10 +178,6 @@ export function initBackground(): {
   router.register('dnr.getDynamicRules', () => dnrProxy.getDynamicRules());
   router.register('dnr.addDynamicRules', (p) => dnrProxy.addDynamicRules(p as any));
   router.register('dnr.removeDynamicRules', (p) => dnrProxy.removeDynamicRules(p as any));
-
-  // ── Expert: Identity ──────────────────────────────
-  router.register('identity.getAuthToken', (p) => identityProxy.getAuthToken(p as any));
-  router.register('identity.clearCachedToken', (p) => identityProxy.clearCachedToken(p as any));
 
   // 管理已连接的 Chat Page Port
   const connectedPorts = new Set<ReturnType<typeof browser.runtime.connect>>();

@@ -10,6 +10,8 @@ export interface GuardrailContext {
   expertModeEnabled: boolean;
   /** Expert Mode 子开关状态 */
   expertSwitches: Record<string, boolean>;
+  /** 已授予的可选权限列表 */
+  grantedPermissions: string[];
   /** 当前会话是否已授权敏感数据发送 */
   sessionGrants: {
     sensitiveDataAllowed: boolean;

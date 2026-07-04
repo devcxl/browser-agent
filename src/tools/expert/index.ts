@@ -4,7 +4,6 @@ import { createPrivacyGetSettingsTool, createPrivacySetSettingTool } from './pri
 import { createProxyGetSettingsTool, createProxySetSettingsTool, createProxyClearTool } from './proxy-tools';
 import { createDebuggerGetTargetsTool, createDebuggerAttachTool, createDebuggerDetachTool } from './debugger-tools';
 import { createDnrGetDynamicRulesTool, createDnrAddDynamicRulesTool, createDnrRemoveDynamicRulesTool } from './dnr-tools';
-import { createIdentityGetAuthTokenTool, createIdentityClearCachedTokenTool } from './identity-tools';
 
 export function createExpertTools(rpc: IJsonRpcClient): ToolDefinition[] {
   return [
@@ -30,9 +29,5 @@ export function createExpertTools(rpc: IJsonRpcClient): ToolDefinition[] {
     createDnrGetDynamicRulesTool(rpc),
     createDnrAddDynamicRulesTool(rpc),
     createDnrRemoveDynamicRulesTool(rpc),
-
-    // Identity
-    createIdentityGetAuthTokenTool(rpc),
-    createIdentityClearCachedTokenTool(rpc),
   ];
 }

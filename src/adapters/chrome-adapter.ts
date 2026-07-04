@@ -388,17 +388,4 @@ export class ChromeAdapter implements IBrowserAdapter {
       await chrome.declarativeNetRequest.updateDynamicRules({ addRules: [], removeRuleIds: ruleIds });
     },
   };
-
-  // ── Identity ─────────────────────────────────────────
-
-  identity = {
-    getAuthToken: async (details?: { interactive?: boolean; account?: { id: string } }): Promise<{ token: string }> => {
-      const result = await chrome.identity.getAuthToken(details as any);
-      return { token: result.token ?? '' };
-    },
-
-    removeCachedToken: async (token: string): Promise<void> => {
-      await chrome.identity.removeCachedAuthToken({ token });
-    },
-  };
 }

@@ -49,7 +49,6 @@ export class CapabilityDetector {
       nativeMessaging:
         this.checkApi('runtime') &&
         typeof (browser as any).runtime?.connectNative !== 'undefined',
-      identity: this.checkApi('identity'),
     };
 
     return { ...this.cache };

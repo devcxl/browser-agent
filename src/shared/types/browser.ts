@@ -133,7 +133,6 @@ export interface Capabilities {
   webRequest: boolean;
   declarativeNetRequest: boolean;
   nativeMessaging: boolean;
-  identity: boolean;
 }
 
 // ==================== Tab 查询/创建/更新参数 ====================

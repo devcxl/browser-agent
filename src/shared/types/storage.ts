@@ -53,7 +53,6 @@ export const EXPERT_API_DOMAINS = [
   'webRequest',
   'declarativeNetRequest',
   'nativeMessaging',
-  'identity',
 ] as const;
 
 export type ExpertApiDomain = typeof EXPERT_API_DOMAINS[number];

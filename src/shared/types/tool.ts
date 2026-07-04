@@ -26,8 +26,7 @@ export type ToolCategory =
   | 'privacy'
   | 'proxy'
   | 'debugger'
-  | 'declarativeNetRequest'
-  | 'identity';
+  | 'declarativeNetRequest';
 
 /** 数据敏感级别 */
 export type SensitivityLevel = 'low' | 'sensitive' | 'critical';

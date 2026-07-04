@@ -30,6 +30,8 @@ export interface AgentRunInput {
   skills?: Skill[];
   /** Expert Mode 设置 */
   expertModeSettings?: ExpertModeSettings;
+  /** 已授予的扩展可选权限列表 */
+  grantedPermissions?: string[];
 }
 
 export interface AgentRunOutput {

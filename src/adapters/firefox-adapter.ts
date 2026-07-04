@@ -434,17 +434,4 @@ export class FirefoxAdapter implements IBrowserAdapter {
       throw new Error('declarativeNetRequest API is not supported in Firefox');
     },
   };
-
-  // ── Identity ─────────────────────────────────────────
-  // Firefox 不支持 chrome.identity API
-
-  identity = {
-    getAuthToken: async (): Promise<{ token: string }> => {
-      throw new Error('identity API is not supported in Firefox');
-    },
-
-    removeCachedToken: async (_token: string): Promise<void> => {
-      throw new Error('identity API is not supported in Firefox');
-    },
-  };
 }
