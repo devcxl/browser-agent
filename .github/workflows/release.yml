@@ -49,20 +49,21 @@ jobs:
       - name: Check size
         run: bash scripts/check-size.sh
 
-      - name: Check AMO secrets
-        id: amo-secrets
+      - name: Check store secrets
+        id: store-secrets
         env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
           AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
           AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
-          if [ -n "$AMO_JWT_ISSUER" ] && [ -n "$AMO_JWT_SECRET" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-          fi
+          echo "chrome=$([ -n "$CHROME_EXTENSION_ID" ] && [ -n "$CHROME_CLIENT_ID" ] && [ -n "$CHROME_CLIENT_SECRET" ] && [ -n "$CHROME_REFRESH_TOKEN" ] && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
+          echo "firefox=$([ -n "$AMO_JWT_ISSUER" ] && [ -n "$AMO_JWT_SECRET" ] && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare source archive for AMO
-        if: ${{ steps.amo-secrets.outputs.available == 'true' }}
+      - name: Prepare source archive for Firefox
+        if: steps.store-secrets.outputs.firefox == 'true'
         run: |
           mkdir -p web-ext-source
           zip -r web-ext-source/source.zip . \
@@ -72,19 +73,24 @@ jobs:
             -x "*.zip" \
             -x "web-ext-source/*"
 
-      - name: Submit to Firefox Add-ons (AMO)
-        if: ${{ steps.amo-secrets.outputs.available == 'true' }}
+      - name: Submit to stores
+        if: steps.store-secrets.outputs.chrome == 'true' || steps.store-secrets.outputs.firefox == 'true'
         env:
-          AMO_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
-          AMO_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          FIREFOX_JWT_ISSUER: ${{ secrets.AMO_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.AMO_JWT_SECRET }}
         run: |
-          npx web-ext sign \
-            --source-dir dist/firefox-mv3 \
-            --channel=listed \
-            --amo-metadata amo-metadata.json \
-            --upload-source-code web-ext-source/source.zip \
-            --api-key "$AMO_JWT_ISSUER" \
-            --api-secret "$AMO_JWT_SECRET"
+          ARGS=""
+          if [ "${{ steps.store-secrets.outputs.chrome }}" = "true" ]; then
+            ARGS="$ARGS --chrome-zip dist/*-chrome.zip --chrome-skip-submit-review"
+          fi
+          if [ "${{ steps.store-secrets.outputs.firefox }}" = "true" ]; then
+            ARGS="$ARGS --firefox-zip dist/*-firefox.zip --firefox-sources-zip web-ext-source/source.zip --firefox-channel listed"
+          fi
+          npx wxt submit $ARGS
 
       - name: Generate release notes
         id: notes
