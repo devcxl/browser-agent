@@ -251,13 +251,6 @@ describe('FirefoxAdapter', () => {
       expect(mockBrowser.notifications.create).toHaveBeenCalledWith({ title: 'Test', message: 'Hello' });
       expect(result).toBe('notif-ff');
     });
-
-    it('create 在 notifications API 不可用时 reject', async () => {
-      // 不设置 notifications mock，模拟 API 不存在
-      delete (mockBrowser as any).notifications;
-      const result = adapter.notifications.create({ title: 'Test', message: 'Hello' });
-      await expect(result).rejects.toThrow('notifications API not available');
-    });
   });
 
   // ── Events ───────────────────────────────────────

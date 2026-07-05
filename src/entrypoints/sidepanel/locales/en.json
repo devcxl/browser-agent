@@ -55,7 +55,9 @@
       "hideReasoning": "Hide reasoning",
       "thinking": "Thinking...",
       "params": "Parameters",
-      "result": "Result"
+      "result": "Result",
+      "copy": "Copy",
+      "copied": "Copied"
     }
   },
   "settings": {

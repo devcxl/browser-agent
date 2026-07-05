@@ -32,12 +32,13 @@ export default defineConfig({
       permissions.push('scripting');
     }
 
+    permissions.push('notifications');
+
     const optional_permissions: string[] = ['management'];
 
     if (!isFirefox) {
       permissions.push(
-        'sidePanel',
-        'notifications', 'contextMenus',
+        'sidePanel', 'contextMenus',
         'declarativeNetRequest',
       );
       optional_permissions.push(

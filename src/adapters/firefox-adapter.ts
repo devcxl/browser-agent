@@ -163,12 +163,8 @@ export class FirefoxAdapter implements IBrowserAdapter {
   // ── Notifications ──────────────────────────────────
 
   notifications = {
-    create: (options: NotificationsCreateOptions): Promise<string> => {
-      if (typeof this.browser?.notifications?.create !== 'function') {
-        return Promise.reject(new Error('notifications API not available in this Firefox version'));
-      }
-      return this.browser.notifications.create(options);
-    },
+    create: (options: NotificationsCreateOptions): Promise<string> =>
+      this.browser.notifications.create(options),
   };
 
   // ── History ──────────────────────────────────────
