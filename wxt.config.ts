@@ -15,7 +15,6 @@ export default defineConfig({
       'tabGroups',
       'storage',
       'sessions',
-      'alarms',
       'bookmarks',
       'downloads',
       'cookies',
@@ -28,17 +27,12 @@ export default defineConfig({
 
     permissions.push('privacy', 'proxy');
 
-    if (isMv3) {
-      permissions.push('scripting');
-    }
-
     permissions.push('notifications');
 
     const optional_permissions: string[] = ['management'];
 
     if (!isFirefox) {
       permissions.push(
-        'sidePanel', 'contextMenus',
         'declarativeNetRequest',
       );
       optional_permissions.push(
