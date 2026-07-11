@@ -18,6 +18,7 @@ import { ProxySettingsProxy } from './proxies/proxy-proxy';
 import { DebuggerProxy } from './proxies/debugger-proxy';
 import { DnrProxy } from './proxies/dnr-proxy';
 import { getAdapter } from '@/adapters';
+import { registerBuiltinSkills } from '@/shared/skills/builtin-skills';
 
 export function initBackground(): {
   router: JsonRpcRouter;
@@ -221,6 +222,8 @@ export function initBackground(): {
   });
 
   eventHub.start();
+
+  registerBuiltinSkills();
 
   return {
     router,
