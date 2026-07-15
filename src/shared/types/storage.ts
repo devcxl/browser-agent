@@ -33,6 +33,12 @@ export interface AgentSettings {
   contextWindowTokens: number;
   /** 预算截断安全边际，默认 4096 */
   tokenBudgetMargin: number;
+  /** 工具结果微压缩：保留最近 N 条不压缩，默认 10 */
+  microcompactKeepRecent: number;
+  /** 工具结果微压缩：结果超过此字符数才触发，默认 500 */
+  microcompactMinChars: number;
+  /** 工具结果微压缩：始终不压缩的工具名列表 */
+  microcompactExcludeTools: string[];
   /** 思考强度，默认 medium */
   reasoningEffort: ReasoningEffort;
   /** 摘要触发阈值 */

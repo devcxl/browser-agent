@@ -164,6 +164,9 @@ export function useAgent() {
           maxContextMessages: 40,
           contextWindowTokens: 128000,
           tokenBudgetMargin: 4096,
+          microcompactKeepRecent: 10,
+          microcompactMinChars: 500,
+          microcompactExcludeTools: [],
           reasoningEffort,
           summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
         };

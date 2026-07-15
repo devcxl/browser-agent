@@ -34,6 +34,9 @@ export interface AgentSettings {
   maxContextMessages: number;
   contextWindowTokens: number;
   tokenBudgetMargin: number;
+  microcompactKeepRecent: number;
+  microcompactMinChars: number;
+  microcompactExcludeTools: string[];
   systemPrompt: string;
   reasoningEffort: ReasoningEffort;
 }

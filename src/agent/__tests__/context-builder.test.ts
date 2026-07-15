@@ -39,6 +39,9 @@ const defaultConfig: AgentConfig = {
   maxContextMessages: 20,
   contextWindowTokens: 128000,
   tokenBudgetMargin: 4096,
+  microcompactKeepRecent: 10,
+  microcompactMinChars: 500,
+  microcompactExcludeTools: [],
   summaryThreshold: { messageCount: 30, estimatedTokens: 12_000, toolCallCount: 50 },
 };
 
@@ -416,5 +419,156 @@ describe('ContextBuilder — Token 预算截断', () => {
     expect(systemMsgs.length).toBeGreaterThanOrEqual(2);
     // 摘要应该保留
     expect(systemMsgs.some((m) => m.content?.includes('important summary'))).toBe(true);
+  });
+});
+
+describe('ContextBuilder — 工具结果微压缩', () => {
+  it('短工具结果不触发压缩', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+
+    const historyMessages: StoredMessage[] = [
+      {
+        id: 'a1', role: 'assistant', content: 'calling tool', timestamp: 100,
+        toolCalls: [{ id: 'tc-1', name: 'time_get', params: {} }],
+      },
+      { id: 't1', role: 'tool', content: 'short result', timestamp: 200, toolCallId: 'tc-1' },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      microcompactKeepRecent: 0, // 不保留任何结果，全部候选
+      microcompactMinChars: 500,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    // 短结果不应该被压缩
+    const toolMsgs = messages.filter((m) => m.role === 'tool');
+    expect(toolMsgs.length).toBe(1);
+    expect(toolMsgs[0]!.content).toBe('short result');
+  });
+
+  it('超出 minChars 的旧工具结果被替换为占位符', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+
+    const longResult = 'x'.repeat(1000); // > 500 minChars
+    const historyMessages: StoredMessage[] = [
+      {
+        id: 'a1', role: 'assistant', content: 'calling', timestamp: 100,
+        toolCalls: [{ id: 'tc-1', name: 'page_getContent', params: {} }],
+      },
+      { id: 't1', role: 'tool', content: longResult, timestamp: 200, toolCallId: 'tc-1' },
+      {
+        id: 'a2', role: 'assistant', content: 'calling again', timestamp: 300,
+        toolCalls: [{ id: 'tc-2', name: 'tabs_query', params: {} }],
+      },
+      { id: 't2', role: 'tool', content: longResult, timestamp: 400, toolCallId: 'tc-2' },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      microcompactKeepRecent: 1, // 只保留最近 1 条
+      microcompactMinChars: 500,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const toolMsgs = messages.filter((m) => m.role === 'tool');
+    expect(toolMsgs.length).toBe(2);
+    // 第一条（旧）被压缩
+    expect(toolMsgs[0]!.content).toContain('result compressed');
+    expect(toolMsgs[0]!.content).toContain('page_getContent');
+    // 第二条（最近）保持原样
+    expect(toolMsgs[1]!.content).toBe(longResult);
+  });
+
+  it('排除列表中的工具不会被压缩', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+
+    const longResult = 'x'.repeat(1000);
+    const historyMessages: StoredMessage[] = [
+      {
+        id: 'a1', role: 'assistant', content: 'calling', timestamp: 100,
+        toolCalls: [{ id: 'tc-1', name: 'page_getScreenshot', params: {} }],
+      },
+      { id: 't1', role: 'tool', content: longResult, timestamp: 200, toolCallId: 'tc-1' },
+      {
+        id: 'a2', role: 'assistant', content: 'calling again', timestamp: 300,
+        toolCalls: [{ id: 'tc-2', name: 'page_getContent', params: {} }],
+      },
+      { id: 't2', role: 'tool', content: longResult, timestamp: 400, toolCallId: 'tc-2' },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      microcompactKeepRecent: 0,
+      microcompactMinChars: 500,
+      microcompactExcludeTools: ['page_getScreenshot'],
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const toolMsgs = messages.filter((m) => m.role === 'tool');
+    expect(toolMsgs.length).toBe(2);
+    // page_getScreenshot 被排除，不压缩
+    expect(toolMsgs[0]!.content).toBe(longResult);
+    // page_getContent 不在排除列表中，被压缩
+    expect(toolMsgs[1]!.content).toContain('result compressed');
+    expect(toolMsgs[1]!.content).toContain('page_getContent');
+  });
+
+  it('保留的最近 N 条不触发压缩', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+
+    const longResult = 'x'.repeat(1000);
+    const historyMessages: StoredMessage[] = [
+      { id: 'u1', role: 'user', content: 'query', timestamp: 50 },
+      {
+        id: 'a1', role: 'assistant', content: 'calling', timestamp: 100,
+        toolCalls: [{ id: 'tc-1', name: 'page_getContent', params: {} }],
+      },
+      { id: 't1', role: 'tool', content: longResult, timestamp: 200, toolCallId: 'tc-1' },
+      {
+        id: 'a2', role: 'assistant', content: 'calling', timestamp: 300,
+        toolCalls: [{ id: 'tc-2', name: 'page_getContent', params: {} }],
+      },
+      { id: 't2', role: 'tool', content: longResult, timestamp: 400, toolCallId: 'tc-2' },
+      {
+        id: 'a3', role: 'assistant', content: 'calling', timestamp: 500,
+        toolCalls: [{ id: 'tc-3', name: 'page_getContent', params: {} }],
+      },
+      { id: 't3', role: 'tool', content: longResult, timestamp: 600, toolCallId: 'tc-3' },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      microcompactKeepRecent: 3, // 保留全部 3 条
+      microcompactMinChars: 500,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const toolMsgs = messages.filter((m) => m.role === 'tool');
+    expect(toolMsgs.length).toBe(3);
+    // 全部 3 条都在保留范围内，不应压缩
+    for (const msg of toolMsgs) {
+      expect(msg.content).toBe(longResult);
+    }
   });
 });

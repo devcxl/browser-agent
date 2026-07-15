@@ -99,6 +99,10 @@ export interface MessageSchema {
       maxContextMessages: string;
       contextWindowTokens: string;
       tokenBudgetMargin: string;
+      microcompactKeepRecent: string;
+      microcompactMinChars: string;
+      microcompactExcludeTools: string;
+      microcompactExcludeToolsPlaceholder: string;
       reasoningEffort: string;
       reasoningEffortHint: string;
       systemPrompt: string;
