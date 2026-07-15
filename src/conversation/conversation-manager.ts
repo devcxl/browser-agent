@@ -175,13 +175,52 @@ export class ConversationManager implements IConversationManager {
       return conversation.summary ?? '';
     }
 
-    const summaryPrompt = `请用 2-3 句话总结以下对话的核心内容和已完成的操作：\n\n${messagesToSummarize.map((m) => `[${m.role}]: ${m.content}`).join('\n')}\n\n已有摘要（如有）：${conversation.summary ?? '无'}\n\n请输出合并后的简洁摘要：`;
+    const dialogueText = messagesToSummarize
+      .map((m) => `[${m.role}]: ${m.content}`)
+      .join('\n');
+
+    const existingSummary = conversation.summary
+      ? `\n## 已有摘要\n${conversation.summary}`
+      : '';
+
+    const summaryPrompt = `分析以下对话片段，提取关键信息并与已有摘要合并。
+
+## 分类体系
+- **用户偏好**：用户的操作习惯、风格倾向、常用工作流
+- **决策**：用户明确的选择或否定（如拒绝关闭窗口、选择归档、确认高风险操作）
+- **已完成操作**：Agent 已执行成功的具体动作及结果
+- **关键上下文**：值得跨轮次记住的事实（如当前项目名、工作主题）
+
+## 合并规则
+1. 优先级：用户偏好 > 决策 > 已完成操作 > 关键上下文
+2. 新事实与已有事实合并去重，保留旧摘要中有价值的信息
+3. 每个分类下如果没有相关事实，输出「(无)」
+4. 不要编造对话中未提及的内容
+
+## 对话内容
+${dialogueText}${existingSummary}
+
+## 输出格式
+按以下 Markdown 格式输出合并后的完整摘要，不要添加额外解释：
+
+## 用户偏好
+- 事实 1
+- 事实 2
+
+## 决策
+- 事实 1
+
+## 已完成操作
+- 事实 1
+
+## 关键上下文
+- 事实 1`;
 
     const response = await llmClient.chat({
       model: '',
       messages: [{ role: 'user', content: summaryPrompt }],
       temperature: 0.3,
-      max_tokens: 500,
+      max_tokens: 2000,
     });
 
     const newSummary = response.choices[0]?.message?.content ?? '';
