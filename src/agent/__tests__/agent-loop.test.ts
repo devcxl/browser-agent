@@ -152,6 +152,28 @@ function createMockLlmClient(
   };
 }
 
+function createRawStreamLlmClient(
+  rounds: import('@/shared/types').StreamChunk[][],
+): ILlmClient {
+  const chatStream = vi.fn().mockImplementation(
+    async (
+      _request: Parameters<ILlmClient['chatStream']>[0],
+      onChunk: (chunk: import('@/shared/types').StreamChunk) => void,
+      _signal?: AbortSignal,
+      _onReasoning?: (content: string) => void,
+    ) => {
+      const round = rounds[chatStream.mock.calls.length - 1] ?? [];
+      for (const chunk of round) onChunk(chunk);
+    },
+  );
+
+  return {
+    chat: vi.fn(),
+    chatStream,
+    checkHealth: vi.fn(),
+  };
+}
+
 function toolCallDelta(
   id: string,
   name: string,
@@ -217,6 +239,8 @@ const defaultConfig: AgentConfig = {
   maxToolRounds: 15,
   systemPrompt: 'You are a browser assistant.',
   maxContextMessages: 20,
+  contextWindowTokens: 128000,
+  tokenBudgetMargin: 4096,
   summaryThreshold: { messageCount: 30, estimatedTokens: 12_000, toolCallCount: 50 },
 };
 
@@ -307,6 +331,205 @@ describe('AgentLoop', () => {
     expect(output.toolCalls[0]!.toolName).toBe('tabs_query');
     expect(output.toolCalls[0]!.result.success).toBe(true);
     expect(toolDef.execute).toHaveBeenCalledWith({});
+  });
+
+  it('provider 省略 tool_call id 时生成内部 id 并执行工具', async () => {
+    const toolDef: ToolDefinition = {
+      name: 'tabs_query',
+      description: '查询标签页',
+      schema: { type: 'object', properties: {} },
+      category: 'tabs',
+      riskLevel: 'low',
+      confirmationRequired: false,
+      resultSensitivity: 'low',
+      execute: vi.fn().mockResolvedValue({ success: true, data: [] }),
+    };
+    const llmClient = createRawStreamLlmClient([
+      [{
+        id: 'resp-tool',
+        choices: [{
+          delta: {
+            tool_calls: [{
+              index: 0,
+              function: { name: 'tabs_query', arguments: '{}' },
+            }],
+          },
+          finish_reason: 'tool_calls',
+        }],
+      }],
+      [{
+        id: 'resp-final',
+        choices: [{
+          delta: { content: '查询完成。' },
+          finish_reason: 'stop',
+        }],
+      }],
+    ]);
+    const loop = new AgentLoop(
+      defaultConfig,
+      createMockToolRegistry([toolDef]),
+      createMockGuardrail(),
+      conversationManager,
+      vi.fn().mockReturnValue(llmClient),
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(toolDef.execute).toHaveBeenCalledOnce();
+    expect(output.finalMessage).toBe('查询完成。');
+    expect(output.toolCalls[0]!.toolCallId).toBeTruthy();
+  });
+
+  it('无参工具 arguments 为空时按空对象执行', async () => {
+    const toolDef: ToolDefinition = {
+      name: 'tabs_query',
+      description: '查询标签页',
+      schema: { type: 'object', properties: {} },
+      category: 'tabs',
+      riskLevel: 'low',
+      confirmationRequired: false,
+      resultSensitivity: 'low',
+      execute: vi.fn().mockResolvedValue({ success: true, data: [] }),
+    };
+    const llmClient = createRawStreamLlmClient([
+      [{
+        id: 'resp-tool',
+        choices: [{
+          delta: {
+            tool_calls: [{
+              index: 0,
+              id: 'call-empty-args',
+              function: { name: 'tabs_query', arguments: '' },
+            }],
+          },
+          finish_reason: 'tool_calls',
+        }],
+      }],
+      [{
+        id: 'resp-final',
+        choices: [{
+          delta: { content: '查询完成。' },
+          finish_reason: 'stop',
+        }],
+      }],
+    ]);
+    const loop = new AgentLoop(
+      defaultConfig,
+      createMockToolRegistry([toolDef]),
+      createMockGuardrail(),
+      conversationManager,
+      vi.fn().mockReturnValue(llmClient),
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(toolDef.execute).toHaveBeenCalledWith({});
+    expect(output.finalMessage).toBe('查询完成。');
+  });
+
+  it('tool_calls 缺少工具名时明确失败且不继续空转', async () => {
+    const llmClient = createRawStreamLlmClient([[
+      {
+        id: 'resp-invalid-tool',
+        choices: [{
+          delta: {
+            content: '好的，我先查询标签页。',
+            tool_calls: [{
+              index: 0,
+              id: 'call-without-name',
+              function: { arguments: '{}' },
+            }],
+          },
+          finish_reason: 'tool_calls',
+        }],
+      },
+    ]]);
+    const loop = new AgentLoop(
+      defaultConfig,
+      createMockToolRegistry([]),
+      createMockGuardrail(),
+      conversationManager,
+      vi.fn().mockReturnValue(llmClient),
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(llmClient.chatStream).toHaveBeenCalledOnce();
+    expect(output.finalMessage).toBe('LLM 返回了无效的工具调用。');
+    expect(conversationManager.addMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('finish_reason 为 tool_calls 但没有调用数据时明确失败', async () => {
+    const llmClient = createRawStreamLlmClient([[
+      {
+        id: 'resp-empty-tool',
+        choices: [{
+          delta: { content: '好的，我来处理。' },
+          finish_reason: 'tool_calls',
+        }],
+      },
+    ]]);
+    const loop = new AgentLoop(
+      defaultConfig,
+      createMockToolRegistry([]),
+      createMockGuardrail(),
+      conversationManager,
+      vi.fn().mockReturnValue(llmClient),
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(llmClient.chatStream).toHaveBeenCalledOnce();
+    expect(output.finalMessage).toBe('LLM 返回了无效的工具调用。');
+    expect(conversationManager.addMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('同批次混合有效和无效 tool_call 时整批拒绝', async () => {
+    const toolDef: ToolDefinition = {
+      name: 'tabs_query',
+      description: '查询标签页',
+      schema: { type: 'object', properties: {} },
+      category: 'tabs',
+      riskLevel: 'low',
+      confirmationRequired: false,
+      resultSensitivity: 'low',
+      execute: vi.fn().mockResolvedValue({ success: true, data: [] }),
+    };
+    const llmClient = createRawStreamLlmClient([[
+      {
+        id: 'resp-mixed-tools',
+        choices: [{
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call-valid',
+                function: { name: 'tabs_query', arguments: '{}' },
+              },
+              {
+                index: 1,
+                id: 'call-invalid',
+                function: { arguments: '{}' },
+              },
+            ],
+          },
+          finish_reason: 'tool_calls',
+        }],
+      },
+    ]]);
+    const loop = new AgentLoop(
+      defaultConfig,
+      createMockToolRegistry([toolDef]),
+      createMockGuardrail(),
+      conversationManager,
+      vi.fn().mockReturnValue(llmClient),
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(toolDef.execute).not.toHaveBeenCalled();
+    expect(output.finalMessage).toBe('LLM 返回了无效的工具调用。');
+    expect(conversationManager.addMessage).toHaveBeenCalledTimes(2);
   });
 
   // === Scenario 3 ===

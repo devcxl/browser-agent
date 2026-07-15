@@ -29,6 +29,10 @@ export interface AgentSettings {
   systemPrompt: string;
   /** 上下文窗口最大消息数，默认 40 */
   maxContextMessages: number;
+  /** 模型上下文窗口 token 上限，默认 128000 */
+  contextWindowTokens: number;
+  /** 预算截断安全边际，默认 4096 */
+  tokenBudgetMargin: number;
   /** 思考强度，默认 medium */
   reasoningEffort: ReasoningEffort;
   /** 摘要触发阈值 */

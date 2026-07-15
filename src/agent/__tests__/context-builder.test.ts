@@ -37,6 +37,8 @@ const defaultConfig: AgentConfig = {
   maxToolRounds: 15,
   systemPrompt: 'You are a browser assistant.',
   maxContextMessages: 20,
+  contextWindowTokens: 128000,
+  tokenBudgetMargin: 4096,
   summaryThreshold: { messageCount: 30, estimatedTokens: 12_000, toolCallCount: 50 },
 };
 
@@ -279,5 +281,140 @@ describe('ContextBuilder', () => {
     expect(first.content).toContain('- **tabs_create**');
     expect(first.content).toContain('查询标签页');
     expect(first.content).toContain('创建标签页');
+  });
+});
+
+describe('ContextBuilder — Token 预算截断', () => {
+  it('消息在预算内时不触发截断', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+
+    const historyMessages: StoredMessage[] = [
+      { id: 'm1', role: 'user', content: 'hello', timestamp: 100 },
+      { id: 'm2', role: 'assistant', content: 'hi', timestamp: 200 },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      contextWindowTokens: 10000,
+      tokenBudgetMargin: 100,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    // 应该保留所有消息（含 system + browser context + 2 条历史）
+    expect(messages.filter((m) => m.role === 'system').length).toBeGreaterThanOrEqual(2);
+    expect(messages.find((m) => m.role === 'user')).toBeDefined();
+    expect(messages.find((m) => m.role === 'assistant')).toBeDefined();
+  });
+
+  it('token 超出预算时截断最旧的非 system 消息', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+
+    // 创建大量长消息，使 token 远超预算
+    const longContent = 'x'.repeat(2000); // ~1000 tokens
+    const historyMessages: StoredMessage[] = [
+      { id: 'm1', role: 'user', content: longContent, timestamp: 100 },
+      { id: 'm2', role: 'assistant', content: longContent, timestamp: 200 },
+      { id: 'm3', role: 'user', content: longContent, timestamp: 300 },
+      { id: 'm4', role: 'assistant', content: longContent, timestamp: 400 },
+      { id: 'm5', role: 'user', content: 'keep-this', timestamp: 500 },
+      { id: 'm6', role: 'assistant', content: 'kept', timestamp: 600 },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      contextWindowTokens: 2000, // 预算远小于消息量
+      tokenBudgetMargin: 100,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    // 最早的消息应该被丢弃，最后的消息保留
+    const userMsgs = messages.filter((m) => m.role === 'user');
+    expect(userMsgs.length).toBeGreaterThan(0);
+    // 最后一条 user 消息 'keep-this' 应该保留
+    expect(userMsgs.some((m) => m.content === 'keep-this')).toBe(true);
+    // 早期消息被截断（内容以大量 x 开头）
+    const allNonSystem = messages.filter((m) => m.role !== 'system');
+    // 最早的消息 m1 不应该在结果中
+    expect(allNonSystem.some((m) => m.content === longContent)).toBe(false);
+  });
+
+  it('截断后对齐到 user 消息边界', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+
+    const longContent = 'x'.repeat(2000);
+    const historyMessages: StoredMessage[] = [
+      { id: 'm1', role: 'user', content: longContent, timestamp: 100 },
+      { id: 'm2', role: 'assistant', content: 'middle', timestamp: 200 },
+      { id: 'm3', role: 'tool', content: 'tool-result', timestamp: 300, toolCallId: 'tc-1' },
+      { id: 'm4', role: 'user', content: 'last-user-msg', timestamp: 400 },
+      { id: 'm5', role: 'assistant', content: 'last-assistant', timestamp: 500 },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      contextWindowTokens: 1500,
+      tokenBudgetMargin: 100,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const nonSystem = messages.filter((m) => m.role !== 'system');
+    if (nonSystem.length > 0) {
+      // 第一条非 system 消息必须是 user 角色
+      expect(nonSystem[0]!.role).toBe('user');
+      // 不应该从中途的 assistant 或 tool 消息开始
+      expect(nonSystem[0]!.content).not.toBe('middle');
+      expect(nonSystem[0]!.content).not.toBe('tool-result');
+    }
+  });
+
+  it('保留 system 消息不变', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue({
+      id: 'conv-1',
+      title: 'test',
+      createdAt: 0,
+      updatedAt: 0,
+      messages: [],
+      summary: 'important summary',
+      sensitiveDataGranted: false,
+    } satisfies Conversation);
+
+    const longContent = 'x'.repeat(2000);
+    const historyMessages: StoredMessage[] = [
+      { id: 'm1', role: 'user', content: longContent, timestamp: 100 },
+      { id: 'm2', role: 'user', content: longContent, timestamp: 200 },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      contextWindowTokens: 500,
+      tokenBudgetMargin: 100,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    // system 消息应该全部保留
+    const systemMsgs = messages.filter((m) => m.role === 'system');
+    expect(systemMsgs.length).toBeGreaterThanOrEqual(2);
+    // 摘要应该保留
+    expect(systemMsgs.some((m) => m.content?.includes('important summary'))).toBe(true);
   });
 });

@@ -105,6 +105,8 @@
     "agent": {
       "maxToolRounds": "Max Tool Rounds",
       "maxContextMessages": "Max Context Messages",
+      "contextWindowTokens": "Context Window Tokens",
+      "tokenBudgetMargin": "Token Budget Margin",
       "reasoningEffort": "Reasoning Effort",
       "reasoningEffortHint": "Controls LLM reasoning depth. Higher values are slower but more thorough. Only supported by reasoning models like DeepSeek, OpenAI o1/o3, etc.",
       "systemPrompt": "System Prompt",

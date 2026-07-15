@@ -36,6 +36,8 @@ const defaultConfig: AgentConfig = {
   maxToolRounds: 15,
   systemPrompt: 'You are a browser assistant.',
   maxContextMessages: 20,
+  contextWindowTokens: 128000,
+  tokenBudgetMargin: 4096,
   summaryThreshold: { messageCount: 30, estimatedTokens: 12_000, toolCallCount: 50 },
 };
 

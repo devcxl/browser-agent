@@ -435,6 +435,34 @@ export function SettingsPanel({
                 />
               </label>
               <label className="block">
+                <span className="text-sm text-mute">{t('settings.agent.contextWindowTokens')}</span>
+                <input
+                  type="number"
+                  value={agentSettings.contextWindowTokens}
+                  onChange={(e) =>
+                    onSaveAgentSettings({ ...agentSettings, contextWindowTokens: Number(e.target.value) })
+                  }
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  min={4096}
+                  max={1048576}
+                  step={1024}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-mute">{t('settings.agent.tokenBudgetMargin')}</span>
+                <input
+                  type="number"
+                  value={agentSettings.tokenBudgetMargin}
+                  onChange={(e) =>
+                    onSaveAgentSettings({ ...agentSettings, tokenBudgetMargin: Number(e.target.value) })
+                  }
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  min={256}
+                  max={32768}
+                  step={256}
+                />
+              </label>
+              <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.reasoningEffort')}</span>
                 <select
                   value={agentSettings.reasoningEffort}
