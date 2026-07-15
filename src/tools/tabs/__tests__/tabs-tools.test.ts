@@ -49,6 +49,7 @@ describe('Tabs tools', () => {
       vi.mocked(rpc.request).mockResolvedValue(mockTabs);
       const tool = createTabsQueryTool(rpc);
       const result = await tool.execute({});
+      expect(rpc.request).toHaveBeenCalledWith('tabs.query', { queryInfo: {} });
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockTabs);
     });

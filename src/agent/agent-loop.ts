@@ -173,20 +173,35 @@ export class AgentLoop implements IAgentRuntime {
           break;
         }
 
-        if (finishReason === 'tool_calls' && toolCallDeltas.size > 0) {
+        if (finishReason === 'tool_calls') {
+          if (toolCallDeltas.size === 0) {
+            finalMessage = 'LLM 返回了无效的工具调用。';
+            break;
+          }
+
           // 流式构建 tool_calls
           const streamToolCalls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }> = [];
           for (const [, delta] of toolCallDeltas) {
-            if (delta.id && delta.function?.name && delta.function.arguments) {
+            const name = delta.function?.name;
+            if (name) {
+              const tool = this.toolRegistry.getTool(name);
+              const hasRequiredParams = (tool?.schema.required?.length ?? 0) > 0;
+              const args = delta.function?.arguments ?? '';
+              const normalizedArgs = args || (hasRequiredParams ? '' : '{}');
               streamToolCalls.push({
-                id: delta.id,
+                id: delta.id ?? crypto.randomUUID(),
                 type: 'function',
                 function: {
-                  name: delta.function.name,
-                  arguments: delta.function.arguments,
+                  name,
+                  arguments: normalizedArgs,
                 },
               });
             }
+          }
+
+          if (streamToolCalls.length !== toolCallDeltas.size) {
+            finalMessage = 'LLM 返回了无效的工具调用。';
+            break;
           }
 
           const assistantMsg = {
