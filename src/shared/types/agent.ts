@@ -10,6 +10,10 @@ export interface AgentConfig {
   maxToolRounds: number;
   systemPrompt: string;
   maxContextMessages: number;
+  /** 模型上下文窗口 token 上限，默认 128000 */
+  contextWindowTokens: number;
+  /** 预算截断安全边际（保留给 system prompt + 输出），默认 4096 */
+  tokenBudgetMargin: number;
   reasoningEffort?: ReasoningEffort;
   summaryThreshold: {
     messageCount: number;

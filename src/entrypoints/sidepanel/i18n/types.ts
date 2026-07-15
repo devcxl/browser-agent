@@ -97,6 +97,8 @@ export interface MessageSchema {
     agent: {
       maxToolRounds: string;
       maxContextMessages: string;
+      contextWindowTokens: string;
+      tokenBudgetMargin: string;
       reasoningEffort: string;
       reasoningEffortHint: string;
       systemPrompt: string;

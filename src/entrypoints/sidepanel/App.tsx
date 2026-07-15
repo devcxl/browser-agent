@@ -25,6 +25,8 @@ function ChatLayout() {
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     maxToolRounds: 99,
     maxContextMessages: 40,
+    contextWindowTokens: 128000,
+    tokenBudgetMargin: 4096,
     systemPrompt: '',
     reasoningEffort: 'medium',
   });
@@ -41,6 +43,8 @@ function ChatLayout() {
       setAgentSettings({
         maxToolRounds: saved.maxToolRounds,
         maxContextMessages: saved.maxContextMessages,
+        contextWindowTokens: saved.contextWindowTokens ?? 128000,
+        tokenBudgetMargin: saved.tokenBudgetMargin ?? 4096,
         systemPrompt: saved.systemPrompt,
         reasoningEffort: saved.reasoningEffort ?? 'medium',
       });
@@ -59,6 +63,8 @@ function ChatLayout() {
       maxToolRounds: s.maxToolRounds,
       systemPrompt: s.systemPrompt,
       maxContextMessages: s.maxContextMessages,
+      contextWindowTokens: s.contextWindowTokens,
+      tokenBudgetMargin: s.tokenBudgetMargin,
       reasoningEffort: s.reasoningEffort,
       summaryThreshold: {
         messageCount: 30,

@@ -1,16 +1,13 @@
 import type { Conversation, StoredMessage, IConversationManager } from '@/shared/types/conversation';
 import type { ILlmClient } from '@/shared/types/llm';
 import type { Database } from '@/shared/db/database';
+import { estimateTokens } from '@/shared/token-estimate';
 
 const SUMMARY_THRESHOLDS = {
   messageCount: 30,
   estimatedTokens: 12_000,
   toolCallCount: 50,
 } as const;
-
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length * 0.5);
-}
 
 function dbMsgToStored(msg: {
   id: string;

@@ -162,6 +162,8 @@ export function useAgent() {
           maxToolRounds: 15,
           systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
           maxContextMessages: 40,
+          contextWindowTokens: 128000,
+          tokenBudgetMargin: 4096,
           reasoningEffort,
           summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
         };

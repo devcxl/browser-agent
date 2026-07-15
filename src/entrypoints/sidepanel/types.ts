@@ -32,6 +32,8 @@ export interface ConversationSummary {
 export interface AgentSettings {
   maxToolRounds: number;
   maxContextMessages: number;
+  contextWindowTokens: number;
+  tokenBudgetMargin: number;
   systemPrompt: string;
   reasoningEffort: ReasoningEffort;
 }
