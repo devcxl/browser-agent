@@ -11,6 +11,9 @@ const DEFAULTS: StorageSchema = {
     maxContextMessages: 40,
     contextWindowTokens: 128000,
     tokenBudgetMargin: 4096,
+    microcompactKeepRecent: 10,
+    microcompactMinChars: 500,
+    microcompactExcludeTools: [],
     reasoningEffort: 'medium',
     summaryThreshold: {
       messageCount: 30,

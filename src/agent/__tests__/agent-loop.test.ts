@@ -241,6 +241,9 @@ const defaultConfig: AgentConfig = {
   maxContextMessages: 20,
   contextWindowTokens: 128000,
   tokenBudgetMargin: 4096,
+  microcompactKeepRecent: 10,
+  microcompactMinChars: 500,
+  microcompactExcludeTools: [],
   summaryThreshold: { messageCount: 30, estimatedTokens: 12_000, toolCallCount: 50 },
 };
 

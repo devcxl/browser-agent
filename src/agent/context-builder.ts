@@ -68,7 +68,10 @@ export class ContextBuilder {
     }
 
     // 5. Token 预算截断
-    return this.trimToTokenBudget(messages);
+    const trimmed = this.trimToTokenBudget(messages);
+
+    // 6. 工具结果微压缩
+    return this.microcompact(trimmed);
   }
 
   /**
@@ -129,6 +132,75 @@ export class ContextBuilder {
     }
 
     return [...systemMessages, ...fixed];
+  }
+
+  /**
+   * 工具结果微压缩：将超出保留数量的旧工具大结果替换为占位符。
+   *
+   * 策略：
+   * 1. 从 assistant 消息中构建 tool_call_id → tool_name 映射
+   * 2. 找到所有 tool 消息，排除白名单中的工具
+   * 3. 保留最近的 microcompactKeepRecent 条不压缩
+   * 4. 对更早的、内容超过 microcompactMinChars 的 tool 消息，替换内容为占位符
+   */
+  private microcompact(messages: ChatMessage[]): ChatMessage[] {
+    const keepRecent = this.config.microcompactKeepRecent;
+    const minChars = this.config.microcompactMinChars;
+    const excludeTools = new Set(this.config.microcompactExcludeTools);
+
+    // 构建 tool_call_id → tool_name 映射
+    const toolNameMap = new Map<string, string>();
+    for (const msg of messages) {
+      if (msg.role === 'assistant' && msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          toolNameMap.set(tc.id, tc.function.name);
+        }
+      }
+    }
+
+    // 收集需要压缩的 tool 消息候选
+    interface CompressCandidate {
+      index: number;
+      name: string;
+      content: string;
+    }
+    const candidates: CompressCandidate[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i]!;
+      if (msg.role !== 'tool' || !msg.tool_call_id || !msg.content) continue;
+
+      const toolName = toolNameMap.get(msg.tool_call_id);
+      if (!toolName || excludeTools.has(toolName)) continue;
+
+      candidates.push({ index: i, name: toolName, content: msg.content });
+    }
+
+    // 保留最近 keepRecent 条不压缩
+    const compressCount = candidates.length - keepRecent;
+    if (compressCount <= 0) return messages;
+
+    const result = [...messages];
+    let compressedCount = 0;
+    for (let i = 0; i < compressCount; i++) {
+      const candidate = candidates[i]!;
+      if (candidate.content.length < minChars) continue;
+
+      const original = result[candidate.index]!;
+      result[candidate.index] = {
+        role: 'tool',
+        tool_call_id: original.tool_call_id,
+        content: `[${candidate.name} result compressed: ${candidate.content.length} chars]`,
+      };
+      compressedCount++;
+    }
+
+    if (compressedCount > 0) {
+      console.warn(
+        `[ContextBuilder] 工具结果微压缩：${compressedCount} 条工具结果被替换为占位符`,
+      );
+    }
+
+    return result;
   }
 
   /** 估算一组消息的总 token 数 */

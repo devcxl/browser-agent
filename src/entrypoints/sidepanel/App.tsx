@@ -27,6 +27,9 @@ function ChatLayout() {
     maxContextMessages: 40,
     contextWindowTokens: 128000,
     tokenBudgetMargin: 4096,
+    microcompactKeepRecent: 10,
+    microcompactMinChars: 500,
+    microcompactExcludeTools: [],
     systemPrompt: '',
     reasoningEffort: 'medium',
   });
@@ -45,6 +48,9 @@ function ChatLayout() {
         maxContextMessages: saved.maxContextMessages,
         contextWindowTokens: saved.contextWindowTokens ?? 128000,
         tokenBudgetMargin: saved.tokenBudgetMargin ?? 4096,
+        microcompactKeepRecent: saved.microcompactKeepRecent ?? 10,
+        microcompactMinChars: saved.microcompactMinChars ?? 500,
+        microcompactExcludeTools: saved.microcompactExcludeTools ?? [],
         systemPrompt: saved.systemPrompt,
         reasoningEffort: saved.reasoningEffort ?? 'medium',
       });
@@ -65,6 +71,9 @@ function ChatLayout() {
       maxContextMessages: s.maxContextMessages,
       contextWindowTokens: s.contextWindowTokens,
       tokenBudgetMargin: s.tokenBudgetMargin,
+      microcompactKeepRecent: s.microcompactKeepRecent,
+      microcompactMinChars: s.microcompactMinChars,
+      microcompactExcludeTools: s.microcompactExcludeTools,
       reasoningEffort: s.reasoningEffort,
       summaryThreshold: {
         messageCount: 30,

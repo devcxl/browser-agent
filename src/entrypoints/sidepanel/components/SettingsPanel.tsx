@@ -463,6 +463,51 @@ export function SettingsPanel({
                 />
               </label>
               <label className="block">
+                <span className="text-sm text-mute">{t('settings.agent.microcompactKeepRecent')}</span>
+                <input
+                  type="number"
+                  value={agentSettings.microcompactKeepRecent}
+                  onChange={(e) =>
+                    onSaveAgentSettings({ ...agentSettings, microcompactKeepRecent: Number(e.target.value) })
+                  }
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  min={0}
+                  max={100}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-mute">{t('settings.agent.microcompactMinChars')}</span>
+                <input
+                  type="number"
+                  value={agentSettings.microcompactMinChars}
+                  onChange={(e) =>
+                    onSaveAgentSettings({ ...agentSettings, microcompactMinChars: Number(e.target.value) })
+                  }
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  min={100}
+                  max={100000}
+                  step={100}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-mute">{t('settings.agent.microcompactExcludeTools')}</span>
+                <input
+                  type="text"
+                  value={agentSettings.microcompactExcludeTools.join(', ')}
+                  onChange={(e) =>
+                    onSaveAgentSettings({
+                      ...agentSettings,
+                      microcompactExcludeTools: e.target.value
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                  placeholder={t('settings.agent.microcompactExcludeToolsPlaceholder')}
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                />
+              </label>
+              <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.reasoningEffort')}</span>
                 <select
                   value={agentSettings.reasoningEffort}
