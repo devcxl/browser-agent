@@ -24,7 +24,6 @@ export interface AgentConfig {
   summaryThreshold: {
     messageCount: number;
     estimatedTokens: number;
-    toolCallCount: number;
   };
 }
 
@@ -34,6 +33,8 @@ export interface AgentRunInput {
   conversationId: string;
   userMessage: string;
   providerConfig: ProviderConfig;
+  /** 模型 ID（如 "gpt-4o", "deepseek/deepseek-chat"） */
+  model: string;
   browserContext: LowSensitivityContext;
   abortSignal?: AbortSignal;
   /** 可用技能列表，用于 skill tool call 拦截和 context 注入 */

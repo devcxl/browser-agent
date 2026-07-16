@@ -18,7 +18,6 @@ const DEFAULTS: StorageSchema = {
     summaryThreshold: {
       messageCount: 30,
       estimatedTokens: 12000,
-      toolCallCount: 50,
     },
   },
   expertModeSettings: {

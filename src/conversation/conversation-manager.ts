@@ -6,7 +6,6 @@ import { estimateTokens } from '@/shared/token-estimate';
 const SUMMARY_THRESHOLDS = {
   messageCount: 30,
   estimatedTokens: 12_000,
-  toolCallCount: 50,
 } as const;
 
 function dbMsgToStored(msg: {
@@ -151,10 +150,6 @@ export class ConversationManager implements IConversationManager {
       0,
     );
     if (totalTokens > SUMMARY_THRESHOLDS.estimatedTokens) return true;
-
-    const logs =
-      await this.db.getToolCallLogsByConversation(conversationId);
-    if (logs.length > SUMMARY_THRESHOLDS.toolCallCount) return true;
 
     return false;
   }

@@ -244,15 +244,15 @@ const defaultConfig: AgentConfig = {
   microcompactKeepRecent: 10,
   microcompactMinChars: 500,
   microcompactExcludeTools: [],
-  summaryThreshold: { messageCount: 30, estimatedTokens: 12_000, toolCallCount: 50 },
+  summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
 };
 
 const defaultProviderConfig: ProviderConfig = {
   id: 'openai',
   name: 'OpenAI',
+  providerId: 'openai',
   endpoint: 'https://api.openai.com/v1',
   apiKey: 'sk-test',
-  model: 'gpt-4o',
   isLocalTrusted: false,
 };
 
@@ -266,6 +266,7 @@ const defaultInput: AgentRunInput = {
   conversationId: 'conv-1',
   userMessage: '查询当前标签页',
   providerConfig: defaultProviderConfig,
+  model: 'gpt-4o',
   browserContext: defaultBrowserContext,
 };
 
@@ -777,44 +778,6 @@ describe('AgentLoop', () => {
   });
 
   // === Scenario 9 ===
-  it('达到 maxToolRounds → 终止', async () => {
-    const toolDef: ToolDefinition = {
-      name: 'noop',
-      description: 'noop',
-      schema: { type: 'object', properties: {} },
-      category: 'tabs',
-      riskLevel: 'low',
-      confirmationRequired: false,
-      resultSensitivity: 'low',
-      execute: vi.fn().mockResolvedValue({ success: true, data: {} }),
-    };
-
-    const toolRegistry = createMockToolRegistry([toolDef]);
-    const config: AgentConfig = { ...defaultConfig, maxToolRounds: 3 };
-
-    const toolCallResp = toolCallsResponse(toolCallDelta('call_n', 'noop', {}));
-    const llmClient = createMockLlmClient([
-      toolCallResp,
-      toolCallResp,
-      toolCallResp,
-    ]);
-    const llmFactory = vi.fn().mockReturnValue(llmClient);
-
-    const loop = new AgentLoop(
-      config,
-      toolRegistry,
-      createMockGuardrail(),
-      conversationManager,
-      llmFactory,
-    );
-
-    const output = await loop.run(defaultInput);
-
-    expect(output.finalMessage).toBe('操作步骤过多，已达到最大执行轮次。');
-    expect(output.toolCalls).toHaveLength(3);
-  });
-
-  // === Scenario 10 ===
   it('AbortController 中止 → 立即停止', async () => {
     const toolDef: ToolDefinition = {
       name: 'slow_tool',
@@ -1456,7 +1419,7 @@ describe('AgentLoop', () => {
     const resp3 = { ...toolCallResp, usage: { prompt_tokens: 30, completion_tokens: 20, total_tokens: 50 } };
     const resp4 = { ...stopResponseWithUsage('完成。', 10, 5), usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
 
-    const config: AgentConfig = { ...defaultConfig, maxToolRounds: 4 };
+    const config: AgentConfig = { ...defaultConfig };
     const llmClient = createMockLlmClient([resp1, resp2, resp3, resp4]);
     const llmFactory = vi.fn().mockReturnValue(llmClient);
 

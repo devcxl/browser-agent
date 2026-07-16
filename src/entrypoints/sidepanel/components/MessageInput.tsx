@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '../utils';
-import type { ProviderConfig } from '@/shared/types';
+import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useI18n } from '../i18n/useI18n';
+import { getProviderClientFactory } from '@/provider/provider-client-factory';
+import type { CatalogModel } from '@/provider/provider-catalog';
 
 interface Props {
   onSend: (text: string) => void;
@@ -10,6 +12,10 @@ interface Props {
   disabled: boolean;
   isRunning: boolean;
   providers: ProviderConfig[];
+  selectedModelId: string;
+  onSelectModel: (modelId: string) => void;
+  reasoningEffort: ReasoningEffort;
+  onReasoningEffortChange: (effort: ReasoningEffort) => void;
 }
 
 const SpinnerIcon = (
@@ -19,10 +25,40 @@ const SpinnerIcon = (
   </svg>
 );
 
-export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }: Props) {
+export function MessageInput({
+  onSend, onAbort, disabled, isRunning,
+  providers, selectedModelId, onSelectModel,
+  reasoningEffort, onReasoningEffortChange,
+}: Props) {
   const { t } = useI18n();
   const [text, setText] = useState('');
+  const [models, setModels] = useState<CatalogModel[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const activeProvider = providers.length > 0 ? providers[0]! : null;
+
+  useEffect(() => {
+    if (!activeProvider || activeProvider.isCustom) {
+      setModels([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingModels(true);
+    getProviderClientFactory()
+      .getModels(activeProvider)
+      .then((m) => {
+        if (!cancelled) {
+          setModels(m);
+          if (m.length > 0 && !selectedModelId) {
+            onSelectModel(m[0]!.id);
+          }
+        }
+      })
+      .catch(() => { if (!cancelled) setModels([]); })
+      .finally(() => { if (!cancelled) setLoadingModels(false); });
+    return () => { cancelled = true; };
+  }, [activeProvider?.id]);
 
   const handleTranscribed = useCallback((transcribedText: string) => {
     setText((prev) => {
@@ -84,14 +120,12 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
             </svg>
           </button>
         );
-
       case 'requesting':
         return (
           <span data-testid="mic-button" className={cn(baseMicClass, 'text-mute')} title={t('chat.input.requestingMic')}>
             {SpinnerIcon}
           </span>
         );
-
       case 'recording':
         return (
           <button
@@ -104,14 +138,12 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
             <span className="w-3 h-3 rounded-full bg-danger animate-pulse" />
           </button>
         );
-
       case 'transcribing':
         return (
           <span data-testid="mic-button" className={cn(baseMicClass, 'text-mute opacity-60')} title={t('chat.input.transcribing')}>
             {SpinnerIcon}
           </span>
         );
-
       case 'error':
         return (
           <button
@@ -128,11 +160,12 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
             </svg>
           </button>
         );
-
       default:
         return null;
     }
   };
+
+  const hasConfigRow = models.length > 0;
 
   return (
     <div className="border-t border-hairline bg-canvas">
@@ -141,53 +174,87 @@ export function MessageInput({ onSend, onAbort, disabled, isRunning, providers }
           <div className="h-full bg-primary w-1/3 animate-progress" />
         </div>
       )}
+
       <div className="px-4 py-3">
-        <div className="flex items-end gap-3">
-        {renderMicButton()}
-        <textarea
-          ref={textareaRef}
-          data-testid="message-input"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={handleKeyDown}
-          disabled={disabled}
-          placeholder={disabled ? t('chat.input.disabledPlaceholder') : t('chat.input.placeholder')}
-          rows={1}
-          className={cn(
-            'flex-1 resize-none rounded-md bg-surface-card text-ink text-sm p-3',
-            'border border-hairline',
-            'placeholder:text-ash',
-            'focus:outline-none focus:border-primary',
-            'disabled:bg-hairline-soft disabled:text-ash',
-          )}
-        />
-        {isRunning ? (
-          <button
-            type="button"
-            data-testid="abort-button"
-            onClick={onAbort}
-            className="px-5 py-2 rounded-full bg-danger text-on-primary text-sm font-medium hover:bg-danger-hover shrink-0"
-          >
-            {t('chat.input.abort')}
-          </button>
-        ) : (
-          <button
-            type="button"
-            data-testid="send-button"
-            onClick={handleSend}
-            disabled={!text.trim() || disabled}
-            aria-label={t('chat.input.send')}
-            className={cn(
-              'px-5 py-2 rounded-full text-sm font-medium shrink-0',
-              text.trim() && !disabled
-                ? 'bg-primary text-on-primary hover:bg-primary-active'
-                : 'bg-hairline-soft text-ash cursor-not-allowed',
+        {hasConfigRow && (
+          <div className="flex items-center gap-2 mb-2">
+            <select
+              data-testid="model-select"
+              value={selectedModelId}
+              onChange={(e) => onSelectModel(e.target.value)}
+              className="flex-1 px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:border-primary"
+            >
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+
+            <select
+              data-testid="reasoning-select"
+              value={reasoningEffort}
+              onChange={(e) => onReasoningEffortChange(e.target.value as ReasoningEffort)}
+              className="w-24 px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:border-primary"
+              title="Reasoning effort"
+            >
+              <option value="low">Think: Low</option>
+              <option value="medium">Think: Med</option>
+              <option value="high">Think: High</option>
+              <option value="max">Think: Max</option>
+            </select>
+
+            {loadingModels && (
+              <span className="text-xs text-mute">...</span>
             )}
-          >
-            {t('chat.input.send')}
-          </button>
+          </div>
         )}
-      </div>
+
+        <div className={cn('flex items-end gap-3', !hasConfigRow && 'flex-col-reverse')}>
+          {hasConfigRow && renderMicButton()}
+          <textarea
+            ref={textareaRef}
+            data-testid="message-input"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            disabled={disabled}
+            placeholder={disabled ? t('chat.input.disabledPlaceholder') : t('chat.input.placeholder')}
+            rows={1}
+            className={cn(
+              'flex-1 resize-none rounded-md bg-surface-card text-ink text-sm p-3',
+              'border border-hairline',
+              'placeholder:text-ash',
+              'focus:outline-none focus:border-primary',
+              'disabled:bg-hairline-soft disabled:text-ash',
+            )}
+          />
+          {isRunning ? (
+            <button
+              type="button"
+              data-testid="abort-button"
+              onClick={onAbort}
+              className="px-5 py-2 rounded-full bg-danger text-on-primary text-sm font-medium hover:bg-danger-hover shrink-0"
+            >
+              {t('chat.input.abort')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="send-button"
+              onClick={handleSend}
+              disabled={!text.trim() || disabled}
+              aria-label={t('chat.input.send')}
+              className={cn(
+                'px-5 py-2 rounded-full text-sm font-medium shrink-0',
+                text.trim() && !disabled
+                  ? 'bg-primary text-on-primary hover:bg-primary-active'
+                  : 'bg-hairline-soft text-ash cursor-not-allowed',
+              )}
+            >
+              {t('chat.input.send')}
+            </button>
+          )}
+        </div>
+        {!hasConfigRow && <div className="flex justify-center mt-2">{renderMicButton()}</div>}
       </div>
     </div>
   );

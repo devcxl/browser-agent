@@ -53,9 +53,9 @@ function makeProvider(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     id: 'p1',
     name: 'Test Provider',
+    providerId: 'openai',
     endpoint: 'https://api.test.com',
     apiKey: 'test-key',
-    model: 'gpt-4o',
     isLocalTrusted: false,
     sttModel: 'whisper-1',
     ...overrides,

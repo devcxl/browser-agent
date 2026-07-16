@@ -37,7 +37,7 @@ export class AgentLoop implements IAgentRuntime {
     private toolRegistry: IToolRegistry,
     private guardrail: IGuardrail,
     private conversationManager: IConversationManager,
-    private llmClientFactory: (config: ProviderConfig) => ILlmClient,
+    private llmClientFactory: (config: ProviderConfig, model: string) => ILlmClient,
     private hooks?: AgentLoopHooks,
   ) {
     this.contextBuilder = new ContextBuilder(config, toolRegistry, conversationManager);
@@ -67,13 +67,12 @@ export class AgentLoop implements IAgentRuntime {
         timestamp: Date.now(),
       });
 
-      const llmClient = this.llmClientFactory(input.providerConfig);
+      const llmClient = this.llmClientFactory(input.providerConfig, input.model);
 
       // 2. Agent loop
-      let round = 0;
       let invalidRetries = 0;
 
-      while (round < this.config.maxToolRounds) {
+      while (true) {
         if (this.abortController.signal.aborted) {
           finalMessage = '操作已被中止。';
           break;
@@ -152,7 +151,7 @@ export class AgentLoop implements IAgentRuntime {
         try {
           await llmClient.chatStream(
             {
-              model: input.providerConfig.model,
+              model: input.model,
               messages,
               tools,
               reasoning_effort: this.config.reasoningEffort,
@@ -484,15 +483,10 @@ export class AgentLoop implements IAgentRuntime {
           }
 
           if (finalMessage) break;
-          round++;
         } else {
           finalMessage = streamingContent;
           break;
         }
-      }
-
-      if (round >= this.config.maxToolRounds && !finalMessage) {
-        finalMessage = '操作步骤过多，已达到最大执行轮次。';
       }
 
       // 4. Store assistant response（toolCalls 已在中间消息持久化，此处只存最终文本）

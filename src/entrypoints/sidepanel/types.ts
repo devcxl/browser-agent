@@ -49,9 +49,10 @@ export interface ExpertModeSettings {
 export interface ProviderFormData {
   id?: string;
   name: string;
+  providerId: string;
   endpoint: string;
   apiKey: string;
-  model: string;
+  isCustom: boolean;
   isLocalTrusted: boolean;
   /** STT 语音识别模型（可选） */
   sttModel?: string;

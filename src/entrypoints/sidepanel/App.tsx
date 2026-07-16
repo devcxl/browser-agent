@@ -9,8 +9,10 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { I18nProvider } from './i18n/I18nProvider';
 import { useI18n } from './i18n/useI18n';
 import { ConfigStore } from '@/shared/storage';
+import { getProviderClientFactory } from '@/provider/provider-client-factory';
+import { ProviderCatalog } from '@/provider/provider-catalog';
 import type { AgentSettings, ExpertModeSettings } from './types';
-import type { ProviderConfig } from '@/shared/types';
+import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 
 const store = ConfigStore.getInstance();
 
@@ -20,8 +22,9 @@ function ChatLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Settings state (persisted via ConfigStore → browser.storage.local)
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>('medium');
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     maxToolRounds: 99,
     maxContextMessages: 40,
@@ -38,7 +41,6 @@ function ChatLayout() {
     switches: {},
   });
 
-  // 初始化：从 storage 加载
   useEffect(() => {
     (async () => {
       setProviders(await store.get('providers'));
@@ -58,7 +60,8 @@ function ChatLayout() {
     })();
   }, []);
 
-  // 持久化回调
+  const activeProvider = providers.length > 0 ? providers[0]! : null;
+
   const handleSaveProviders = useCallback(async (p: ProviderConfig[]) => {
     setProviders(p);
     await store.set('providers', p);
@@ -78,7 +81,6 @@ function ChatLayout() {
       summaryThreshold: {
         messageCount: 30,
         estimatedTokens: 12000,
-        toolCallCount: 50,
       },
     });
   }, []);
@@ -89,22 +91,32 @@ function ChatLayout() {
 
   const handleSend = useCallback(
     (text: string) => {
+      if (!activeProvider) return;
+      const model = selectedModelId || '';
+
       if (!conversations.activeId) {
         conversations.create().then((id) => {
-          agent.run(id, text, providers[0]!, agentSettings.reasoningEffort);
+          agent.run(id, text, activeProvider, model, reasoningEffort);
         });
         return;
       }
-      agent.run(conversations.activeId, text, providers[0]!, agentSettings.reasoningEffort);
+      agent.run(conversations.activeId, text, activeProvider, model, reasoningEffort);
     },
-    [conversations, agent, providers, agentSettings.reasoningEffort],
+    [conversations, agent, activeProvider, selectedModelId, reasoningEffort],
   );
 
   const handleTestConnection = useCallback(
     async (provider: ProviderConfig): Promise<boolean> => {
-      const { LlmClient } = await import('@/provider');
-      const client = new LlmClient(provider);
-      return client.checkHealth(provider);
+      try {
+        const models = await getProviderClientFactory().getModels(provider);
+        if (models.length > 0) {
+          const client = await getProviderClientFactory().createClient(provider, models[0]!.id);
+          return client.checkHealth(provider);
+        }
+        return false;
+      } catch {
+        return false;
+      }
     },
     [],
   );
@@ -115,12 +127,10 @@ function ChatLayout() {
 
   return (
     <div className="h-full flex flex-col bg-canvas">
-      {/* Header */}
       <header className="h-10 border-b border-hairline bg-canvas flex items-center justify-between px-4 shrink-0">
         <span className="text-sm font-semibold text-ink tracking-wide">{t('app.title')}</span>
       </header>
 
-      {/* Main */}
       <div className="flex-1 flex overflow-hidden">
         <ConversationSidebar
           conversations={conversations.list.map((c) => ({ ...c, status: conversationStatuses[c.id] }))}
@@ -156,14 +166,17 @@ function ChatLayout() {
           <MessageInput
             onSend={handleSend}
             onAbort={agent.abort}
-            disabled={agent.status !== 'idle'}
+            disabled={agent.status !== 'idle' || !activeProvider}
             isRunning={agent.status !== 'idle'}
             providers={providers}
+            selectedModelId={selectedModelId}
+            onSelectModel={setSelectedModelId}
+            reasoningEffort={reasoningEffort}
+            onReasoningEffortChange={setReasoningEffort}
           />
         </div>
       </div>
 
-      {/* Settings Modal */}
       {showSettings && (
         <SettingsPanel
           providers={providers}
@@ -177,7 +190,6 @@ function ChatLayout() {
         />
       )}
 
-      {/* Confirm Dialog */}
       {confirmRequest && (
         <ConfirmDialog
           request={confirmRequest}

@@ -6,10 +6,11 @@ function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     id: 'test-stt-provider',
     name: 'Test STT',
+    providerId: 'openai',
     endpoint: 'https://api.test.com',
     apiKey: 'sk-test-key',
-    model: 'whisper-1',
     isLocalTrusted: false,
+    sttModel: 'whisper-1',
     ...overrides,
   };
 }
@@ -93,7 +94,8 @@ describe('SttClient', () => {
 
       const file = formData.get('file') as File;
       expect(file).toBeInstanceOf(File);
-      expect(file.name).toBe('audio.webm');
+      // Audio is converted to WAV when sttModel is set and audioFormat is auto
+      expect(file.name).toBe('audio.wav');
     });
 
     it('should include Authorization header', async () => {
@@ -165,7 +167,7 @@ describe('SttClient', () => {
       expect(headers['Authorization']).toBe('Bearer sk-test-key');
     });
 
-    it('should prefer sttModel over model', async () => {
+    it('should use configured sttModel', async () => {
       const configWithSttModel = makeConfig({ sttModel: 'whisper-2' });
       const customClient = new SttClient(configWithSttModel);
       const fetchSpy = mockFetchOk({ text: 'ok' });

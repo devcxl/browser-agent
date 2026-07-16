@@ -67,7 +67,10 @@ export class SttClient {
       const ext = mimeToExt(sendBlob.type);
       const formData = new FormData();
       formData.append('file', sendBlob, `audio.${ext}`);
-      formData.append('model', this.config.sttModel ?? this.config.model);
+      if (!this.config.sttModel) {
+        throw new Error('未配置 STT 语音识别模型');
+      }
+      formData.append('model', this.config.sttModel);
 
       const response = await fetch(this.apiUrl, {
         method: 'POST',

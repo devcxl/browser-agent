@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import type { AgentSettings, ExpertModeSettings, ProviderFormData } from '../types';
 import type { Skill, SkillSubscription } from '@/shared/types';
 import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
+import { ProviderCatalog } from '@/provider/provider-catalog';
 import { cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
 import { EXPERT_API_DOMAINS } from '@/shared/types';
@@ -19,15 +20,11 @@ interface Props {
   onClose: () => void;
 }
 
-const defaultForm: ProviderFormData = {
-  name: '',
-  endpoint: '',
-  apiKey: '',
-  model: '',
-  isLocalTrusted: false,
-  sttModel: '',
-  audioFormat: '',
-};
+interface CatalogEntry {
+  id: string;
+  name: string;
+  npm: string;
+}
 
 export function SettingsPanel({
   providers,
@@ -41,7 +38,14 @@ export function SettingsPanel({
 }: Props) {
   const { t, locale, setLanguage } = useI18n();
   const [tab, setTab] = useState<'provider' | 'agent' | 'expert' | 'skills' | 'language'>('provider');
-  const [editing, setEditing] = useState<ProviderFormData | null>(null);
+
+  // Provider
+  const [catalogList, setCatalogList] = useState<CatalogEntry[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
+  const [editApiKey, setEditApiKey] = useState('');
   const [testingIdx, setTestingIdx] = useState<number | null>(null);
   const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
 
@@ -56,24 +60,72 @@ export function SettingsPanel({
     { value: 'audio/wav', label: t('settings.provider.audioFormats.wav') },
   ];
 
-  const handleSaveProvider = () => {
-    if (!editing) return;
-    const newProvider: ProviderConfig = {
-      id: editing.id ?? crypto.randomUUID(),
-      name: editing.name,
-      endpoint: editing.endpoint,
-      apiKey: editing.apiKey,
-      model: editing.model,
-      isLocalTrusted: editing.isLocalTrusted,
-      sttModel: editing.sttModel || undefined,
-      audioFormat: editing.audioFormat || undefined,
-    };
-    if (editing.id) {
-      onSaveProviders(providers.map((p) => (p.id === editing.id ? newProvider : p)));
-    } else {
-      onSaveProviders([...providers, newProvider]);
+  useEffect(() => {
+    if (tab === 'provider' && catalogList.length === 0) {
+      setLoadingCatalog(true);
+      ProviderCatalog.getInstance()
+        .getProviderList()
+        .then((list) => setCatalogList(list))
+        .catch(() => {})
+        .finally(() => setLoadingCatalog(false));
     }
-    setEditing(null);
+  }, [tab, catalogList.length]);
+
+  const filteredCatalog = useMemo(() => {
+    if (!searchQuery.trim()) return catalogList;
+    const q = searchQuery.toLowerCase();
+    return catalogList.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q),
+    );
+  }, [catalogList, searchQuery]);
+
+  const startAddProvider = (entry: CatalogEntry) => {
+    const catalog = ProviderCatalog.getInstance();
+    catalog.getProvider(entry.id).then((info) => {
+      if (!info) return;
+      setEditingProviderId(entry.id);
+      setEditApiKey('');
+      setShowAddPanel(false);
+      setSearchQuery('');
+    });
+  };
+
+  const startCustomProvider = () => {
+    setEditingProviderId('__custom__');
+    setEditApiKey('');
+    setShowAddPanel(false);
+    setSearchQuery('');
+  };
+
+  const handleSaveProvider = () => {
+    if (!editingProviderId || !editApiKey.trim()) return;
+
+    if (editingProviderId === '__custom__') {
+      return;
+    }
+
+    const catalog = ProviderCatalog.getInstance();
+    catalog.getProvider(editingProviderId).then((info) => {
+      if (!info) return;
+
+      const newProvider: ProviderConfig = {
+        id: crypto.randomUUID(),
+        name: info.name,
+        providerId: editingProviderId,
+        endpoint: info.api,
+        apiKey: editApiKey.trim(),
+        isLocalTrusted: false,
+      };
+
+      const existing = providers.find((p) => p.providerId === editingProviderId && !p.isCustom);
+      if (existing) {
+        onSaveProviders(providers.map((p) => (p.id === existing.id ? { ...newProvider, id: existing.id } : p)));
+      } else {
+        onSaveProviders([...providers, newProvider]);
+      }
+      setEditingProviderId(null);
+      setEditApiKey('');
+    });
   };
 
   const handleDeleteProvider = (id: string) => {
@@ -241,16 +293,12 @@ export function SettingsPanel({
               {t(`settings.tabs.${tabKey}`)}
             </button>
           ))}
-
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {tab === 'provider' && (
             <div className="space-y-3">
-              {providers.length === 0 && !editing && (
-                <p className="text-sm text-mute">{t('settings.provider.noProviders')}</p>
-              )}
-
+              {/* 已保存的 Provider 列表 */}
               {providers.map((p, idx) => (
                 <div
                   key={p.id}
@@ -259,16 +307,21 @@ export function SettingsPanel({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-ink">{p.name}</span>
+                      {p.isCustom && (
+                        <span className="text-[10px] bg-ash/20 text-ash px-1.5 py-0.5 rounded-full">
+                          Custom
+                        </span>
+                      )}
                       {p.isLocalTrusted && (
                         <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">
                           {t('settings.provider.trusted')}
                         </span>
                       )}
                     </div>
-                    <div className="text-xs text-mute truncate">{p.endpoint} / {p.model}</div>
+                    <div className="text-xs text-mute truncate">{p.endpoint}</div>
                     {p.sttModel && (
                       <div className="text-xs text-mute truncate mt-0.5">
-                        🎤 {t('settings.provider.voiceModel')}: {p.sttModel} | {t('settings.provider.audioFormat')}: {p.audioFormat || 'WAV'}
+                        STT: {p.sttModel}
                       </div>
                     )}
                   </div>
@@ -288,24 +341,6 @@ export function SettingsPanel({
                     )}
                     <button
                       type="button"
-                      onClick={() =>
-                        setEditing({
-                          id: p.id,
-                          name: p.name,
-                          endpoint: p.endpoint,
-                          apiKey: p.apiKey,
-                          model: p.model,
-                          isLocalTrusted: p.isLocalTrusted,
-                          sttModel: p.sttModel ?? '',
-                          audioFormat: p.audioFormat ?? '',
-                        })
-                      }
-                      className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft"
-                    >
-                      {t('settings.provider.edit')}
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => handleDeleteProvider(p.id)}
                       className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50"
                     >
@@ -315,77 +350,88 @@ export function SettingsPanel({
                 </div>
               ))}
 
-              {editing && (
-                <div className="border border-hairline rounded-xl p-3 space-y-2 bg-surface-soft">
-                  <input
-                    data-testid="provider-name-input"
-                    placeholder={t('settings.provider.placeholder.name')}
-                    value={editing.name}
-                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-                  />
-                  <input
-                    data-testid="provider-endpoint-input"
-                    placeholder={t('settings.provider.placeholder.endpoint')}
-                    value={editing.endpoint}
-                    onChange={(e) => setEditing({ ...editing, endpoint: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-                  />
-                  <input
-                    data-testid="provider-apikey-input"
-                    type="password"
-                    placeholder={t('settings.provider.placeholder.apiKey')}
-                    value={editing.apiKey}
-                    onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-                  />
-                  <input
-                    data-testid="provider-model-input"
-                    placeholder={t('settings.provider.placeholder.model')}
-                    value={editing.model}
-                    onChange={(e) => setEditing({ ...editing, model: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-                  />
-                  <input
-                    data-testid="provider-stt-model-input"
-                    placeholder={t('settings.provider.placeholder.sttModel')}
-                    value={editing.sttModel ?? ''}
-                    onChange={(e) => setEditing({ ...editing, sttModel: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-                  />
-                  <select
-                    data-testid="provider-audio-format-select"
-                    value={editing.audioFormat ?? ''}
-                    onChange={(e) => setEditing({ ...editing, audioFormat: e.target.value })}
-                    className="w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink focus:outline-none focus:border-primary"
-                  >
-                    {audioFormats.map((fmt) => (
-                      <option key={fmt.value} value={fmt.value}>{fmt.label}</option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-mute -mt-1">{t('settings.provider.audioFormatHint')}</p>
-                  <label className="flex items-center gap-2 text-sm text-mute">
+              {providers.length === 0 && !editingProviderId && (
+                <p className="text-sm text-mute text-center py-4">{t('settings.provider.noProviders')}</p>
+              )}
+
+              {/* 添加 Provider 入口 */}
+              {!editingProviderId ? (
+                <button
+                  type="button"
+                  data-testid="add-provider-button"
+                  onClick={() => setShowAddPanel(true)}
+                  className="w-full py-2.5 text-sm rounded-xl border-2 border-dashed border-primary/40 text-primary hover:border-primary hover:bg-primary/5 font-medium"
+                >
+                  + {t('settings.provider.add')}
+                </button>
+              ) : null}
+
+              {/* Provider 选择面板 */}
+              {showAddPanel && (
+                <div className="border border-hairline rounded-xl overflow-hidden bg-canvas">
+                  {/* 搜索框 */}
+                  <div className="px-3 py-2 border-b border-hairline">
                     <input
-                      type="checkbox"
-                      checked={editing.isLocalTrusted}
-                      onChange={(e) => setEditing({ ...editing, isLocalTrusted: e.target.checked })}
+                      autoFocus
+                      type="text"
+                      placeholder="Search providers..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-hairline rounded-lg bg-surface-soft text-ink placeholder:text-mute focus:outline-none focus:border-primary"
                     />
-                    {t('settings.provider.trustedLabel')}
-                  </label>
-                  <div className="flex gap-2 pt-1">
+                  </div>
+
+                  {/* Provider 列表 */}
+                  <div className="max-h-64 overflow-y-auto">
+                    {loadingCatalog && (
+                      <div className="text-xs text-mute text-center py-4">Loading...</div>
+                    )}
+                    {!loadingCatalog && filteredCatalog.length === 0 && (
+                      <div className="text-xs text-mute text-center py-4">No providers found</div>
+                    )}
+                    {filteredCatalog.map((entry) => {
+                      const exists = providers.some((p) => p.providerId === entry.id && !p.isCustom);
+                      return (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          onClick={() => startAddProvider(entry)}
+                          disabled={!!exists}
+                          className={cn(
+                            'w-full text-left px-4 py-2.5 text-sm transition-colors border-b border-hairline-soft last:border-0',
+                            exists
+                              ? 'text-mute bg-hairline-soft cursor-not-allowed'
+                              : 'text-ink hover:bg-surface-soft',
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">{entry.name}</span>
+                            {exists && <span className="text-[10px] text-mute">Added</span>}
+                          </div>
+                          <div className="text-xs text-mute mt-0.5">{entry.id}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom Provider */}
+                  <div className="border-t border-hairline px-3 py-2">
                     <button
                       type="button"
-                      data-testid="save-provider-button"
-                      onClick={handleSaveProvider}
-                      disabled={!editing.name || !editing.endpoint || !editing.apiKey || !editing.model}
-                      className="px-3 py-1 text-sm rounded-full bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed"
+                      data-testid="custom-provider-button"
+                      onClick={startCustomProvider}
+                      className="w-full py-2 text-sm rounded-lg border border-dashed border-ash text-mute hover:border-ink hover:text-ink"
                     >
-                      {t('settings.provider.save')}
+                      + Custom Provider
                     </button>
+                  </div>
+
+                  {/* 取消 */}
+                  <div className="border-t border-hairline px-3 py-2">
                     <button
                       type="button"
-                      onClick={() => setEditing(null)}
-                      className="px-3 py-1 text-sm rounded-full border border-hairline-strong text-mute hover:bg-surface-soft"
+                      onClick={() => { setShowAddPanel(false); setSearchQuery(''); }}
+                      className="w-full py-1.5 text-sm text-mute hover:text-ink rounded-lg hover:bg-surface-soft"
                     >
                       {t('settings.provider.cancel')}
                     </button>
@@ -393,15 +439,56 @@ export function SettingsPanel({
                 </div>
               )}
 
-              {!editing && (
-                <button
-                  type="button"
-                  data-testid="add-provider-button"
-                  onClick={() => setEditing(defaultForm)}
-                  className="w-full py-2 text-sm rounded-xl border-2 border-dashed border-ash text-mute hover:border-ink hover:text-ink"
-                >
-                  {t('settings.provider.add')}
-                </button>
+              {/* API Key 填写表单 (选中 provider 后) */}
+              {editingProviderId && (
+                <div className="border border-hairline rounded-xl p-4 space-y-3 bg-surface-soft">
+                  {editingProviderId === '__custom__' ? (
+                    <div className="text-sm font-medium text-ink">Custom Provider</div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-ink">
+                          {catalogList.find((c) => c.id === editingProviderId)?.name ?? editingProviderId}
+                        </span>
+                      </div>
+                      <div className="text-xs text-mute">
+                        {ProviderCatalog.prototype.getProvider
+                          ? 'Loading endpoint...'
+                          : ''}
+                      </div>
+                    </div>
+                  )}
+
+                  <input
+                    data-testid="provider-apikey-input"
+                    type="password"
+                    autoFocus
+                    placeholder="API Key"
+                    value={editApiKey}
+                    onChange={(e) => setEditApiKey(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveProvider(); }}
+                    className="w-full px-3 py-2 text-sm border border-hairline rounded-lg bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
+                  />
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      data-testid="save-provider-button"
+                      onClick={handleSaveProvider}
+                      disabled={!editApiKey.trim()}
+                      className="flex-1 py-2 text-sm rounded-lg bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed font-medium"
+                    >
+                      {t('settings.provider.save')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingProviderId(null); setEditApiKey(''); }}
+                      className="px-4 py-2 text-sm rounded-lg border border-hairline-strong text-mute hover:bg-surface-soft"
+                    >
+                      {t('settings.provider.cancel')}
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -506,24 +593,6 @@ export function SettingsPanel({
                   placeholder={t('settings.agent.microcompactExcludeToolsPlaceholder')}
                   className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
                 />
-              </label>
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.reasoningEffort')}</span>
-                <select
-                  value={agentSettings.reasoningEffort}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, reasoningEffort: e.target.value as ReasoningEffort })
-                  }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
-                >
-                  <option value="low">{t('settings.agent.reasoningOptions.low')}</option>
-                  <option value="medium">{t('settings.agent.reasoningOptions.medium')}</option>
-                  <option value="high">{t('settings.agent.reasoningOptions.high')}</option>
-                  <option value="max">{t('settings.agent.reasoningOptions.max')}</option>
-                </select>
-                <p className="text-xs text-mute mt-1">
-                  {t('settings.agent.reasoningEffortHint')}
-                </p>
               </label>
               <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.systemPrompt')}</span>
@@ -634,7 +703,6 @@ export function SettingsPanel({
                 <p className="text-xs text-mute text-center py-3">{t('settings.skills.noSubscriptionsAndSkills')}</p>
               )}
 
-              {/* Subscriptions */}
               {subscriptions.map((sub) => {
                 const subSkills = skillsBySource.get(`github:${sub.source}`) ?? [];
                 return (
@@ -711,7 +779,6 @@ export function SettingsPanel({
                 );
               })}
 
-              {/* Local skills */}
               {localSkills.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium text-ink mb-2">{t('settings.skills.localSkills')}</h4>

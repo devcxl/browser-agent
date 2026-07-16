@@ -44,8 +44,7 @@ export interface AgentSettings {
   /** 摘要触发阈值 */
   summaryThreshold: {
     messageCount: number;    // 默认 30
-    estimatedTokens: number; // 默认 12000
-    toolCallCount: number;   // 默认 50
+    estimatedTokens: number;  // 默认 12000
   };
 }
 

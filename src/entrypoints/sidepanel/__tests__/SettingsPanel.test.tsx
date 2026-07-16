@@ -113,9 +113,9 @@ function makeProvider(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
   return {
     id: 'p1',
     name: 'Test Provider',
+    providerId: 'openai',
     endpoint: 'https://api.test.com/v1',
     apiKey: 'sk-test',
-    model: 'gpt-4o',
     isLocalTrusted: false,
     ...overrides,
   };
@@ -133,122 +133,67 @@ describe('SettingsPanel - sttModel', () => {
     await mockBrowser.local.set({ preferences: { language: 'zh-CN' } });
   });
 
-  it('编辑表单应包含语音模型输入框', async () => {
+  it('点击 Add Provider 按钮应显示搜索面板', async () => {
     const props = makeProps();
     renderWithI18n(<SettingsPanel {...props} />);
 
     const addBtn = screen.getByTestId('add-provider-button');
     await userEvent.click(addBtn);
 
-    const input = screen.getByTestId('provider-stt-model-input') as HTMLInputElement;
-    expect(input).toBeInTheDocument();
-    expect(input).toHaveAttribute('placeholder', expect.stringContaining('语音模型'));
-    expect(input.value).toBe('');
+    expect(screen.getByPlaceholderText('Search providers...')).toBeTruthy();
+    expect(screen.getByTestId('custom-provider-button')).toBeTruthy();
   });
 
-  it('新增 Provider 时可填写 sttModel 并保存', async () => {
-    const onSave = vi.fn();
-    const props = makeProps({ onSaveProviders: onSave });
+  it('选中 provider 后应显示 API Key 输入框', async () => {
+    const props = makeProps();
     renderWithI18n(<SettingsPanel {...props} />);
 
-    const addBtn = screen.getByTestId('add-provider-button');
-    await userEvent.click(addBtn);
+    await userEvent.click(screen.getByTestId('add-provider-button'));
+    await userEvent.click(screen.getByTestId('custom-provider-button'));
 
-    await userEvent.type(screen.getByTestId('provider-name-input'), 'My Provider');
-    await userEvent.type(screen.getByTestId('provider-endpoint-input'), 'https://api.example.com/v1');
-    await userEvent.type(screen.getByTestId('provider-apikey-input'), 'sk-xxx');
-    await userEvent.type(screen.getByTestId('provider-model-input'), 'gpt-4o');
-    await userEvent.type(screen.getByTestId('provider-stt-model-input'), 'whisper-1');
-
-    await userEvent.click(screen.getByTestId('save-provider-button'));
-
-    expect(onSave).toHaveBeenCalledTimes(1);
-    const saved = onSave.mock.calls[0][0] as ProviderConfig[];
-    expect(saved[0].sttModel).toBe('whisper-1');
+    expect(screen.getByTestId('provider-apikey-input')).toBeTruthy();
+    expect(screen.getByTestId('save-provider-button')).toBeTruthy();
   });
 
-  it('不填 sttModel 时保存的 ProviderConfig 应不含 sttModel 字段', async () => {
-    const onSave = vi.fn();
-    const props = makeProps({ onSaveProviders: onSave });
-    renderWithI18n(<SettingsPanel {...props} />);
-
-    const addBtn = screen.getByTestId('add-provider-button');
-    await userEvent.click(addBtn);
-
-    await userEvent.type(screen.getByTestId('provider-name-input'), 'My Provider');
-    await userEvent.type(screen.getByTestId('provider-endpoint-input'), 'https://api.example.com/v1');
-    await userEvent.type(screen.getByTestId('provider-apikey-input'), 'sk-xxx');
-    await userEvent.type(screen.getByTestId('provider-model-input'), 'gpt-4o');
-
-    await userEvent.click(screen.getByTestId('save-provider-button'));
-
-    expect(onSave).toHaveBeenCalledTimes(1);
-    const saved = onSave.mock.calls[0][0] as ProviderConfig[];
-    expect(saved[0].sttModel).toBeUndefined();
-  });
-
-  it('编辑已有 Provider 时应回显 sttModel', async () => {
+  it('已有 provider 时应显示 provider 卡片', () => {
     const provider = makeProvider({ sttModel: 'whisper-1' });
     const props = makeProps({ providers: [provider] });
     renderWithI18n(<SettingsPanel {...props} />);
 
-    const editBtn = screen.getByText('编辑');
-    await userEvent.click(editBtn);
-
-    const input = screen.getByTestId('provider-stt-model-input') as HTMLInputElement;
-    expect(input.value).toBe('whisper-1');
+    expect(screen.getByText('Test Provider')).toBeTruthy();
+    expect(screen.getByText(/whisper-1/)).toBeTruthy();
   });
 
-  it('编辑已有 Provider 时应可修改 sttModel 并保存', async () => {
-    const onSave = vi.fn();
-    const provider = makeProvider({ sttModel: 'whisper-1' });
-    const props = makeProps({ providers: [provider], onSaveProviders: onSave });
-    renderWithI18n(<SettingsPanel {...props} />);
-
-    await userEvent.click(screen.getByText('编辑'));
-
-    const input = screen.getByTestId('provider-stt-model-input');
-    await userEvent.clear(input);
-    await userEvent.type(input, 'whisper-large-v3');
-
-    await userEvent.click(screen.getByTestId('save-provider-button'));
-
-    expect(onSave).toHaveBeenCalledTimes(1);
-    const saved = onSave.mock.calls[0][0] as ProviderConfig[];
-    expect(saved[0].sttModel).toBe('whisper-large-v3');
-  });
-
-  it('Provider 列表卡片应在有 sttModel 时显示语音模型信息', () => {
-    const provider = makeProvider({ sttModel: 'whisper-1' });
-    const props = makeProps({ providers: [provider] });
-    renderWithI18n(<SettingsPanel {...props} />);
-
-    expect(screen.getByText(/🎤.*语音模型.*whisper-1/)).toBeInTheDocument();
-  });
-
-  it('Provider 列表卡片应在无 sttModel 时不显示语音模型信息', () => {
+  it('已有 provider 无 sttModel 时不显示语音模型信息', () => {
     const provider = makeProvider();
     const props = makeProps({ providers: [provider] });
     renderWithI18n(<SettingsPanel {...props} />);
 
-    expect(screen.queryByText(/🎤.*语音模型/)).not.toBeInTheDocument();
+    expect(screen.getByText('Test Provider')).toBeTruthy();
+    expect(screen.queryByText(/STT:/)).toBeFalsy();
   });
 
-  it('sttModel 输入框值为空时保存应转为 undefined', async () => {
+  it('可删除已有 provider', async () => {
     const onSave = vi.fn();
-    const provider = makeProvider({ sttModel: 'whisper-1' });
+    const provider = makeProvider();
     const props = makeProps({ providers: [provider], onSaveProviders: onSave });
     renderWithI18n(<SettingsPanel {...props} />);
 
-    await userEvent.click(screen.getByText('编辑'));
-
-    const input = screen.getByTestId('provider-stt-model-input');
-    await userEvent.clear(input);
-
-    await userEvent.click(screen.getByTestId('save-provider-button'));
+    await userEvent.click(screen.getByText('删除'));
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    const saved = onSave.mock.calls[0][0] as ProviderConfig[];
-    expect(saved[0].sttModel).toBeUndefined();
+    expect(onSave.mock.calls[0][0]).toHaveLength(0);
+  });
+
+  it('API key 为空时保存按钮应禁用', async () => {
+    const onSave = vi.fn();
+    const props = makeProps({ onSaveProviders: onSave });
+    renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByTestId('add-provider-button'));
+    await userEvent.click(screen.getByTestId('custom-provider-button'));
+
+    const saveBtn = screen.getByTestId('save-provider-button');
+    expect(saveBtn).toBeDisabled();
   });
 });

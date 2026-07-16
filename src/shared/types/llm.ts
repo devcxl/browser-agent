@@ -8,13 +8,16 @@ export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max';
 
 export interface ProviderConfig {
   id: string;
+  /** 显示名称 */
   name: string;
+  /** models.dev 中的 provider id，用于查找 endpoint 和可用模型列表 */
+  providerId: string;
   /** API 端点 (e.g., https://api.openai.com/v1) */
   endpoint: string;
   /** API Key */
   apiKey: string;
-  /** 模型名称 */
-  model: string;
+  /** 是否为自定义 provider（不在 models.dev 列表中） */
+  isCustom?: boolean;
   /** 是否标记为本地可信 */
   isLocalTrusted: boolean;
   /** 额外 HTTP headers */

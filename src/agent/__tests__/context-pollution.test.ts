@@ -41,7 +41,7 @@ const defaultConfig: AgentConfig = {
   microcompactKeepRecent: 10,
   microcompactMinChars: 500,
   microcompactExcludeTools: [],
-  summaryThreshold: { messageCount: 30, estimatedTokens: 12_000, toolCallCount: 50 },
+  summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
 };
 
 const defaultBrowserContext: LowSensitivityContext = {

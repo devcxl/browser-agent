@@ -129,6 +129,7 @@ export function useAgent() {
       conversationId: string,
       userMessage: string,
       providerConfig: ProviderConfig,
+      model: string,
       reasoningEffort?: import('@/shared/types').ReasoningEffort,
     ) => {
       setRunningConversationId(conversationId);
@@ -168,7 +169,7 @@ export function useAgent() {
           microcompactMinChars: 500,
           microcompactExcludeTools: [],
           reasoningEffort,
-          summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
+          summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
         };
 
         const hooks: AgentLoopHooks = {
@@ -247,7 +248,7 @@ export function useAgent() {
           },
         };
 
-        const llmClientFactory = (config: ProviderConfig) => new LlmClient(config);
+        const llmClientFactory = (config: ProviderConfig, model: string) => new LlmClient(config, model);
 
         const loop = new AgentLoop(
           agentConfig,
@@ -282,6 +283,7 @@ export function useAgent() {
           conversationId,
           userMessage,
           providerConfig,
+          model,
           browserContext: {
             currentWindow: { tabs: [] },
             allWindows: [],

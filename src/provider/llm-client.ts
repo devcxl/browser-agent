@@ -5,57 +5,37 @@ import type {
   StreamChunk,
   ILlmClient,
 } from '@/shared/types';
+import { getProviderClientFactory } from './provider-client-factory';
 
 export class LlmClient implements ILlmClient {
-  constructor(private config: ProviderConfig) {}
+  private modelId: string;
+  private underlying: ILlmClient | null = null;
+  private initPromise: Promise<ILlmClient> | null = null;
 
-  private get apiUrl(): string {
-    const base = this.config.endpoint.replace(/\/+$/, '');
-    return `${base}/v1/chat/completions`;
+  constructor(
+    private config: ProviderConfig,
+    modelId: string,
+  ) {
+    this.modelId = modelId;
   }
 
-  private get headers(): Record<string, string> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+  private async getClient(): Promise<ILlmClient> {
+    if (this.underlying) return this.underlying;
+    if (!this.initPromise) {
+      this.initPromise = getProviderClientFactory().createClient(this.config, this.modelId).then((c) => {
+        this.underlying = c;
+        return c;
+      });
     }
-    if (this.config.extraHeaders) {
-      Object.assign(headers, this.config.extraHeaders);
-    }
-    return headers;
+    return this.initPromise;
   }
 
   async chat(
     request: ChatCompletionRequest,
     externalSignal?: AbortSignal,
   ): Promise<ChatCompletionResponse> {
-    const { signal, clear } = this.createTimeoutSignal(externalSignal);
-    try {
-      const response = await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: request.messages,
-          tools: request.tools,
-          stream: false,
-          temperature: request.temperature,
-          max_tokens: request.max_tokens,
-          reasoning_effort: request.reasoning_effort,
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `LLM API 错误 ${response.status}: ${await response.text().catch(() => '')}`,
-        );
-      }
-
-      return (await response.json()) as ChatCompletionResponse;
-    } finally {
-      clear();
-    }
+    const client = await this.getClient();
+    return client.chat(request, externalSignal);
   }
 
   async chatStream(
@@ -64,119 +44,16 @@ export class LlmClient implements ILlmClient {
     externalSignal?: AbortSignal,
     onReasoning?: (content: string) => void,
   ): Promise<void> {
-    const { signal, clear } = this.createTimeoutSignal(externalSignal);
-    try {
-      const response = await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify({
-          model: this.config.model,
-          messages: request.messages,
-          tools: request.tools,
-          stream: true,
-          temperature: request.temperature,
-          max_tokens: request.max_tokens,
-          reasoning_effort: request.reasoning_effort,
-        }),
-        signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `LLM API 错误 ${response.status}: ${await response.text().catch(() => '')}`,
-        );
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('无法读取响应流');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-            const data = trimmed.slice(6);
-            if (data === '[DONE]') return;
-
-            try {
-              const chunk = JSON.parse(data) as StreamChunk;
-              // 提取 reasoning_content 并通过独立回调传递
-              const reasoning = chunk.choices?.[0]?.delta?.reasoning_content;
-              if (reasoning && onReasoning) {
-                onReasoning(reasoning);
-              }
-              onChunk(chunk);
-            } catch {
-              // skip malformed JSON
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-    } finally {
-      clear();
-    }
+    const client = await this.getClient();
+    return client.chatStream(request, onChunk, externalSignal, onReasoning);
   }
 
-  async checkHealth(config: ProviderConfig): Promise<boolean> {
+  async checkHealth(): Promise<boolean> {
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10_000);
-
-      const base = config.endpoint.replace(/\/+$/, '');
-      const response = await fetch(`${base}/v1/models`, {
-        method: 'GET',
-        headers: config.apiKey
-          ? { Authorization: `Bearer ${config.apiKey}` }
-          : {},
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      return response.ok;
+      const client = await this.getClient();
+      return client.checkHealth(this.config);
     } catch {
       return false;
     }
-  }
-
-  private createTimeoutSignal(
-    externalSignal?: AbortSignal,
-  ): { signal: AbortSignal; clear: () => void } {
-    const timeoutMs = this.config.timeoutMs ?? 120_000;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(new Error('请求超时')),
-      timeoutMs,
-    );
-
-    if (externalSignal) {
-      if (externalSignal.aborted) {
-        controller.abort(externalSignal.reason);
-      } else {
-        externalSignal.addEventListener(
-          'abort',
-          () => controller.abort(externalSignal.reason),
-          { once: true },
-        );
-      }
-    }
-
-    return {
-      signal: controller.signal,
-      clear: () => clearTimeout(timeoutId),
-    };
   }
 }

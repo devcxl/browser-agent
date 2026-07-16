@@ -15,9 +15,9 @@ describe('LLM types', () => {
       const config: ProviderConfig = {
         id: 'openai',
         name: 'OpenAI',
+        providerId: 'openai',
         endpoint: 'https://api.openai.com/v1',
         apiKey: 'sk-xxx',
-        model: 'gpt-4',
         isLocalTrusted: false,
       };
       expect(config.id).toBe('openai');

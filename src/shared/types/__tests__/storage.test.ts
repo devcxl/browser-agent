@@ -22,7 +22,7 @@ describe('Storage types', () => {
           systemPrompt: '',
           maxContextMessages: 40,
           reasoningEffort: 'medium',
-          summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
+          summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
         },
         expertModeSettings: { enabled: false, switches: {} },
         preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },
@@ -39,7 +39,7 @@ describe('Storage types', () => {
         maxToolRounds: 10,
         systemPrompt: 'You are a browser agent',
         maxContextMessages: 20,
-        summaryThreshold: { messageCount: 25, estimatedTokens: 10000, toolCallCount: 40 },
+        summaryThreshold: { messageCount: 25, estimatedTokens: 10000 },
       };
       expect(s.maxToolRounds).toBe(10);
     });
@@ -135,7 +135,7 @@ describe('Storage types', () => {
             systemPrompt: '',
             maxContextMessages: 40,
             reasoningEffort: 'medium',
-            summaryThreshold: { messageCount: 30, estimatedTokens: 12000, toolCallCount: 50 },
+            summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
           },
           expertModeSettings: { enabled: false, switches: {} },
           preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },

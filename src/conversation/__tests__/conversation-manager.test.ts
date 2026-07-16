@@ -322,26 +322,11 @@ describe('ConversationManager', () => {
   });
 
   // #15
-  it('needsSummary() toolCall 超阈值', async () => {
-    vi.mocked(db.countMessagesByConversation).mockResolvedValue(5);
-    vi.mocked(db.getMessagesByConversation).mockResolvedValue([]);
-    const logs = Array.from({ length: 51 }, (_, i) =>
-      mockLog('c1', { id: `log-${i}` }),
-    );
-    vi.mocked(db.getToolCallLogsByConversation).mockResolvedValue(logs);
-
-    const result = await mgr.needsSummary('c1');
-    expect(result).toBe(true);
-  });
-
   // #16
   it('needsSummary() 未超阈值', async () => {
     vi.mocked(db.countMessagesByConversation).mockResolvedValue(5);
     vi.mocked(db.getMessagesByConversation).mockResolvedValue([
       mockMsg('c1', { content: 'short' }),
-    ]);
-    vi.mocked(db.getToolCallLogsByConversation).mockResolvedValue([
-      mockLog('c1'),
     ]);
 
     const result = await mgr.needsSummary('c1');
