@@ -1,4 +1,4 @@
-import type { IAgentRuntime, AgentRunInput, AgentRunOutput, ToolCallRecord } from '@/shared/types/agent';
+import type { IAgentRuntime, AgentRunInput, AgentRunOutput, AgentConfig, ToolCallRecord } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition } from '@/registry/types';
 import type { IGuardrail } from '@/shared/types/guardrail';
 import type { IConversationManager } from '@/shared/types/conversation';
@@ -10,6 +10,9 @@ import type { ModelMessage, Tool as AISdkTool, StepResult, TypedToolCall, TypedT
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { jsonSchemaToZod } from '@/shared/json-schema-to-zod';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
+import { FEATURE_FLAGS } from '@/shared/feature-flags';
+import { ContextManager } from './context-manager';
+import { DEFAULT_AGENT_CONFIG } from './system-prompt';
 
 /** 默认最大工具循环轮数 */
 const DEFAULT_MAX_STEPS = 99;
@@ -17,6 +20,7 @@ const DEFAULT_MAX_STEPS = 99;
 export class ToolLoopAdapter implements IAgentRuntime {
   private abortController: AbortController | null = null;
   private agent: ToolLoopAgent | null = null;
+  private contextManager: ContextManager;
 
   constructor(
     private toolRegistry: IToolRegistry,
@@ -24,7 +28,10 @@ export class ToolLoopAdapter implements IAgentRuntime {
     private conversationManager: IConversationManager,
     private providerConfig: ProviderConfig,
     private modelId: string,
-  ) {}
+    private agentConfig: AgentConfig = DEFAULT_AGENT_CONFIG as AgentConfig,
+  ) {
+    this.contextManager = new ContextManager(agentConfig);
+  }
 
   abort(): void {
     this.abortController?.abort();
@@ -51,7 +58,10 @@ export class ToolLoopAdapter implements IAgentRuntime {
         tools,
         stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
         toolApproval: async () => 'approved' as const,
-        prepareStep: () => {
+        prepareStep: ({ messages, stepNumber }) => {
+          if (FEATURE_FLAGS.usePrepareStepContext) {
+            return this.contextManager.prepareStep(stepNumber, messages);
+          }
           return {};
         },
         onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
