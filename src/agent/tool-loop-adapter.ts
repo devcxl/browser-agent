@@ -57,7 +57,43 @@ export class ToolLoopAdapter implements IAgentRuntime {
         model,
         tools,
         stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
-        toolApproval: async () => 'approved' as const,
+        toolApproval: async ({ toolCall }) => {
+          if (!FEATURE_FLAGS.useToolApproval) {
+            return { type: 'approved' as const };
+          }
+
+          const guardrailCtx = {
+            isLocalTrusted: this.providerConfig.isLocalTrusted,
+            expertModeEnabled: input.expertModeSettings?.enabled ?? false,
+            expertSwitches: input.expertModeSettings?.switches ?? {},
+            grantedPermissions: input.grantedPermissions ?? [],
+            sessionGrants: { sensitiveDataAllowed: false },
+          };
+
+          const check = await this.guardrail.check(
+            toolCall.toolName,
+            toolCall.input as Record<string, unknown>,
+            guardrailCtx,
+          );
+
+          if (!check.allowed) {
+            return { type: 'denied' as const, reason: check.reason };
+          }
+
+          switch (check.riskLevel) {
+            case 'low':
+            case 'medium':
+              return { type: 'approved' as const };
+            case 'high':
+              if (guardrailCtx.isLocalTrusted) return { type: 'approved' as const };
+              return { type: 'user-approval' as const };
+            case 'critical':
+              if (!guardrailCtx.expertModeEnabled) return { type: 'denied' as const, reason: '需要 Expert Mode' };
+              return { type: 'user-approval' as const };
+            default:
+              return { type: 'approved' as const };
+          }
+        },
         prepareStep: ({ messages, stepNumber }) => {
           if (FEATURE_FLAGS.usePrepareStepContext) {
             return this.contextManager.prepareStep(stepNumber, messages);
