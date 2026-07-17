@@ -199,6 +199,17 @@ export function useAgent() {
               allWindows: [],
               tabGroups: [],
             },
+            callbacks: {
+              onStreamChunk: (chunk: string) => {
+                assistantMsg.content += chunk;
+                cbRef.current.onMessage?.({ ...assistantMsg });
+              },
+              onReasoningChunk: (chunk: string) => {
+                const existing = assistantMsg.reasoningContent ?? '';
+                assistantMsg.reasoningContent = existing + chunk;
+                cbRef.current.onMessage?.({ ...assistantMsg });
+              },
+            },
           });
 
           // 展示工具调用记录

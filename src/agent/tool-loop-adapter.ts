@@ -99,23 +99,35 @@ export class ToolLoopAdapter implements IAgentRuntime {
     const toolCalls: ToolCallRecord[] = [];
 
     try {
-      // 1. 构建初始 messages（含 system prompt + 对话历史）
       const messages = await this.buildMessages(input);
-
-      // 2. 获取或创建 agent
       this.ensureAgentCreated(input);
 
-      // 3. 执行
-      const result = await this._agent!.generate({
+      // 使用 stream() 获取流式事件
+      const result = await this._agent!.stream({
         messages,
         abortSignal: this.abortController.signal,
+        onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
+          this.recordStepToolCalls(stepResult, toolCalls);
+        },
       });
 
+      // 消费流事件，实时转发 text/reasoning delta
+      for await (const part of result.stream) {
+        if (part.type === 'text-delta') {
+          input.callbacks?.onStreamChunk?.(part.text);
+        } else if (part.type === 'reasoning-delta') {
+          input.callbacks?.onReasoningChunk?.(part.text);
+        }
+      }
+
+      const finalStep = await result.finalStep;
+      const usage = await result.usage;
+
       return {
-        finalMessage: result.text,
+        finalMessage: finalStep.text,
         toolCalls,
-        tokenUsage: result.usage
-          ? { prompt: result.usage.inputTokens ?? 0, completion: result.usage.outputTokens ?? 0 }
+        tokenUsage: usage
+          ? { prompt: usage.inputTokens ?? 0, completion: usage.outputTokens ?? 0 }
           : undefined,
       };
     } finally {

@@ -29,6 +29,12 @@ export interface AgentConfig {
 
 // ==================== Agent 运行输入/输出 ====================
 
+export interface AgentRunCallbacks {
+  onStreamChunk?: (chunk: string) => void;
+  onReasoningChunk?: (chunk: string) => void;
+  onToolCall?: (record: ToolCallRecord) => void;
+}
+
 export interface AgentRunInput {
   conversationId: string;
   userMessage: string;
@@ -43,6 +49,8 @@ export interface AgentRunInput {
   expertModeSettings?: ExpertModeSettings;
   /** 已授予的扩展可选权限列表 */
   grantedPermissions?: string[];
+  /** 流式回调（推理、文本、工具） */
+  callbacks?: AgentRunCallbacks;
 }
 
 export interface AgentRunOutput {

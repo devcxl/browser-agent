@@ -9,7 +9,7 @@ import { FEATURE_FLAGS } from '@/shared/feature-flags';
 
 // ==================== Mocks ====================
 
-const mockToolLoopAgentGenerate = vi.fn();
+const mockToolLoopAgentStream = vi.fn();
 let capturedToolLoopAgentOptions: Record<string, unknown> | null = null;
 
 vi.mock('ai', async () => {
@@ -19,7 +19,8 @@ vi.mock('ai', async () => {
     ToolLoopAgent: vi.fn().mockImplementation((options) => {
       capturedToolLoopAgentOptions = options;
       return {
-        generate: mockToolLoopAgentGenerate,
+        generate: mockToolLoopAgentStream,
+        stream: mockToolLoopAgentStream,
       };
     }),
   };
@@ -139,10 +140,11 @@ describe('ToolLoopAdapter', () => {
     mockConversationManager = createMockConversationManager();
     providerConfig = createMockProviderConfig();
 
-    // 默认：generate 返回成功
-    mockToolLoopAgentGenerate.mockResolvedValue({
-      text: '操作完成',
-      usage: { inputTokens: 100, outputTokens: 50 },
+    // 默认：stream 返回成功（空 stream 事件 + 最终结果）
+    mockToolLoopAgentStream.mockResolvedValue({
+      stream: (async function* () {})(),
+      finalStep: Promise.resolve({ text: '操作完成' }),
+      usage: Promise.resolve({ inputTokens: 100, outputTokens: 50 }),
     });
 
     adapter = new ToolLoopAdapter(
@@ -160,7 +162,7 @@ describe('ToolLoopAdapter', () => {
     const result = await adapter.run(basicInput);
 
     expect(result.finalMessage).toBe('操作完成');
-    expect(mockToolLoopAgentGenerate).toHaveBeenCalledTimes(1);
+    expect(mockToolLoopAgentStream).toHaveBeenCalledTimes(1);
     expect(result.tokenUsage).toEqual({ prompt: 100, completion: 50 });
   });
 
@@ -177,7 +179,7 @@ describe('ToolLoopAdapter', () => {
   it('应该在 generate 调用中传递构造的消息', async () => {
     await adapter.run(basicInput);
 
-    const generateCall = mockToolLoopAgentGenerate.mock.calls[0]?.[0];
+    const generateCall = mockToolLoopAgentStream.mock.calls[0]?.[0];
     expect(generateCall).toBeDefined();
     expect(generateCall.messages).toBeDefined();
     expect(generateCall.messages.length).toBeGreaterThan(0);
@@ -189,7 +191,7 @@ describe('ToolLoopAdapter', () => {
   it('应该包含用户消息在 messages 中', async () => {
     await adapter.run(basicInput);
 
-    const messages = mockToolLoopAgentGenerate.mock.calls[0]?.[0].messages;
+    const messages = mockToolLoopAgentStream.mock.calls[0]?.[0].messages;
     const userMessage = messages?.find((m: { role: string }) => m.role === 'user');
     expect(userMessage).toBeDefined();
     expect(userMessage?.content).toBe('Hello');
@@ -213,7 +215,7 @@ describe('ToolLoopAdapter', () => {
 
     await adapter.run(inputWithSignal);
 
-    const generateCall = mockToolLoopAgentGenerate.mock.calls[0]?.[0];
+    const generateCall = mockToolLoopAgentStream.mock.calls[0]?.[0];
     expect(generateCall.abortSignal).toBeDefined();
   });
 
@@ -242,15 +244,16 @@ describe('ToolLoopAdapter', () => {
     await adapter.run(basicInput);
 
     // generate 被调用了
-    expect(mockToolLoopAgentGenerate).toHaveBeenCalled();
+    expect(mockToolLoopAgentStream).toHaveBeenCalled();
   });
 
   // ── 边界条件 ──────────────────────────────────────
 
   it('应该在 usage 为 undefined 时处理', async () => {
-    mockToolLoopAgentGenerate.mockResolvedValue({
-      text: '完成',
-      // usage 缺失
+    mockToolLoopAgentStream.mockResolvedValue({
+      stream: (async function* () {})(),
+      finalStep: Promise.resolve({ text: '完成' }),
+      usage: Promise.resolve(undefined),
     });
 
     const result = await adapter.run(basicInput);
