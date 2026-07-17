@@ -59,12 +59,15 @@ export class ToolClassifier {
     userMessage: string,
     model: LanguageModel,
   ): Promise<ToolCategory[]> {
-    // 缓存命中：同一消息直接返回
     if (this.cache?.userMessage === userMessage) {
+      console.debug('[ToolClassifier] 缓存命中:', this.cache.categories);
       return this.cache.categories;
     }
 
     try {
+      console.debug('[ToolClassifier] 开始 generateObject 分类...');
+      const t0 = performance.now();
+
       const result = await generateObject({
         model,
         output: 'array' as const,
@@ -76,11 +79,18 @@ export class ToolClassifier {
       });
 
       const raw = result.object as string[];
+      console.debug('[ToolClassifier] generateObject 完成', {
+        raw,
+        elapsed: `${(performance.now() - t0).toFixed(0)}ms`,
+      });
 
-      // 保护：只保留实际存在的 category 名称
       const validCategories = raw.filter((c): c is ToolCategory =>
         CATEGORY_NAMES.has(c as ToolCategory),
       );
+
+      if (validCategories.length !== raw.length) {
+        console.debug('[ToolClassifier] 过滤无效类别:', raw.filter(c => !CATEGORY_NAMES.has(c as ToolCategory)));
+      }
 
       this.cache = {
         userMessage,
@@ -89,8 +99,8 @@ export class ToolClassifier {
       };
 
       return validCategories;
-    } catch {
-      // 分类失败时返回空，让 prepareStep 使用全量工具
+    } catch (err) {
+      console.warn('[ToolClassifier] classify 失败, 返回空数组', err);
       return [];
     }
   }

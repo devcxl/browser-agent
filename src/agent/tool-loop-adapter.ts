@@ -99,35 +99,43 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   async run(input: AgentRunInput): Promise<AgentRunOutput> {
+    console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId, message: input.userMessage.slice(0, 100) });
     this.abortController = new AbortController();
     const toolCalls: ToolCallRecord[] = [];
 
     try {
-      // 保存用户消息到 DB
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'user',
         content: input.userMessage,
       });
 
+      console.debug('[ToolLoopAdapter] buildMessages 开始');
       const messages = await this.buildMessages(input);
+      console.debug('[ToolLoopAdapter] buildMessages 完成, count:', messages.length);
+
+      console.debug('[ToolLoopAdapter] ensureAgentCreated');
       this.ensureAgentCreated(input);
 
       let accumulatedText = '';
       let accumulatedReasoning = '';
 
-      // 使用 stream() 获取流式事件
+      console.debug('[ToolLoopAdapter] agent.stream() 开始');
       const result = await this._agent!.stream({
         messages,
         abortSignal: this.abortController.signal,
         onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
+          console.debug('[ToolLoopAdapter] onStepFinish', {
+            hasText: !!stepResult.text,
+            reasoningLen: stepResult.reasoningText?.length ?? 0,
+            toolCount: stepResult.toolCalls?.length ?? 0,
+          });
           this.recordStepToolCalls(stepResult, toolCalls);
-          // 保存工具调用结果消息
           this.persistToolMessages(input.conversationId, stepResult);
         },
       });
 
-      // 消费流事件，实时转发 text/reasoning delta
+      console.debug('[ToolLoopAdapter] 消费 stream 事件...');
       for await (const part of result.stream) {
         if (part.type === 'text-delta') {
           accumulatedText += part.text;
@@ -137,11 +145,16 @@ export class ToolLoopAdapter implements IAgentRuntime {
           input.callbacks?.onReasoningChunk?.(part.text);
         }
       }
+      console.debug('[ToolLoopAdapter] stream 消费完成, text:', accumulatedText.length, 'reasoning:', accumulatedReasoning.length);
 
       const finalStep = await result.finalStep;
       const usage = await result.usage;
+      console.debug('[ToolLoopAdapter] 执行完成', {
+        finalText: finalStep.text?.slice(0, 80),
+        toolCalls: toolCalls.length,
+        usage,
+      });
 
-      // 保存最终助手消息到 DB
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -157,7 +170,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
           : undefined,
       };
     } catch (err) {
-      // 异常时也保存用户消息（已保存），但标记助手消息为 error
+      console.error('[ToolLoopAdapter] run() 异常', err);
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -213,11 +226,18 @@ export class ToolLoopAdapter implements IAgentRuntime {
       stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
       toolApproval: this.createToolApproval(input),
         prepareStep: async ({ messages, stepNumber, model }) => {
+          console.debug('[ToolLoopAdapter] prepareStep step:', stepNumber, 'totalTools:', Object.keys(this.tools).length);
           const toolFilter = await this.classifyAndFilterTools(messages, stepNumber, model);
           if (FEATURE_FLAGS.usePrepareStepContext) {
             const ctx = this.contextManager.prepareStep(stepNumber, messages);
-            return { ...ctx, ...toolFilter };
+            const result = { ...ctx, ...toolFilter };
+            console.debug('[ToolLoopAdapter] prepareStep result:', {
+              activeTools: result.activeTools?.length ?? 'all',
+              contextManaged: true,
+            });
+            return result;
           }
+          console.debug('[ToolLoopAdapter] prepareStep activeTools:', toolFilter.activeTools?.length ?? 'all');
           return toolFilter;
         },
         onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
@@ -296,29 +316,47 @@ export class ToolLoopAdapter implements IAgentRuntime {
     stepNumber: number,
     model: LanguageModel,
   ): Promise<{ activeTools?: string[] }> {
-    if (!FEATURE_FLAGS.useToolLazyLoad || stepNumber !== 0) return {};
+    if (!FEATURE_FLAGS.useToolLazyLoad || stepNumber !== 0) {
+      if (stepNumber === 0) console.debug('[ToolLoopAdapter] classify: FLAG=false, skip');
+      return {};
+    }
 
     const lastUserMsg = [...messages].reverse().find(
       (m): m is { role: 'user'; content: string } =>
         m.role === 'user' && typeof m.content === 'string',
     );
-    if (!lastUserMsg) return {};
+    if (!lastUserMsg) {
+      console.debug('[ToolLoopAdapter] classify: 未找到用户消息');
+      return {};
+    }
 
     try {
+      console.debug('[ToolLoopAdapter] classify: 开始 LLM 分类, message:', lastUserMsg.content.slice(0, 80));
       const categories = await this.toolClassifier.classify(
         lastUserMsg.content,
         model,
       );
+      console.debug('[ToolLoopAdapter] classify: LLM 返回 categories:', categories);
 
-      if (categories.length === 0) return {};
+      if (categories.length === 0) {
+        console.debug('[ToolLoopAdapter] classify: 无匹配类别, 降级到全量工具');
+        return {};
+      }
 
-      const toolNames = this.toolRegistry
-        .getAllTools()
+      const allTools = this.toolRegistry.getAllTools();
+      const toolNames = allTools
         .filter((t) => categories.includes(t.category))
         .map((t) => t.name);
 
+      console.debug('[ToolLoopAdapter] classify: 过滤结果', {
+        totalTools: allTools.length,
+        matchedCategories: categories,
+        activeTools: toolNames,
+      });
+
       return toolNames.length > 0 ? { activeTools: toolNames } : {};
-    } catch {
+    } catch (err) {
+      console.warn('[ToolLoopAdapter] classify: 分类失败, 降级到全量工具', err);
       return {};
     }
   }
