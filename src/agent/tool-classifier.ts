@@ -6,7 +6,7 @@ import type { ToolCategory } from '@/shared/types/tool';
 // 分类 prompt
 // ---------------------------------------------------------------------------
 
-const CLASSIFIER_PROMPT = `你是浏览器工具分类器。根据用户消息判断需要用到哪些工具类别。
+const CLASSIFIER_PROMPT = `你是浏览器工具分类器。根据用户消息判断需要用到哪些工具类别，以 JSON 字符串数组格式输出。
 
 可用类别及其说明：
 - tabs: 标签页操作（打开、关闭、切换、移动、查询标签页信息）
