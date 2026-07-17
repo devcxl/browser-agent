@@ -6,7 +6,13 @@ import type { ProviderConfig } from '@/shared/types/llm';
 import type { LowSensitivityContext } from '@/shared/types/browser';
 import type { ToolResult, RiskLevel } from '@/shared/types/tool';
 import { ToolLoopAgent, isStepCount, isLoopFinished } from 'ai';
-import type { ModelMessage, Tool as AISdkTool, StepResult, TypedToolCall, TypedToolResult } from 'ai';
+import type {
+  ModelMessage,
+  Tool as AISdkTool,
+  StepResult,
+  TypedToolCall,
+  TypedToolResult,
+} from 'ai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { jsonSchemaToZod } from '@/shared/json-schema-to-zod';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
@@ -17,9 +23,13 @@ import { DEFAULT_AGENT_CONFIG } from './system-prompt';
 /** 默认最大工具循环轮数 */
 const DEFAULT_MAX_STEPS = 99;
 
+/** Agent 接口所需的工具集类型 */
+type AdapterTools = Record<string, AISdkTool>;
+
 export class ToolLoopAdapter implements IAgentRuntime {
   private abortController: AbortController | null = null;
-  private agent: ToolLoopAgent | null = null;
+  private _agent: ToolLoopAgent | null = null;
+  private _tools: AdapterTools | null = null;
   private contextManager: ContextManager;
 
   constructor(
@@ -33,9 +43,41 @@ export class ToolLoopAdapter implements IAgentRuntime {
     this.contextManager = new ContextManager(agentConfig);
   }
 
+  // ─── Agent 接口 ──────────────────────────────────────
+
+  get version(): 'agent-v1' {
+    return 'agent-v1';
+  }
+
+  get id(): string | undefined {
+    return undefined;
+  }
+
+  get tools(): AdapterTools {
+    if (!this._tools) {
+      this._tools = this.buildTools();
+    }
+    return this._tools;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async generate(options: any): Promise<any> {
+    const agent = this.getOrCreateAgent();
+    return agent.generate(options);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async stream(options: any): Promise<any> {
+    const agent = this.getOrCreateAgent();
+    return agent.stream(options);
+  }
+
+  // ─── IAgentRuntime 接口 ──────────────────────────────
+
   abort(): void {
     this.abortController?.abort();
     this.abortController = null;
+    this._agent = null;
   }
 
   async run(input: AgentRunInput): Promise<AgentRunOutput> {
@@ -43,70 +85,14 @@ export class ToolLoopAdapter implements IAgentRuntime {
     const toolCalls: ToolCallRecord[] = [];
 
     try {
-      // 1. 构建 AI SDK tools 对象
-      const tools = this.buildTools();
-
-      // 2. 构建初始 messages
+      // 1. 构建初始 messages（含 system prompt + 对话历史）
       const messages = await this.buildMessages(input);
 
-      // 3. 创建 LanguageModel
-      const model = this.createModel();
+      // 2. 获取或创建 agent（首次调用时创建，后续复用——但 abort 后会重建）
+      this.ensureAgentCreated(input);
 
-      // 4. 创建 ToolLoopAgent 实例
-      this.agent = new ToolLoopAgent({
-        model,
-        tools,
-        stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
-        toolApproval: async ({ toolCall }) => {
-          if (!FEATURE_FLAGS.useToolApproval) {
-            return { type: 'approved' as const };
-          }
-
-          const guardrailCtx = {
-            isLocalTrusted: this.providerConfig.isLocalTrusted,
-            expertModeEnabled: input.expertModeSettings?.enabled ?? false,
-            expertSwitches: input.expertModeSettings?.switches ?? {},
-            grantedPermissions: input.grantedPermissions ?? [],
-            sessionGrants: { sensitiveDataAllowed: false },
-          };
-
-          const check = await this.guardrail.check(
-            toolCall.toolName,
-            toolCall.input as Record<string, unknown>,
-            guardrailCtx,
-          );
-
-          if (!check.allowed) {
-            return { type: 'denied' as const, reason: check.reason };
-          }
-
-          switch (check.riskLevel) {
-            case 'low':
-            case 'medium':
-              return { type: 'approved' as const };
-            case 'high':
-              if (guardrailCtx.isLocalTrusted) return { type: 'approved' as const };
-              return { type: 'user-approval' as const };
-            case 'critical':
-              if (!guardrailCtx.expertModeEnabled) return { type: 'denied' as const, reason: '需要 Expert Mode' };
-              return { type: 'user-approval' as const };
-            default:
-              return { type: 'approved' as const };
-          }
-        },
-        prepareStep: ({ messages, stepNumber }) => {
-          if (FEATURE_FLAGS.usePrepareStepContext) {
-            return this.contextManager.prepareStep(stepNumber, messages);
-          }
-          return {};
-        },
-        onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
-          this.recordStepToolCalls(stepResult, toolCalls);
-        },
-      });
-
-      // 5. 执行
-      const result = await this.agent.generate({
+      // 3. 执行
+      const result = await this._agent!.generate({
         messages,
         abortSignal: this.abortController.signal,
       });
@@ -119,16 +105,104 @@ export class ToolLoopAdapter implements IAgentRuntime {
           : undefined,
       };
     } finally {
-      this.agent = null;
       this.abortController = null;
     }
   }
 
   // ─── 私有方法 ──────────────────────────────────────────
 
+  /** 懒加载创建 ToolLoopAgent（仅首次或 abort 后重建） */
+  private getOrCreateAgent(): ToolLoopAgent {
+    if (!this._agent) {
+      this.abortController = new AbortController();
+      this._agent = new ToolLoopAgent({
+        model: this.createModel(),
+        tools: this.tools,
+        stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
+        toolApproval: this.createToolApproval(),
+        prepareStep: ({ messages, stepNumber }) => {
+          if (FEATURE_FLAGS.usePrepareStepContext) {
+            return this.contextManager.prepareStep(stepNumber, messages);
+          }
+          return {};
+        },
+        onStepFinish: () => {
+          // toolCalls 记录由 useChat 框架处理，此处不重复记录
+        },
+      });
+    }
+    return this._agent;
+  }
+
+  /** 为 run() 路径创建 agent（带 run() 特有的 onStepFinish 和正确的 guardrail 上下文） */
+  private ensureAgentCreated(input: AgentRunInput): void {
+    if (this._agent) {
+      this._agent = null;
+    }
+    const toolCalls: ToolCallRecord[] = [];
+    this.abortController = new AbortController();
+    this._agent = new ToolLoopAgent({
+      model: this.createModel(),
+      tools: this.tools,
+      stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
+      toolApproval: this.createToolApproval(input),
+      prepareStep: ({ messages, stepNumber }) => {
+        if (FEATURE_FLAGS.usePrepareStepContext) {
+          return this.contextManager.prepareStep(stepNumber, messages);
+        }
+        return {};
+      },
+      onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
+        this.recordStepToolCalls(stepResult, toolCalls);
+      },
+    });
+  }
+
+  /** 创建 toolApproval 函数 */
+  private createToolApproval(input?: AgentRunInput) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return async ({ toolCall }: { toolCall: { toolName: string; input: unknown } }) => {
+      if (!FEATURE_FLAGS.useToolApproval) {
+        return { type: 'approved' as const };
+      }
+
+      const guardrailCtx = {
+        isLocalTrusted: this.providerConfig.isLocalTrusted,
+        expertModeEnabled: input?.expertModeSettings?.enabled ?? false,
+        expertSwitches: input?.expertModeSettings?.switches ?? ({} as Record<string, boolean>),
+        grantedPermissions: input?.grantedPermissions ?? ([] as string[]),
+        sessionGrants: { sensitiveDataAllowed: false },
+      };
+
+      const check = await this.guardrail.check(
+        toolCall.toolName,
+        toolCall.input as Record<string, unknown>,
+        guardrailCtx,
+      );
+
+      if (!check.allowed) {
+        return { type: 'denied' as const, reason: check.reason };
+      }
+
+      switch (check.riskLevel) {
+        case 'low':
+        case 'medium':
+          return { type: 'approved' as const };
+        case 'high':
+          if (guardrailCtx.isLocalTrusted) return { type: 'approved' as const };
+          return { type: 'user-approval' as const };
+        case 'critical':
+          if (!guardrailCtx.expertModeEnabled) return { type: 'denied' as const, reason: '需要 Expert Mode' };
+          return { type: 'user-approval' as const };
+        default:
+          return { type: 'approved' as const };
+      }
+    };
+  }
+
   /** 将 ToolDefinition[] 转换为 AI SDK ToolSet */
-  private buildTools(): Record<string, AISdkTool> {
-    const tools: Record<string, AISdkTool> = {};
+  private buildTools(): AdapterTools {
+    const tools: AdapterTools = {};
     for (const t of this.toolRegistry.getAllTools()) {
       tools[t.name] = {
         description: t.description,

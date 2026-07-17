@@ -30,6 +30,7 @@
     "@ai-sdk/google": "^4.0.17",
     "@ai-sdk/openai": "^4.0.15",
     "@ai-sdk/openai-compatible": "^3.0.11",
+    "@ai-sdk/react": "^4.0.33",
     "@mozilla/readability": "^0.5.0",
     "ai": "^7.0.29",
     "idb": "^8.0.0",
