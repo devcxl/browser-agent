@@ -6,6 +6,6 @@ export const FEATURE_FLAGS = {
   usePrepareStepContext: true,
   /** Guardrail riskLevel → toolApproval 映射 */
   useToolApproval: true,
-  /** AI SDK useChat + DirectChatTransport */
-  useSDKChat: true,
+  /** AI SDK useChat + DirectChatTransport（需先完成 Provider 动态注入） */
+  useSDKChat: false,
 };
