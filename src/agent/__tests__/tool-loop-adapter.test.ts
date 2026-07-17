@@ -53,7 +53,6 @@ function createMockGuardrail(allowed = true): IGuardrail {
       allowed,
       riskLevel: 'low',
       requiresPreflight: false,
-      requiresConfirmation: false,
       reason: allowed ? '允许执行' : '被拒绝',
       dataSensitivity: 'low',
     } satisfies GuardrailCheck),
@@ -293,7 +292,7 @@ describe('ToolLoopAdapter', () => {
     });
 
     afterEach(() => {
-      FEATURE_FLAGS.useToolApproval = false;
+      FEATURE_FLAGS.useToolApproval = true;
       vi.clearAllMocks();
     });
 
@@ -322,7 +321,6 @@ describe('ToolLoopAdapter', () => {
         allowed: false,
         riskLevel: 'high',
         requiresPreflight: false,
-        requiresConfirmation: false,
         reason: '工具被拒绝',
         dataSensitivity: 'low',
       });
@@ -340,7 +338,6 @@ describe('ToolLoopAdapter', () => {
         allowed: true,
         riskLevel: 'low',
         requiresPreflight: false,
-        requiresConfirmation: false,
         reason: '允许执行',
         dataSensitivity: 'low',
       });
@@ -358,7 +355,6 @@ describe('ToolLoopAdapter', () => {
         allowed: true,
         riskLevel: 'medium',
         requiresPreflight: false,
-        requiresConfirmation: false,
         reason: '中风险操作，记录日志',
         dataSensitivity: 'low',
       });
@@ -376,8 +372,7 @@ describe('ToolLoopAdapter', () => {
         allowed: true,
         riskLevel: 'high',
         requiresPreflight: true,
-        requiresConfirmation: true,
-        reason: '高风险操作，需要用户确认',
+        reason: '高风险操作',
         dataSensitivity: 'low',
       });
 
@@ -403,8 +398,7 @@ describe('ToolLoopAdapter', () => {
         allowed: true,
         riskLevel: 'high',
         requiresPreflight: true,
-        requiresConfirmation: false,
-        reason: '高风险操作，本地信任 Provider，跳过确认',
+        reason: '高风险操作，本地信任 Provider',
         dataSensitivity: 'low',
       });
 
@@ -421,8 +415,7 @@ describe('ToolLoopAdapter', () => {
         allowed: true,
         riskLevel: 'critical',
         requiresPreflight: true,
-        requiresConfirmation: true,
-        reason: 'Critical 操作，需要 Expert Mode + 用户确认',
+        reason: 'Critical 操作，需要 Expert Mode',
         dataSensitivity: 'critical',
       });
 
@@ -439,8 +432,7 @@ describe('ToolLoopAdapter', () => {
         allowed: true,
         riskLevel: 'critical',
         requiresPreflight: true,
-        requiresConfirmation: true,
-        reason: 'Critical 操作，需要 Expert Mode + 用户确认',
+        reason: 'Critical 操作，需要 Expert Mode',
         dataSensitivity: 'critical',
       });
 
@@ -462,14 +454,13 @@ describe('ToolLoopAdapter', () => {
         (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
           allowed: true,
           riskLevel: 'high',
-          requiresPreflight: true,
-          requiresConfirmation: true,
-          reason: '高风险操作，需要用户确认',
-          dataSensitivity: 'low',
-        });
+        requiresPreflight: true,
+        reason: '高风险操作',
+        dataSensitivity: 'low',
+      });
 
-        const onApproval = vi.fn().mockResolvedValue('approve');
-        const approvalAdapter = new ToolLoopAdapter(
+      const onApproval = vi.fn().mockResolvedValue('approve');
+      const approvalAdapter = new ToolLoopAdapter(
           mockToolRegistry,
           mockGuardrail,
           mockConversationManager,
@@ -489,7 +480,7 @@ describe('ToolLoopAdapter', () => {
         expect(onApproval).toHaveBeenCalledWith({
           toolName: 'tabs_remove',
           params: { tabId: 1 },
-          reason: '高风险操作，需要用户确认',
+          reason: '高风险操作',
           riskLevel: 'high',
         });
       });
@@ -499,7 +490,6 @@ describe('ToolLoopAdapter', () => {
           allowed: true,
           riskLevel: 'high',
           requiresPreflight: true,
-          requiresConfirmation: true,
           reason: '高风险操作',
           dataSensitivity: 'low',
         });
@@ -529,7 +519,6 @@ describe('ToolLoopAdapter', () => {
           allowed: true,
           riskLevel: 'critical',
           requiresPreflight: true,
-          requiresConfirmation: true,
           reason: 'Critical 操作，需要确认',
           dataSensitivity: 'critical',
         });
@@ -568,7 +557,6 @@ describe('ToolLoopAdapter', () => {
           allowed: true,
           riskLevel: 'critical',
           requiresPreflight: true,
-          requiresConfirmation: true,
           reason: 'Critical 操作',
           dataSensitivity: 'critical',
         });
@@ -601,7 +589,6 @@ describe('ToolLoopAdapter', () => {
           allowed: true,
           riskLevel: 'high',
           requiresPreflight: true,
-          requiresConfirmation: true,
           reason: '高风险操作',
           dataSensitivity: 'low',
         });
@@ -620,7 +607,7 @@ describe('ToolLoopAdapter', () => {
 
 // 验证 Feature Flag 默认值（模块级别，不受 beforeEach 影响）
 describe('Feature Flag 默认值', () => {
-  it('FEATURE_FLAGS.useToolApproval 默认为 false', () => {
-    expect(FEATURE_FLAGS.useToolApproval).toBe(false);
+  it('FEATURE_FLAGS.useToolApproval 默认为 true', () => {
+    expect(FEATURE_FLAGS.useToolApproval).toBe(true);
   });
 });

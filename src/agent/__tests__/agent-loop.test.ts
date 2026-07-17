@@ -28,7 +28,6 @@ function createMockGuardrail(allowed = true): IGuardrail {
       allowed,
       riskLevel: 'low',
       requiresPreflight: false,
-      requiresConfirmation: false,
       reason: allowed ? '允许执行' : '被拒绝',
       dataSensitivity: 'low',
     } satisfies GuardrailCheck),
@@ -938,7 +937,7 @@ describe('AgentLoop', () => {
       expect(record.result.success).toBe(true);
     });
 
-    it('onConfirm 在高风险工具需确认时被调用', async () => {
+    it('高风险工具不再通过 onConfirm 确认，直接执行', async () => {
       const toolDef: ToolDefinition = {
         name: 'tabs_close',
         description: '关闭标签页',
@@ -955,14 +954,13 @@ describe('AgentLoop', () => {
       };
 
       const toolRegistry = createMockToolRegistry([toolDef]);
-      // Guardrail returns allowed=true but requiresConfirmation=true for high risk
+      // 确认逻辑已由 toolApproval 接管，guardrail 不再输出 requiresConfirmation
       const guardrail: IGuardrail = {
         check: vi.fn().mockResolvedValue({
           allowed: true,
           riskLevel: 'high',
           requiresPreflight: true,
-          requiresConfirmation: true,
-          reason: '高风险操作，需要用户确认',
+          reason: '高风险操作',
           dataSensitivity: 'low',
         } satisfies GuardrailCheck),
         filterResultForRemote: vi.fn().mockImplementation((_t, r) => r),
@@ -987,15 +985,13 @@ describe('AgentLoop', () => {
 
       const output = await loop.run(defaultInput);
 
-      expect(onConfirm).toHaveBeenCalledTimes(1);
-      const request = onConfirm.mock.calls[0][0];
-      expect(request.toolName).toBe('tabs_close');
-      expect(request.params).toEqual({ tabId: 1 });
-      expect(toolDef.execute).toHaveBeenCalled(); // confirmed, so tool executed
+      // onConfirm 不再由 guardrail 触发，确认由 toolApproval 管理
+      expect(onConfirm).not.toHaveBeenCalled();
+      expect(toolDef.execute).toHaveBeenCalled(); // 工具直接执行
       expect(output.toolCalls[0]!.confirmed).toBe(true);
     });
 
-    it('onConfirm 拒绝后跳过工具执行', async () => {
+    it('高风险工具无 onConfirm 也直接执行', async () => {
       const toolDef: ToolDefinition = {
         name: 'tabs_close',
         description: '关闭标签页',
@@ -1004,7 +1000,7 @@ describe('AgentLoop', () => {
         riskLevel: 'high',
         confirmationRequired: true,
         resultSensitivity: 'low',
-        execute: vi.fn(),
+        execute: vi.fn().mockResolvedValue({ success: true, data: {} }),
         preflight: vi.fn().mockResolvedValue({
           affectedObjects: [{ type: 'tab', id: '1', reason: '关闭标签页' }],
           warnings: ['关闭后将无法恢复'],
@@ -1017,8 +1013,7 @@ describe('AgentLoop', () => {
           allowed: true,
           riskLevel: 'high',
           requiresPreflight: true,
-          requiresConfirmation: true,
-          reason: '高风险操作，需要用户确认',
+          reason: '高风险操作',
           dataSensitivity: 'low',
         } satisfies GuardrailCheck),
         filterResultForRemote: vi.fn().mockImplementation((_t, r) => r),
@@ -1026,27 +1021,23 @@ describe('AgentLoop', () => {
 
       const llmClient = createMockLlmClient([
         toolCallsResponse(toolCallDelta('call_1', 'tabs_close', { tabId: 1 })),
-        stopResponse('已取消操作。'),
+        stopResponse('操作完成。'),
       ]);
       const llmFactory = vi.fn().mockReturnValue(llmClient);
 
-      const onConfirm = vi.fn().mockResolvedValue(false);
-
+      // 不传 onConfirm hook
       const loop = new AgentLoop(
         defaultConfig,
         toolRegistry,
         guardrail,
         conversationManager,
         llmFactory,
-        { onConfirm },
       );
 
       const output = await loop.run(defaultInput);
 
-      expect(onConfirm).toHaveBeenCalledTimes(1);
-      expect(toolDef.execute).not.toHaveBeenCalled();
-      // Tool call record should exist but with confirmed=false and a skip note
-      expect(output.toolCalls[0]!.confirmed).toBe(false);
+      expect(toolDef.execute).toHaveBeenCalled(); // guardrail 允许后直接执行
+      expect(output.toolCalls[0]!.confirmed).toBe(true);
     });
   });
 

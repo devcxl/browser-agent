@@ -383,41 +383,6 @@ export class AgentLoop implements IAgentRuntime {
               warnings = preflightResult.warnings ?? [];
             }
 
-            if (check.requiresConfirmation && this.hooks?.onConfirm) {
-              const confirmed = await this.hooks.onConfirm({
-                toolName: tc.function.name,
-                params,
-                affectedObjects,
-                warnings,
-              });
-              if (!confirmed) {
-                toolCalls.push({
-                  toolName: tc.function.name,
-                  params,
-                  result: { success: false, error: '用户取消确认' },
-                  riskLevel: check.riskLevel,
-                  confirmed: false,
-                  timestamp: Date.now(),
-                  toolCallId: tc.id,
-                });
-                const cancelMsg = {
-                  role: 'tool' as const,
-                  tool_call_id: tc.id,
-                  content: '用户取消确认，跳过执行。',
-                };
-                messages.push(cancelMsg);
-                await this.conversationManager.addMessage(input.conversationId, {
-                  id: crypto.randomUUID(),
-                  role: 'tool',
-                  content: cancelMsg.content,
-                  toolCallId: tc.id,
-                  timestamp: Date.now(),
-                });
-                this.hooks?.onToolCall?.(toolCalls[toolCalls.length - 1]!);
-                continue;
-              }
-            }
-
             let result: import('@/shared/types').ToolResult;
             try {
               result = await tool.execute(params);
@@ -427,7 +392,7 @@ export class AgentLoop implements IAgentRuntime {
                 params,
                 result: { success: false, error: (err as Error).message },
                 riskLevel: check.riskLevel,
-                confirmed: check.requiresConfirmation,
+                confirmed: true,
                 timestamp: Date.now(),
                 toolCallId: tc.id,
               });
@@ -459,7 +424,7 @@ export class AgentLoop implements IAgentRuntime {
               params,
               result: filteredResult,
               riskLevel: check.riskLevel,
-              confirmed: check.requiresConfirmation,
+              confirmed: true,
               timestamp: Date.now(),
               toolCallId: tc.id,
             });

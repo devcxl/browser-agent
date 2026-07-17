@@ -25,7 +25,6 @@ describe('Guardrail types', () => {
         allowed: true,
         riskLevel: 'low',
         requiresPreflight: false,
-        requiresConfirmation: false,
         reason: 'OK',
         dataSensitivity: 'low',
       };
@@ -40,10 +39,10 @@ describe('Guardrail types', () => {
           allowed: true,
           riskLevel: 'low',
           requiresPreflight: false,
-          requiresConfirmation: false,
           reason: 'OK',
           dataSensitivity: 'low',
         }),
+        filterResultForRemote: (_tool, result) => result,
       };
       expect(typeof guardrail.check).toBe('function');
     });
