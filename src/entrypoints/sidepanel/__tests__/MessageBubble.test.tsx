@@ -200,4 +200,114 @@ describe('MessageBubble', () => {
       expect(screen.getByText('## 不是标题')).toBeDefined();
     });
   });
+
+  // === SDK parts 格式测试 ===
+  describe('AI SDK parts 格式', () => {
+    it('从 text part 渲染文本内容', () => {
+      const msg: UIMessage = {
+        id: 'sdk-1',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'Hello from SDK' }],
+        timestamp: Date.now(),
+      };
+      wrappedRender(<MessageBubble message={msg} />);
+      expect(screen.getByText('Hello from SDK')).toBeDefined();
+    });
+
+    it('从 reasoning part 渲染推理内容', () => {
+      const msg: UIMessage = {
+        id: 'sdk-2',
+        role: 'assistant',
+        parts: [{ type: 'reasoning', text: 'Let me think...' }],
+        timestamp: Date.now(),
+      };
+      wrappedRender(<MessageBubble message={msg} />);
+      // 推理默认折叠，展开按钮显示翻译后的文本
+      expect(screen.getByText('查看思考过程')).toBeDefined();
+    });
+
+    it('从 dynamic-tool part 渲染工具调用卡片', () => {
+      const msg: UIMessage = {
+        id: 'sdk-3',
+        role: 'assistant',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        parts: [
+          {
+            type: 'dynamic-tool',
+            toolCallId: 'tc-1',
+            toolName: 'tabs_query',
+            state: 'output-available',
+            input: { url: 'example.com' },
+            output: { count: 3 },
+          } as any,
+        ],
+        timestamp: Date.now(),
+      };
+      wrappedRender(<MessageBubble message={msg} />);
+      expect(screen.getByText('tabs_query')).toBeDefined();
+      expect(screen.getByText('output-available')).toBeDefined();
+    });
+
+    it('streaming 时显示光标（text part state=streaming）', () => {
+      const msg: UIMessage = {
+        id: 'sdk-4',
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'streaming...', state: 'streaming' }],
+        timestamp: Date.now(),
+      };
+      wrappedRender(<MessageBubble message={msg} />);
+      expect(screen.getByText('streaming...')).toBeDefined();
+      const cursor = document.querySelector('.animate-pulse');
+      expect(cursor).toBeDefined();
+    });
+
+    it('多个 text part 拼接为一段文本', () => {
+      const msg: UIMessage = {
+        id: 'sdk-5',
+        role: 'assistant',
+        parts: [
+          { type: 'text', text: 'Part 1 ' },
+          { type: 'text', text: 'Part 2' },
+        ],
+        timestamp: Date.now(),
+      };
+      wrappedRender(<MessageBubble message={msg} />);
+      expect(screen.getByText('Part 1 Part 2')).toBeDefined();
+    });
+
+    it('user 消息 with parts 纯文本渲染（不做 markdown）', () => {
+      const msg: UIMessage = {
+        id: 'sdk-6',
+        role: 'user',
+        parts: [{ type: 'text', text: '## 不是标题' }],
+        timestamp: Date.now(),
+      };
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
+      expect(container.querySelector('h2')).toBeNull();
+      expect(screen.getByText('## 不是标题')).toBeDefined();
+    });
+
+    it('工具调用失败状态显示 error 图标', () => {
+      const msg: UIMessage = {
+        id: 'sdk-7',
+        role: 'assistant',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        parts: [
+          {
+            type: 'dynamic-tool',
+            toolCallId: 'tc-err',
+            toolName: 'bad_tool',
+            state: 'output-error',
+            input: {},
+            errorText: 'Something went wrong',
+          } as any,
+        ],
+        timestamp: Date.now(),
+      };
+      wrappedRender(<MessageBubble message={msg} />);
+      expect(screen.getByText('bad_tool')).toBeDefined();
+      // error 状态显示 ✕ 图标
+      expect(screen.getByText('✕')).toBeDefined();
+    });
+  });
 });

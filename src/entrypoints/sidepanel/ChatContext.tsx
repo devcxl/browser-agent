@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { AgentStatus, UIMessage, ConfirmRequest, TokenUsage } from './types';
 import { useConversations } from './hooks/useConversations';
 import { useAgent } from './hooks/useAgent';
@@ -56,6 +56,18 @@ function ChatProviderSDK({ children }: { children: React.ReactNode }) {
 
   const { messages: sdkMessages, sendMessage, status, error, stop } = useChatAgent(adapter);
 
+  // 将 AI SDK UIMessage[] 适配到我们的 UIMessage 类型，保留 parts 数组
+  const messages: UIMessage[] = useMemo(
+    () =>
+      sdkMessages.map((m) => ({
+        id: m.id,
+        role: m.role as 'user' | 'assistant' | 'tool',
+        parts: m.parts,
+        timestamp: Date.now(),
+      })),
+    [sdkMessages],
+  );
+
   const sdkAgent: ReturnType<typeof useAgent> = {
     status: (status === 'streaming' || status === 'submitted') ? 'streaming' : 'idle' as AgentStatus,
     error: error?.message ?? null,
@@ -77,7 +89,7 @@ function ChatProviderSDK({ children }: { children: React.ReactNode }) {
         conversations,
         agent: sdkAgent,
         browserState,
-        messages: sdkMessages as unknown as UIMessage[],
+        messages,
         addMessage: () => {},
         clearMessages: () => {},
         messagesLoading: false,
