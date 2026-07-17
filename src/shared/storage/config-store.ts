@@ -28,6 +28,7 @@ const DEFAULTS: StorageSchema = {
     theme: 'system',
     language: 'zh-CN',
     sidebarExpanded: true,
+    reasoningAutoExpand: false,
   },
   skills: [],
   skillSubscriptions: [],

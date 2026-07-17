@@ -127,12 +127,6 @@ function MessageBubbleLegacy({
   const isStreaming = message.status === 'streaming';
   const hasReasoning = message.role === 'assistant' && !!message.reasoningContent;
 
-  useEffect(() => {
-    if (isStreaming && hasReasoning) {
-      setShowReasoning(true);
-    }
-  }, [isStreaming, hasReasoning]);
-
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content ?? '');
@@ -268,12 +262,6 @@ function MessageBubbleSDK({
   const [copied, setCopied] = useState(false);
 
   const hasReasoning = message.role === 'assistant' && !!reasoningContent;
-
-  useEffect(() => {
-    if (isStreaming && hasReasoning) {
-      setShowReasoning(true);
-    }
-  }, [isStreaming, hasReasoning]);
 
   const handleCopy = async () => {
     try {

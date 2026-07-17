@@ -73,6 +73,8 @@ export interface UserPreferences {
   language: 'zh-CN' | 'en';
   /** 侧边栏默认展开 */
   sidebarExpanded: boolean;
+  /** 推理内容自动展开（流式输出时），默认 false */
+  reasoningAutoExpand: boolean;
 }
 
 // ==================== IndexedDB Schema ====================
