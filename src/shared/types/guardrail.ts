@@ -28,8 +28,6 @@ export interface GuardrailCheck {
   riskLevel: RiskLevel;
   /** 是否需要 preflight */
   requiresPreflight: boolean;
-  /** 是否需要用户确认 */
-  requiresConfirmation: boolean;
   /** 原因描述（用于 UI 展示） */
   reason: string;
   /** 数据敏感级别 */

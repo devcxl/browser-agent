@@ -17,7 +17,6 @@ export class Guardrail implements IGuardrail {
         allowed: false,
         riskLevel: 'high',
         requiresPreflight: false,
-        requiresConfirmation: false,
         reason: `未知工具: ${toolName}`,
         dataSensitivity: 'low',
       };
@@ -28,7 +27,6 @@ export class Guardrail implements IGuardrail {
         allowed: false,
         riskLevel: 'critical',
         requiresPreflight: false,
-        requiresConfirmation: false,
         reason: `工具 ${toolName} 需要 Expert Mode`,
         dataSensitivity: tool.resultSensitivity,
       };
@@ -39,7 +37,6 @@ export class Guardrail implements IGuardrail {
         allowed: false,
         riskLevel: 'critical',
         requiresPreflight: false,
-        requiresConfirmation: false,
         reason: `工具 ${toolName} 需要开启 Expert API: ${tool.expertSwitch}`,
         dataSensitivity: tool.resultSensitivity,
       };
@@ -52,7 +49,6 @@ export class Guardrail implements IGuardrail {
         allowed: false,
         riskLevel: tool.riskLevel,
         requiresPreflight: false,
-        requiresConfirmation: false,
         reason: `需要额外权限: ${missing.join(', ')}。请在扩展设置中启用对应权限以使用此工具`,
         dataSensitivity: tool.resultSensitivity,
       };
@@ -66,7 +62,6 @@ export class Guardrail implements IGuardrail {
       allowed: true,
       riskLevel: tool.riskLevel,
       requiresPreflight: false,
-      requiresConfirmation: false,
       reason: '允许执行',
       dataSensitivity: tool.resultSensitivity,
     };
@@ -79,10 +74,9 @@ export class Guardrail implements IGuardrail {
         return base;
       case 'high':
         base.requiresPreflight = true;
-        base.requiresConfirmation = !context.isLocalTrusted;
         base.reason = context.isLocalTrusted
-          ? '高风险操作，本地信任 Provider，跳过确认'
-          : '高风险操作，需要用户确认';
+          ? '高风险操作，本地信任 Provider'
+          : '高风险操作';
         return base;
       case 'critical':
         if (!context.expertModeEnabled) {
@@ -92,8 +86,7 @@ export class Guardrail implements IGuardrail {
           return { ...base, allowed: false, reason: `Critical 操作需要开启 Expert API: ${tool.expertSwitch}` };
         }
         base.requiresPreflight = true;
-        base.requiresConfirmation = true;
-        base.reason = 'Critical 操作，需要 Expert Mode + 用户确认';
+        base.reason = 'Critical 操作，需要 Expert Mode';
         return base;
       default:
         return base;

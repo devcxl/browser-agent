@@ -51,7 +51,6 @@ describe('Guardrail', () => {
 
       expect(result.allowed).toBe(true);
       expect(result.requiresPreflight).toBe(false);
-      expect(result.requiresConfirmation).toBe(false);
       expect(result.riskLevel).toBe('low');
     });
 
@@ -64,10 +63,9 @@ describe('Guardrail', () => {
 
       expect(result.allowed).toBe(true);
       expect(result.requiresPreflight).toBe(false);
-      expect(result.requiresConfirmation).toBe(false);
     });
 
-    it('场景3: high + 非本地信任 → requiresPreflight + requiresConfirmation', async () => {
+    it('场景3: high + 非本地信任 → requiresPreflight', async () => {
       const tool = makeTool({ riskLevel: 'high' });
       const registry = createMockRegistry(() => tool);
       const guardrail = new Guardrail(registry);
@@ -76,10 +74,9 @@ describe('Guardrail', () => {
 
       expect(result.allowed).toBe(true);
       expect(result.requiresPreflight).toBe(true);
-      expect(result.requiresConfirmation).toBe(true);
     });
 
-    it('场景4: high + 本地信任 → requiresConfirmation false', async () => {
+    it('场景4: high + 本地信任 → requiresPreflight', async () => {
       const tool = makeTool({ riskLevel: 'high' });
       const registry = createMockRegistry(() => tool);
       const guardrail = new Guardrail(registry);
@@ -88,7 +85,6 @@ describe('Guardrail', () => {
 
       expect(result.allowed).toBe(true);
       expect(result.requiresPreflight).toBe(true);
-      expect(result.requiresConfirmation).toBe(false);
     });
 
     it('场景5: critical + Expert Mode → allowed true', async () => {
@@ -104,7 +100,6 @@ describe('Guardrail', () => {
 
       expect(result.allowed).toBe(true);
       expect(result.requiresPreflight).toBe(true);
-      expect(result.requiresConfirmation).toBe(true);
     });
 
     it('场景6: critical + !Expert Mode → allowed false', async () => {
@@ -120,7 +115,6 @@ describe('Guardrail', () => {
 
       expect(result.allowed).toBe(false);
       expect(result.requiresPreflight).toBe(false);
-      expect(result.requiresConfirmation).toBe(false);
     });
 
     it('场景7: expertOnly + !Expert Mode → allowed false', async () => {
