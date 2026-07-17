@@ -103,8 +103,18 @@ export class ToolLoopAdapter implements IAgentRuntime {
     const toolCalls: ToolCallRecord[] = [];
 
     try {
+      // 保存用户消息到 DB
+      await this.conversationManager.addMessage(input.conversationId, {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: input.userMessage,
+      });
+
       const messages = await this.buildMessages(input);
       this.ensureAgentCreated(input);
+
+      let accumulatedText = '';
+      let accumulatedReasoning = '';
 
       // 使用 stream() 获取流式事件
       const result = await this._agent!.stream({
@@ -112,20 +122,32 @@ export class ToolLoopAdapter implements IAgentRuntime {
         abortSignal: this.abortController.signal,
         onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
           this.recordStepToolCalls(stepResult, toolCalls);
+          // 保存工具调用结果消息
+          this.persistToolMessages(input.conversationId, stepResult);
         },
       });
 
       // 消费流事件，实时转发 text/reasoning delta
       for await (const part of result.stream) {
         if (part.type === 'text-delta') {
+          accumulatedText += part.text;
           input.callbacks?.onStreamChunk?.(part.text);
         } else if (part.type === 'reasoning-delta') {
+          accumulatedReasoning += part.text;
           input.callbacks?.onReasoningChunk?.(part.text);
         }
       }
 
       const finalStep = await result.finalStep;
       const usage = await result.usage;
+
+      // 保存最终助手消息到 DB
+      await this.conversationManager.addMessage(input.conversationId, {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: finalStep.text || accumulatedText,
+        reasoningContent: finalStep.reasoningText || accumulatedReasoning || undefined,
+      });
 
       return {
         finalMessage: finalStep.text,
@@ -134,6 +156,14 @@ export class ToolLoopAdapter implements IAgentRuntime {
           ? { prompt: usage.inputTokens ?? 0, completion: usage.outputTokens ?? 0 }
           : undefined,
       };
+    } catch (err) {
+      // 异常时也保存用户消息（已保存），但标记助手消息为 error
+      await this.conversationManager.addMessage(input.conversationId, {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      throw err;
     } finally {
       this.abortController = null;
     }
@@ -474,6 +504,25 @@ export class ToolLoopAdapter implements IAgentRuntime {
         riskLevel: 'low' as RiskLevel,
         confirmed: true,
         timestamp: Date.now(),
+        toolCallId: tc.toolCallId,
+      });
+    }
+  }
+
+  /** 将工具调用结果持久化到 DB */
+  private async persistToolMessages(
+    conversationId: string,
+    stepResult: { toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>; toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>> },
+  ) {
+    const stepToolCalls = stepResult.toolCalls ?? [];
+    const stepToolResults = stepResult.toolResults ?? [];
+
+    for (const tc of stepToolCalls) {
+      const tr = stepToolResults.find((r) => r.toolCallId === tc.toolCallId);
+      await this.conversationManager.addMessage(conversationId, {
+        id: tc.toolCallId,
+        role: 'tool',
+        content: JSON.stringify(tr?.output ?? { success: true }),
         toolCallId: tc.toolCallId,
       });
     }

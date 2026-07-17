@@ -106,6 +106,7 @@ export function storedMessagesToUIMessages(messages: StoredMessage[]): UIMessage
           id: msg.id + '_text',
           role: 'assistant',
           content: msg.content,
+          reasoningContent: msg.reasoningContent,
           timestamp: msg.timestamp,
           status: 'complete',
         });
@@ -144,6 +145,7 @@ export function storedMessagesToUIMessages(messages: StoredMessage[]): UIMessage
         id: msg.id,
         role: msg.role,
         content: msg.content,
+        reasoningContent: msg.reasoningContent,
         timestamp: msg.timestamp,
         status: 'complete',
       });

@@ -13,9 +13,10 @@ export interface StoredMessage {
     params: Record<string, unknown>;
     result?: string; // 只存摘要，不存原文
   }>;
-  /** 工具调用 ID（仅 tool 消息包含） */
+  /** 工具调用 ID（仅 tool 消息） */
   toolCallId?: string;
-  timestamp: number;
+  /** 推理/思考内容（仅 assistant 消息） */
+  reasoningContent?: string;
 }
 
 // ==================== 会话 ====================
