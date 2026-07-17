@@ -9,5 +9,5 @@ export const FEATURE_FLAGS = {
   /** AI SDK useChat + DirectChatTransport（需先完成 Provider 动态注入） */
   useSDKChat: false,
   /** 工具懒加载：LLM 预分类 + activeTools 过滤 */
-  useToolLazyLoad: false,
+  useToolLazyLoad: true,
 };
