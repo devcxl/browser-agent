@@ -1,3 +1,6 @@
+// @deprecated — 已由 AI SDK transcribe() 替代，Phase 5 移除
+// 旧 SttClient fetch 路径仍依赖此模块，保留至 Phase 5 统一清理
+
 function float32ToInt16(float32: Float32Array): Int16Array {
   const len = float32.length;
   const int16 = new Int16Array(len);
