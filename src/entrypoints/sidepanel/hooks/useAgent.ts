@@ -171,6 +171,21 @@ export function useAgent() {
             convManager,
             providerConfig,
             model,
+            undefined,
+            async (request) => {
+              return new Promise<'approve' | 'deny'>((resolve) => {
+                setStatus('waitingConfirmation');
+                confirmResolveRef.current = (allowed: boolean) => {
+                  resolve(allowed ? 'approve' : 'deny');
+                };
+                cbRef.current.onConfirm?.({
+                  toolName: request.toolName,
+                  params: request.params,
+                  affectedObjects: [],
+                  warnings: [request.reason],
+                });
+              });
+            },
           );
           loopRef.current = adapter;
 

@@ -26,11 +26,23 @@ const DEFAULT_MAX_STEPS = 99;
 /** Agent 接口所需的工具集类型 */
 type AdapterTools = Record<string, AISdkTool>;
 
+/** toolApproval 回调请求参数 */
+export interface ToolApprovalRequest {
+  toolName: string;
+  params: Record<string, unknown>;
+  reason: string;
+  riskLevel: 'high' | 'critical';
+}
+
+/** toolApproval 用户确认回调签名 */
+export type OnRequestApproval = (request: ToolApprovalRequest) => Promise<'approve' | 'deny'>;
+
 export class ToolLoopAdapter implements IAgentRuntime {
   private abortController: AbortController | null = null;
   private _agent: ToolLoopAgent | null = null;
   private _tools: AdapterTools | null = null;
   private contextManager: ContextManager;
+  private onRequestApproval?: OnRequestApproval;
 
   constructor(
     private toolRegistry: IToolRegistry,
@@ -39,7 +51,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
     private providerConfig: ProviderConfig,
     private modelId: string,
     private agentConfig: AgentConfig = DEFAULT_AGENT_CONFIG as AgentConfig,
+    onRequestApproval?: OnRequestApproval,
   ) {
+    this.onRequestApproval = onRequestApproval;
     this.contextManager = new ContextManager(agentConfig);
   }
 
@@ -190,9 +204,31 @@ export class ToolLoopAdapter implements IAgentRuntime {
           return { type: 'approved' as const };
         case 'high':
           if (guardrailCtx.isLocalTrusted) return { type: 'approved' as const };
+          if (this.onRequestApproval) {
+            const decision = await this.onRequestApproval({
+              toolName: toolCall.toolName,
+              params: toolCall.input as Record<string, unknown>,
+              reason: check.reason,
+              riskLevel: 'high',
+            });
+            return decision === 'approve'
+              ? { type: 'approved' as const }
+              : { type: 'denied' as const, reason: check.reason };
+          }
           return { type: 'user-approval' as const };
         case 'critical':
           if (!guardrailCtx.expertModeEnabled) return { type: 'denied' as const, reason: '需要 Expert Mode' };
+          if (this.onRequestApproval) {
+            const decision = await this.onRequestApproval({
+              toolName: toolCall.toolName,
+              params: toolCall.input as Record<string, unknown>,
+              reason: check.reason,
+              riskLevel: 'critical',
+            });
+            return decision === 'approve'
+              ? { type: 'approved' as const }
+              : { type: 'denied' as const, reason: check.reason };
+          }
           return { type: 'user-approval' as const };
         default:
           return { type: 'approved' as const };

@@ -455,6 +455,166 @@ describe('ToolLoopAdapter', () => {
 
       expect(result).toEqual({ type: 'user-approval' });
     });
+
+    // ── onRequestApproval 回调确认流程 ──
+    describe('onRequestApproval 确认流程', () => {
+      it('high 风险 + onRequestApproval 批准 → approved', async () => {
+        (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+          allowed: true,
+          riskLevel: 'high',
+          requiresPreflight: true,
+          requiresConfirmation: true,
+          reason: '高风险操作，需要用户确认',
+          dataSensitivity: 'low',
+        });
+
+        const onApproval = vi.fn().mockResolvedValue('approve');
+        const approvalAdapter = new ToolLoopAdapter(
+          mockToolRegistry,
+          mockGuardrail,
+          mockConversationManager,
+          providerConfig,
+          'test-model',
+          undefined,
+          onApproval,
+        );
+
+        await approvalAdapter.run(basicInput);
+        const result = await getToolApproval()({
+          toolCall: { toolName: 'tabs_remove', input: { tabId: 1 } },
+        });
+
+        expect(result).toEqual({ type: 'approved' });
+        expect(onApproval).toHaveBeenCalledTimes(1);
+        expect(onApproval).toHaveBeenCalledWith({
+          toolName: 'tabs_remove',
+          params: { tabId: 1 },
+          reason: '高风险操作，需要用户确认',
+          riskLevel: 'high',
+        });
+      });
+
+      it('high 风险 + onRequestApproval 拒绝 → denied', async () => {
+        (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+          allowed: true,
+          riskLevel: 'high',
+          requiresPreflight: true,
+          requiresConfirmation: true,
+          reason: '高风险操作',
+          dataSensitivity: 'low',
+        });
+
+        const onApproval = vi.fn().mockResolvedValue('deny');
+        const approvalAdapter = new ToolLoopAdapter(
+          mockToolRegistry,
+          mockGuardrail,
+          mockConversationManager,
+          providerConfig,
+          'test-model',
+          undefined,
+          onApproval,
+        );
+
+        await approvalAdapter.run(basicInput);
+        const result = await getToolApproval()({
+          toolCall: { toolName: 'tabs_remove', input: { tabId: 1 } },
+        });
+
+        expect(result).toEqual({ type: 'denied', reason: '高风险操作' });
+        expect(onApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('critical 风险 + Expert Mode 开启 + onRequestApproval 批准 → approved', async () => {
+        (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+          allowed: true,
+          riskLevel: 'critical',
+          requiresPreflight: true,
+          requiresConfirmation: true,
+          reason: 'Critical 操作，需要确认',
+          dataSensitivity: 'critical',
+        });
+
+        const onApproval = vi.fn().mockResolvedValue('approve');
+        const approvalAdapter = new ToolLoopAdapter(
+          mockToolRegistry,
+          mockGuardrail,
+          mockConversationManager,
+          providerConfig,
+          'test-model',
+          undefined,
+          onApproval,
+        );
+
+        const expertInput: AgentRunInput = {
+          ...basicInput,
+          expertModeSettings: { enabled: true, switches: {} },
+        };
+        await approvalAdapter.run(expertInput);
+        const result = await getToolApproval()({
+          toolCall: { toolName: 'proxy_set', input: {} },
+        });
+
+        expect(result).toEqual({ type: 'approved' });
+        expect(onApproval).toHaveBeenCalledWith({
+          toolName: 'proxy_set',
+          params: {},
+          reason: 'Critical 操作，需要确认',
+          riskLevel: 'critical',
+        });
+      });
+
+      it('critical 风险 + Expert Mode 开启 + onRequestApproval 拒绝 → denied', async () => {
+        (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+          allowed: true,
+          riskLevel: 'critical',
+          requiresPreflight: true,
+          requiresConfirmation: true,
+          reason: 'Critical 操作',
+          dataSensitivity: 'critical',
+        });
+
+        const onApproval = vi.fn().mockResolvedValue('deny');
+        const approvalAdapter = new ToolLoopAdapter(
+          mockToolRegistry,
+          mockGuardrail,
+          mockConversationManager,
+          providerConfig,
+          'test-model',
+          undefined,
+          onApproval,
+        );
+
+        const expertInput: AgentRunInput = {
+          ...basicInput,
+          expertModeSettings: { enabled: true, switches: {} },
+        };
+        await approvalAdapter.run(expertInput);
+        const result = await getToolApproval()({
+          toolCall: { toolName: 'proxy_set', input: {} },
+        });
+
+        expect(result).toEqual({ type: 'denied', reason: 'Critical 操作' });
+      });
+
+      it('无 onRequestApproval 时 high 风险仍返回 user-approval（向后兼容）', async () => {
+        (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+          allowed: true,
+          riskLevel: 'high',
+          requiresPreflight: true,
+          requiresConfirmation: true,
+          reason: '高风险操作',
+          dataSensitivity: 'low',
+        });
+
+        // adapter 在 beforeEach 中创建，没有 onRequestApproval
+        await adapter.run(basicInput);
+        const result = await getToolApproval()({
+          toolCall: { toolName: 'tabs_remove', input: { tabId: 1 } },
+        });
+
+        expect(result).toEqual({ type: 'user-approval' });
+      });
+    });
   });
 });
 
