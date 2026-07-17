@@ -10,6 +10,7 @@ import type {
   ModelMessage,
   Tool as AISdkTool,
   StepResult,
+  LanguageModel,
   TypedToolCall,
   TypedToolResult,
 } from 'ai';
@@ -18,6 +19,7 @@ import { jsonSchemaToZod } from '@/shared/json-schema-to-zod';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { FEATURE_FLAGS } from '@/shared/feature-flags';
 import { ContextManager } from './context-manager';
+import { ToolClassifier } from './tool-classifier';
 import { DEFAULT_AGENT_CONFIG } from './system-prompt';
 
 /** 默认最大工具循环轮数 */
@@ -42,6 +44,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
   private _agent: ToolLoopAgent | null = null;
   private _tools: AdapterTools | null = null;
   private contextManager: ContextManager;
+  private toolClassifier: ToolClassifier;
   private onRequestApproval?: OnRequestApproval;
 
   constructor(
@@ -55,6 +58,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
   ) {
     this.onRequestApproval = onRequestApproval;
     this.contextManager = new ContextManager(agentConfig);
+    this.toolClassifier = new ToolClassifier();
   }
 
   // ─── Agent 接口 ──────────────────────────────────────
@@ -147,11 +151,15 @@ export class ToolLoopAdapter implements IAgentRuntime {
         allowSystemInMessages: true,
         stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
         toolApproval: this.createToolApproval(),
-        prepareStep: ({ messages, stepNumber }) => {
+        prepareStep: async ({ messages, stepNumber, model }) => {
+          // 工具懒加载：step 0 时 LLM 预分类
+          const toolFilter = await this.classifyAndFilterTools(messages, stepNumber, model);
+          // 上下文管理
           if (FEATURE_FLAGS.usePrepareStepContext) {
-            return this.contextManager.prepareStep(stepNumber, messages);
+            const ctx = this.contextManager.prepareStep(stepNumber, messages);
+            return { ...ctx, ...toolFilter };
           }
-          return {};
+          return toolFilter;
         },
         onStepFinish: () => {
           // toolCalls 记录由 useChat 框架处理，此处不重复记录
@@ -174,17 +182,19 @@ export class ToolLoopAdapter implements IAgentRuntime {
       allowSystemInMessages: true,
       stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
       toolApproval: this.createToolApproval(input),
-      prepareStep: ({ messages, stepNumber }) => {
-        if (FEATURE_FLAGS.usePrepareStepContext) {
-          return this.contextManager.prepareStep(stepNumber, messages);
-        }
-        return {};
-      },
-      onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
-        this.recordStepToolCalls(stepResult, toolCalls);
-      },
-    });
-  }
+        prepareStep: async ({ messages, stepNumber, model }) => {
+          const toolFilter = await this.classifyAndFilterTools(messages, stepNumber, model);
+          if (FEATURE_FLAGS.usePrepareStepContext) {
+            const ctx = this.contextManager.prepareStep(stepNumber, messages);
+            return { ...ctx, ...toolFilter };
+          }
+          return toolFilter;
+        },
+        onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
+          this.recordStepToolCalls(stepResult, toolCalls);
+        },
+      });
+    }
 
   /** 创建 toolApproval 函数 */
   private createToolApproval(input?: AgentRunInput) {
@@ -248,6 +258,39 @@ export class ToolLoopAdapter implements IAgentRuntime {
           return { type: 'approved' as const };
       }
     };
+  }
+
+  /** LLM 预分类用户意图，返回匹配的工具名列表作为 activeTools */
+  private async classifyAndFilterTools(
+    messages: ModelMessage[],
+    stepNumber: number,
+    model: LanguageModel,
+  ): Promise<{ activeTools?: string[] }> {
+    if (!FEATURE_FLAGS.useToolLazyLoad || stepNumber !== 0) return {};
+
+    const lastUserMsg = [...messages].reverse().find(
+      (m): m is { role: 'user'; content: string } =>
+        m.role === 'user' && typeof m.content === 'string',
+    );
+    if (!lastUserMsg) return {};
+
+    try {
+      const categories = await this.toolClassifier.classify(
+        lastUserMsg.content,
+        model as any,
+      );
+
+      if (categories.length === 0) return {};
+
+      const toolNames = this.toolRegistry
+        .getAllTools()
+        .filter((t) => categories.includes(t.category))
+        .map((t) => t.name);
+
+      return toolNames.length > 0 ? { activeTools: toolNames } : {};
+    } catch {
+      return {};
+    }
   }
 
   /** 将 ToolDefinition[] 转换为 AI SDK ToolSet */
