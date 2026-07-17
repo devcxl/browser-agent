@@ -30,6 +30,8 @@ export interface ProviderConfig {
   audioFormat?: string;
   /** 是否默认 Provider */
   isDefault?: boolean;
+  /** 是否使用 AI SDK transcribe() 替代手动 fetch/WAV（默认 false，保留旧代码） */
+  useSDKTranscribe?: boolean;
 }
 
 // ==================== Chat Message ====================
