@@ -102,7 +102,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
       // 1. 构建初始 messages（含 system prompt + 对话历史）
       const messages = await this.buildMessages(input);
 
-      // 2. 获取或创建 agent（首次调用时创建，后续复用——但 abort 后会重建）
+      // 2. 获取或创建 agent
       this.ensureAgentCreated(input);
 
       // 3. 执行
@@ -132,6 +132,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
       this._agent = new ToolLoopAgent({
         model: this.createModel(),
         tools: this.tools,
+        allowSystemInMessages: true,
         stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
         toolApproval: this.createToolApproval(),
         prepareStep: ({ messages, stepNumber }) => {
@@ -158,6 +159,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     this._agent = new ToolLoopAgent({
       model: this.createModel(),
       tools: this.tools,
+      allowSystemInMessages: true,
       stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
       toolApproval: this.createToolApproval(input),
       prepareStep: ({ messages, stepNumber }) => {
