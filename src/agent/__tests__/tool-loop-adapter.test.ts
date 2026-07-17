@@ -10,14 +10,18 @@ import { FEATURE_FLAGS } from '@/shared/feature-flags';
 // ==================== Mocks ====================
 
 const mockToolLoopAgentGenerate = vi.fn();
+let capturedToolLoopAgentOptions: Record<string, unknown> | null = null;
 
 vi.mock('ai', async () => {
   const actual = await vi.importActual('ai');
   return {
     ...actual,
-    ToolLoopAgent: vi.fn().mockImplementation(() => ({
-      generate: mockToolLoopAgentGenerate,
-    })),
+    ToolLoopAgent: vi.fn().mockImplementation((options) => {
+      capturedToolLoopAgentOptions = options;
+      return {
+        generate: mockToolLoopAgentGenerate,
+      };
+    }),
   };
 });
 
@@ -127,6 +131,7 @@ describe('ToolLoopAdapter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    capturedToolLoopAgentOptions = null;
     mockToolRegistry = createMockToolRegistry([
       createMockTool('tabs_query'),
       createMockTool('tabs_remove'),
@@ -278,5 +283,184 @@ describe('ToolLoopAdapter', () => {
     );
     const result = await restrictedAdapter.run(basicInput);
     expect(result.finalMessage).toBe('操作完成');
+  });
+
+  // ── toolApproval 风险映射 ─────────────────────────
+
+  describe('toolApproval 风险映射', () => {
+    beforeEach(() => {
+      FEATURE_FLAGS.useToolApproval = true;
+    });
+
+    afterEach(() => {
+      FEATURE_FLAGS.useToolApproval = false;
+      vi.clearAllMocks();
+    });
+
+    function getToolApproval() {
+      if (!capturedToolLoopAgentOptions) {
+        throw new Error('capturedToolLoopAgentOptions is null — did you call adapter.run()?');
+      }
+      return capturedToolLoopAgentOptions['toolApproval'] as (
+        opts: { toolCall: { toolName: string; input: Record<string, unknown> } },
+      ) => Promise<{ type: string; reason?: string }>;
+    }
+
+    it('FEATURE_FLAGS.useToolApproval=false 时直接 approved', async () => {
+      FEATURE_FLAGS.useToolApproval = false;
+
+      await adapter.run(basicInput);
+      const result = await getToolApproval()({
+        toolCall: { toolName: 'tabs_query', input: { tabId: 1 } },
+      });
+
+      expect(result).toEqual({ type: 'approved' });
+    });
+
+    it('guardrail check.allowed=false → denied with reason', async () => {
+      (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+        allowed: false,
+        riskLevel: 'high',
+        requiresPreflight: false,
+        requiresConfirmation: false,
+        reason: '工具被拒绝',
+        dataSensitivity: 'low',
+      });
+
+      await adapter.run(basicInput);
+      const result = await getToolApproval()({
+        toolCall: { toolName: 'tabs_remove', input: { tabId: 1 } },
+      });
+
+      expect(result).toEqual({ type: 'denied', reason: '工具被拒绝' });
+    });
+
+    it('riskLevel low → approved', async () => {
+      (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+        allowed: true,
+        riskLevel: 'low',
+        requiresPreflight: false,
+        requiresConfirmation: false,
+        reason: '允许执行',
+        dataSensitivity: 'low',
+      });
+
+      await adapter.run(basicInput);
+      const result = await getToolApproval()({
+        toolCall: { toolName: 'tabs_query', input: { tabId: 1 } },
+      });
+
+      expect(result).toEqual({ type: 'approved' });
+    });
+
+    it('riskLevel medium → approved', async () => {
+      (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+        allowed: true,
+        riskLevel: 'medium',
+        requiresPreflight: false,
+        requiresConfirmation: false,
+        reason: '中风险操作，记录日志',
+        dataSensitivity: 'low',
+      });
+
+      await adapter.run(basicInput);
+      const result = await getToolApproval()({
+        toolCall: { toolName: 'tabs_query', input: { tabId: 1 } },
+      });
+
+      expect(result).toEqual({ type: 'approved' });
+    });
+
+    it('riskLevel high + 非 local-trusted → user-approval', async () => {
+      (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+        allowed: true,
+        riskLevel: 'high',
+        requiresPreflight: true,
+        requiresConfirmation: true,
+        reason: '高风险操作，需要用户确认',
+        dataSensitivity: 'low',
+      });
+
+      await adapter.run(basicInput);
+      const result = await getToolApproval()({
+        toolCall: { toolName: 'tabs_remove', input: { tabId: 1 } },
+      });
+
+      expect(result).toEqual({ type: 'user-approval' });
+    });
+
+    it('riskLevel high + local-trusted → approved', async () => {
+      providerConfig.isLocalTrusted = true;
+      const localAdapter = new ToolLoopAdapter(
+        mockToolRegistry,
+        mockGuardrail,
+        mockConversationManager,
+        providerConfig,
+        'test-model',
+      );
+
+      (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+        allowed: true,
+        riskLevel: 'high',
+        requiresPreflight: true,
+        requiresConfirmation: false,
+        reason: '高风险操作，本地信任 Provider，跳过确认',
+        dataSensitivity: 'low',
+      });
+
+      await localAdapter.run(basicInput);
+      const result = await getToolApproval()({
+        toolCall: { toolName: 'tabs_remove', input: { tabId: 1 } },
+      });
+
+      expect(result).toEqual({ type: 'approved' });
+    });
+
+    it('riskLevel critical + Expert Mode 关闭 → denied', async () => {
+      (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+        allowed: true,
+        riskLevel: 'critical',
+        requiresPreflight: true,
+        requiresConfirmation: true,
+        reason: 'Critical 操作，需要 Expert Mode + 用户确认',
+        dataSensitivity: 'critical',
+      });
+
+      await adapter.run(basicInput);
+      const result = await getToolApproval()({
+        toolCall: { toolName: 'proxy_set', input: {} },
+      });
+
+      expect(result).toEqual({ type: 'denied', reason: '需要 Expert Mode' });
+    });
+
+    it('riskLevel critical + Expert Mode 开启 → user-approval', async () => {
+      (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
+        allowed: true,
+        riskLevel: 'critical',
+        requiresPreflight: true,
+        requiresConfirmation: true,
+        reason: 'Critical 操作，需要 Expert Mode + 用户确认',
+        dataSensitivity: 'critical',
+      });
+
+      const expertInput: AgentRunInput = {
+        ...basicInput,
+        expertModeSettings: { enabled: true, switches: {} },
+      };
+      await adapter.run(expertInput);
+      const result = await getToolApproval()({
+        toolCall: { toolName: 'proxy_set', input: {} },
+      });
+
+      expect(result).toEqual({ type: 'user-approval' });
+    });
+  });
+});
+
+// 验证 Feature Flag 默认值（模块级别，不受 beforeEach 影响）
+describe('Feature Flag 默认值', () => {
+  it('FEATURE_FLAGS.useToolApproval 默认为 false', () => {
+    expect(FEATURE_FLAGS.useToolApproval).toBe(false);
   });
 });
