@@ -86,7 +86,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     for (const t of this.toolRegistry.getAllTools()) {
       tools[t.name] = {
         description: t.description,
-        inputSchema: jsonSchemaToZod(t.schema),
+        inputSchema: jsonSchemaToZod(t.schema as unknown as Record<string, unknown>),
         execute: async (args, opts) => {
           return this.executeTool(t, args as Record<string, unknown>, opts?.abortSignal);
         },

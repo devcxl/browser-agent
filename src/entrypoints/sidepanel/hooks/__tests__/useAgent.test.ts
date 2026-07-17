@@ -1,18 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
+// vi.hoisted: 确保 mock 对象在 vi.mock 提升前初始化
+const { mockRun, mockAbort, mockToolLoopAdapterRun, mockToolLoopAdapterAbort, mockFeatureFlags, state } =
+  vi.hoisted(() => ({
+    mockRun: vi.fn(),
+    mockAbort: vi.fn(),
+    mockToolLoopAdapterRun: vi.fn(),
+    mockToolLoopAdapterAbort: vi.fn(),
+    mockFeatureFlags: { useToolLoopAgent: false },
+    state: {
+      capturedHooks: null as any,
+      capturedToolLoopAdapterArgs: [] as any[][],
+    },
+  }));
+
 // Mock AgentLoop module - capture hooks passed to constructor
-let capturedHooks: any = null;
-const mockRun = vi.fn();
-const mockAbort = vi.fn();
 vi.mock('@/agent/agent-loop', () => ({
   AgentLoop: vi.fn().mockImplementation((...args: any[]) => {
-    capturedHooks = args[5]; // hooks is 6th constructor arg
+    state.capturedHooks = args[5]; // hooks is 6th constructor arg
     return {
       run: mockRun,
       abort: mockAbort,
     };
   }),
+}));
+
+// Mock ToolLoopAdapter module
+vi.mock('@/agent/tool-loop-adapter', () => ({
+  ToolLoopAdapter: vi.fn().mockImplementation((...args: any[]) => {
+    state.capturedToolLoopAdapterArgs.push(args);
+    return {
+      run: mockToolLoopAdapterRun,
+      abort: mockToolLoopAdapterAbort,
+    };
+  }),
+}));
+
+// Mock feature flags — mutable object for test control
+vi.mock('@/shared/feature-flags', () => ({
+  FEATURE_FLAGS: mockFeatureFlags,
 }));
 
 vi.mock('@/provider', () => ({
@@ -120,10 +147,15 @@ import type { UIMessage } from '../../types';
 describe('useAgent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    capturedHooks = null;
+    state.capturedHooks = null;
+    state.capturedToolLoopAdapterArgs = [];
     mockRun.mockReset();
     mockRun.mockResolvedValue({ finalMessage: '完成', toolCalls: [] });
     mockAbort.mockReset();
+    mockToolLoopAdapterRun.mockReset();
+    mockToolLoopAdapterRun.mockResolvedValue({ finalMessage: '完成', toolCalls: [] });
+    mockToolLoopAdapterAbort.mockReset();
+    mockFeatureFlags.useToolLoopAgent = false;
   });
 
   it('初始状态为 idle', () => {
@@ -248,8 +280,8 @@ describe('useAgent', () => {
   it('confirm 流程：onConfirm hook 被调用后 resolveConfirm 返回 true', async () => {
     // Make AgentLoop's run call the onConfirm hook to simulate high-risk tool
     mockRun.mockImplementation(async (_input: any) => {
-      if (capturedHooks?.onConfirm) {
-        const confirmed = await capturedHooks.onConfirm({
+      if (state.capturedHooks?.onConfirm) {
+        const confirmed = await state.capturedHooks.onConfirm({
           toolName: 'tabs_close',
           params: { tabId: 1 },
           affectedObjects: [{ type: 'tab', id: '1', title: 'Test', url: 'https://test.com', reason: '关闭标签页' }],
@@ -305,8 +337,8 @@ describe('useAgent', () => {
 
   it('confirm 流程：拒绝后 AgentLoop 收到 false 并返回取消消息', async () => {
     mockRun.mockImplementation(async (_input: any) => {
-      if (capturedHooks?.onConfirm) {
-        const confirmed = await capturedHooks.onConfirm({
+      if (state.capturedHooks?.onConfirm) {
+        const confirmed = await state.capturedHooks.onConfirm({
           toolName: 'tabs_close',
           params: { tabId: 1 },
           affectedObjects: [],
@@ -348,5 +380,161 @@ describe('useAgent', () => {
     });
 
     expect(result.current.status).toBe('idle');
+  });
+
+  // ── Feature Flag 切换测试 ────────────────────────
+
+  it('FEATURE_FLAGS.useToolLoopAgent=false 时使用 AgentLoop', async () => {
+    mockFeatureFlags.useToolLoopAgent = false;
+
+    const { result } = renderHook(() => useAgent());
+    result.current.setCallbacks({ onMessage: vi.fn() });
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key',
+        model: 'gpt-4o', isLocalTrusted: false,
+      });
+    });
+
+    const { AgentLoop } = await import('@/agent/agent-loop');
+    expect(AgentLoop).toHaveBeenCalled();
+    expect(mockRun).toHaveBeenCalled();
+  });
+
+  it('FEATURE_FLAGS.useToolLoopAgent=true 时使用 ToolLoopAdapter', async () => {
+    mockFeatureFlags.useToolLoopAgent = true;
+
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+    result.current.setCallbacks({ onMessage });
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key',
+        model: 'gpt-4o', isLocalTrusted: false,
+      });
+    });
+
+    const { ToolLoopAdapter } = await import('@/agent/tool-loop-adapter');
+    expect(ToolLoopAdapter).toHaveBeenCalled();
+    expect(mockToolLoopAdapterRun).toHaveBeenCalled();
+    expect(result.current.status).toBe('idle');
+  });
+
+  it('FEATURE_FLAGS.useToolLoopAgent=true 时正确发送 assistant 消息', async () => {
+    mockFeatureFlags.useToolLoopAgent = true;
+    mockToolLoopAdapterRun.mockResolvedValue({
+      finalMessage: '来自 ToolLoopAdapter 的回复',
+      toolCalls: [],
+    });
+
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+    result.current.setCallbacks({ onMessage });
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key',
+        model: 'gpt-4o', isLocalTrusted: false,
+      });
+    });
+
+    const assistantCalls = onMessage.mock.calls.filter(
+      (c: [UIMessage]) => c[0].role === 'assistant',
+    );
+    expect(assistantCalls.length).toBeGreaterThanOrEqual(1);
+    expect(assistantCalls[assistantCalls.length - 1][0].content).toBe('来自 ToolLoopAdapter 的回复');
+    expect(assistantCalls[assistantCalls.length - 1][0].status).toBe('complete');
+  });
+
+  it('FEATURE_FLAGS.useToolLoopAgent=true 时展示工具调用记录', async () => {
+    mockFeatureFlags.useToolLoopAgent = true;
+    mockToolLoopAdapterRun.mockResolvedValue({
+      finalMessage: '操作完成',
+      toolCalls: [
+        {
+          toolName: 'tabs_query',
+          params: {},
+          result: { success: true, data: [] },
+          riskLevel: 'low' as const,
+          confirmed: true,
+          timestamp: Date.now(),
+          toolCallId: 'call-1',
+        },
+      ],
+      tokenUsage: { prompt: 50, completion: 30 },
+    });
+
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+    const onTokenUsage = vi.fn();
+    result.current.setCallbacks({ onMessage, onTokenUsage });
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key',
+        model: 'gpt-4o', isLocalTrusted: false,
+      });
+    });
+
+    // 应该有 tool 角色的消息
+    const toolCalls = onMessage.mock.calls.filter(
+      (c: [UIMessage]) => c[0].role === 'tool',
+    );
+    expect(toolCalls.length).toBeGreaterThanOrEqual(1);
+    expect(toolCalls[0][0].toolCallDisplay).toBeDefined();
+    expect(toolCalls[0][0].toolCallDisplay.name).toBe('tabs_query');
+
+    // tokenUsage 应该被传递
+    expect(onTokenUsage).toHaveBeenCalledWith({ prompt: 50, completion: 30 });
+  });
+
+  it('FEATURE_FLAGS.useToolLoopAgent=true 时 abort 调用 ToolLoopAdapter.abort', async () => {
+    mockFeatureFlags.useToolLoopAgent = true;
+
+    const { result } = renderHook(() => useAgent());
+    result.current.setCallbacks({ onMessage: vi.fn() });
+
+    const runPromise = result.current.run('conv-1', '你好', {
+      id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key',
+      model: 'gpt-4o', isLocalTrusted: false,
+    });
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    act(() => {
+      result.current.abort();
+    });
+
+    await act(async () => {
+      await runPromise;
+    });
+
+    expect(mockToolLoopAdapterAbort).toHaveBeenCalled();
+  });
+
+  it('FEATURE_FLAGS.useToolLoopAgent=true 时 error 处理正常', async () => {
+    mockFeatureFlags.useToolLoopAgent = true;
+    mockToolLoopAdapterRun.mockRejectedValue(new Error('ToolLoopAdapter 错误'));
+
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+    result.current.setCallbacks({ onMessage });
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key',
+        model: 'gpt-4o', isLocalTrusted: false,
+      });
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(result.current.error).toBe('ToolLoopAdapter 错误');
+  });
+
+  it('FEATURE_FLAGS 默认值为 false', () => {
+    // 验证每次 beforeEach 后重置为 false
+    expect(mockFeatureFlags.useToolLoopAgent).toBe(false);
   });
 });
