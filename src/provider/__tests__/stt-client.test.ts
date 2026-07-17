@@ -1,3 +1,7 @@
+// 注意：SttClient 是旧 fetch 路径，已由 AI SDK transcribe() 替代（Phase 3.1）。
+// 在 useSDKTranscribe feature flag 启用前，此路径保留作为向后兼容。
+// audio-utils 模块已标记 @deprecated，Phase 5 将一并移除。
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SttClient } from '../stt-client';
 import type { ProviderConfig } from '@/shared/types';
