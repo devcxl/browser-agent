@@ -10,6 +10,7 @@ import type { IConversationManager } from '@/shared/types/conversation';
 import type { IJsonRpcClient } from '@/shared/types';
 import { uid } from '../utils';
 import { ConfigStore } from '@/shared/storage';
+import { FEATURE_FLAGS } from '@/shared/feature-flags';
 
 import type { ISkillStore } from '@/shared/types/skill';
 
@@ -21,6 +22,7 @@ interface AgentCallbacks {
 
 interface AgentDeps {
   AgentLoop: typeof import('@/agent/agent-loop').AgentLoop;
+  ToolLoopAdapter: typeof import('@/agent/tool-loop-adapter').ToolLoopAdapter;
   ToolRegistry: typeof import('@/registry').ToolRegistry;
   Guardrail: typeof import('@/guardrail').Guardrail;
   ConversationManager: typeof import('@/conversation').ConversationManager;
@@ -40,6 +42,7 @@ async function getDeps(): Promise<AgentDeps> {
   _deps = (async () => {
     const [
       { AgentLoop },
+      { ToolLoopAdapter },
       { ToolRegistry },
       { Guardrail },
       { ConversationManager },
@@ -55,6 +58,7 @@ async function getDeps(): Promise<AgentDeps> {
       { SkillStore },
     ] = await Promise.all([
       import('@/agent/agent-loop'),
+      import('@/agent/tool-loop-adapter'),
       import('@/registry'),
       import('@/guardrail'),
       import('@/conversation'),
@@ -95,7 +99,7 @@ async function getDeps(): Promise<AgentDeps> {
     const guardrail = new Guardrail(registry);
     const skillStore = SkillStore.getInstance();
 
-    return { AgentLoop, ToolRegistry, Guardrail, ConversationManager, JsonRpcClient, LlmClient, registry, guardrail, convManager, rpc, skillStore };
+    return { AgentLoop, ToolLoopAdapter, ToolRegistry, Guardrail, ConversationManager, JsonRpcClient, LlmClient, registry, guardrail, convManager, rpc, skillStore };
   })();
   return _deps;
 }
@@ -157,8 +161,54 @@ export function useAgent() {
       try {
         setStatus('streaming');
 
-        const { AgentLoop, registry, guardrail, convManager, LlmClient, skillStore } = await getDeps();
+        const { AgentLoop, ToolLoopAdapter, registry, guardrail, convManager, LlmClient, skillStore } = await getDeps();
 
+        // ── Feature Flag：useToolLoopAgent=true 时使用 AI SDK ToolLoopAgent ──
+        if (FEATURE_FLAGS.useToolLoopAgent) {
+          const adapter = new ToolLoopAdapter(
+            registry,
+            guardrail,
+            convManager,
+            providerConfig,
+            model,
+          );
+          loopRef.current = adapter;
+
+          const output = await adapter.run({
+            conversationId,
+            userMessage,
+            providerConfig,
+            model,
+            browserContext: {
+              currentWindow: { tabs: [] },
+              allWindows: [],
+              tabGroups: [],
+            },
+          });
+
+          // 展示工具调用记录
+          for (const tc of output.toolCalls) {
+            const display = recordToDisplay(tc);
+            cbRef.current.onMessage?.({
+              id: uid(),
+              role: 'tool',
+              content: tc.toolName,
+              toolCallDisplay: display,
+              timestamp: Date.now(),
+              status: display.status,
+            });
+          }
+
+          assistantMsg.content = output.finalMessage;
+          if (output.tokenUsage) {
+            cbRef.current.onTokenUsage?.(output.tokenUsage);
+          }
+          assistantMsg.status = 'complete';
+          cbRef.current.onMessage?.({ ...assistantMsg });
+          setRunningConversationId(null);
+          setStatus('idle');
+        } else {
+          // ── 旧 AgentLoop 路径 ──
         const agentConfig: AgentConfig = {
           maxToolRounds: 15,
           systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
@@ -305,6 +355,7 @@ export function useAgent() {
         cbRef.current.onMessage?.({ ...assistantMsg });
         setRunningConversationId(null);
         setStatus('idle');
+        } // ── 结束旧 AgentLoop 路径 ──
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           assistantMsg.content += '\n\n*操作已中止*';
