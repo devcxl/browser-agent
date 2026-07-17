@@ -5,4 +5,6 @@ export const FEATURE_FLAGS = {
   usePrepareStepContext: true,
   /** 是否使用 Guardrail riskLevel → toolApproval 映射，替代旧 confirmation 流程 */
   useToolApproval: false,
+  /** 是否使用 AI SDK useChat + DirectChatTransport 替代自定义 useAgent hook */
+  useSDKChat: false,
 };

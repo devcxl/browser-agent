@@ -2,10 +2,15 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import type { AgentStatus, UIMessage, ConfirmRequest, TokenUsage } from './types';
 import { useConversations } from './hooks/useConversations';
 import { useAgent } from './hooks/useAgent';
+import { useChatAgent } from './hooks/useChatAgent';
 import { useBrowserState } from './hooks/useBrowserState';
 import { ConversationManager } from '@/conversation';
 import { Database } from '@/shared/db/database';
 import { storedMessagesToUIMessages } from './utils';
+import { FEATURE_FLAGS } from '@/shared/feature-flags';
+import { ToolLoopAdapter } from '@/agent/tool-loop-adapter';
+import { ToolRegistry } from '@/registry';
+import { Guardrail } from '@/guardrail';
 
 const db = Database.getInstance();
 const manager = new ConversationManager(db);
@@ -27,7 +32,73 @@ interface ChatContextValue {
 
 const ChatContext = createContext<ChatContextValue | null>(null);
 
+/**
+ * SDK Chat Provider — 使用 useChat + DirectChatTransport。
+ * 当 FEATURE_FLAGS.useSDKChat 为 true 时使用此 Provider。
+ */
+function ChatProviderSDK({ children }: { children: React.ReactNode }) {
+  const conversations = useConversations();
+  const browserState = useBrowserState();
+  const [conversationStatuses] = useState<Record<string, AgentStatus>>({});
+
+  // 创建适配器实例
+  const registry = new ToolRegistry();
+  const guardrail = new Guardrail(registry);
+  const convManager = new ConversationManager(db);
+
+  const adapter = new ToolLoopAdapter(
+    registry,
+    guardrail,
+    convManager,
+    { id: 'default', name: 'default', providerId: 'openai', endpoint: '', apiKey: '' },
+    'gpt-4o',
+  );
+
+  const { messages: sdkMessages, sendMessage, status, error, stop } = useChatAgent(adapter);
+
+  const sdkAgent: ReturnType<typeof useAgent> = {
+    status: (status === 'streaming' || status === 'submitted') ? 'streaming' : 'idle' as AgentStatus,
+    error: error?.message ?? null,
+    run: async (
+      _conversationId: string,
+      userMessage: string,
+    ) => {
+      sendMessage({ text: userMessage });
+    },
+    abort: () => stop(),
+    setCallbacks: () => {},
+    resolveConfirm: () => {},
+    runningConversationId: null,
+  };
+
+  return (
+    <ChatContext.Provider
+      value={{
+        conversations,
+        agent: sdkAgent,
+        browserState,
+        messages: sdkMessages as unknown as UIMessage[],
+        addMessage: () => {},
+        clearMessages: () => {},
+        messagesLoading: false,
+        messagesError: error?.message ?? null,
+        tokenUsage: { prompt: 0, completion: 0 },
+        confirmRequest: null,
+        resolveConfirm: () => {},
+        conversationStatuses,
+      }}
+    >
+      {children}
+    </ChatContext.Provider>
+  );
+}
+
 export function ChatProvider({ children }: { children: React.ReactNode }) {
+  // Feature Flag：useSDKChat 启用时使用 SDK Chat Provider
+  if (FEATURE_FLAGS.useSDKChat) {
+    return <ChatProviderSDK>{children}</ChatProviderSDK>;
+  }
+
   const conversations = useConversations();
   const agent = useAgent();
   const browserState = useBrowserState();
