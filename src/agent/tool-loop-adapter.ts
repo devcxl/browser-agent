@@ -277,7 +277,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     try {
       const categories = await this.toolClassifier.classify(
         lastUserMsg.content,
-        model as any,
+        model,
       );
 
       if (categories.length === 0) return {};

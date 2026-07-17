@@ -1,6 +1,5 @@
-import { generateObject } from 'ai';
+import { generateObject, type LanguageModel } from 'ai';
 import { z } from 'zod';
-import type { LanguageModelV4 } from '@ai-sdk/provider';
 import type { ToolCategory } from '@/shared/types/tool';
 
 // ---------------------------------------------------------------------------
@@ -58,7 +57,7 @@ export class ToolClassifier {
    */
   async classify(
     userMessage: string,
-    model: LanguageModelV4,
+    model: LanguageModel,
   ): Promise<ToolCategory[]> {
     // 缓存命中：同一消息直接返回
     if (this.cache?.userMessage === userMessage) {
