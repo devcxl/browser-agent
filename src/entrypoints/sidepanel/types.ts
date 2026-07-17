@@ -1,4 +1,5 @@
 import type { RiskLevel, ToolResult, ReasoningEffort } from '@/shared/types';
+import type { UIMessage as AiUIMessage } from 'ai';
 
 export type AgentStatus = 'idle' | 'running' | 'streaming' | 'waitingConfirmation';
 
@@ -12,13 +13,43 @@ export interface ToolCallDisplay {
   confirmed: boolean;
 }
 
+/** AI SDK 工具调用状态映射到 UI 状态 */
+export type ToolCallSDKState =
+  | 'input-streaming'
+  | 'input-available'
+  | 'approval-requested'
+  | 'approval-responded'
+  | 'output-available'
+  | 'output-error'
+  | 'output-denied';
+
+/** AI SDK 工具调用 UI 数据 */
+export interface ToolCallSDK {
+  toolCallId: string;
+  toolName: string;
+  state: ToolCallSDKState;
+  input?: unknown;
+  output?: unknown;
+  errorText?: string;
+}
+
+/**
+ * UI 消息类型。
+ * 兼容两种格式：
+ * - 旧格式：content + reasoningContent + toolCallDisplay + timestamp
+ * - AI SDK 格式：parts（直接从 ai SDK UIMessage 传入）
+ */
 export interface UIMessage {
   id: string;
   role: 'user' | 'assistant' | 'tool';
-  content: string;
+  /** 纯文本内容（旧格式），parts 存在时可省略 */
+  content?: string;
+  /** AI SDK parts 数组，存在时优先使用 */
+  parts?: AiUIMessage['parts'];
   reasoningContent?: string;
   toolCallDisplay?: ToolCallDisplay;
-  timestamp: number;
+  /** 消息时间戳，默认 Date.now() */
+  timestamp?: number;
   status?: 'streaming' | 'complete' | 'error';
 }
 
