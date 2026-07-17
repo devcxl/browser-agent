@@ -224,16 +224,15 @@ describe('ToolLoopAdapter', () => {
 
   // ── Feature Flag ──────────────────────────────────
 
-  it('FEATURE_FLAGS.useToolLoopAgent 默认为 false', () => {
-    expect(FEATURE_FLAGS.useToolLoopAgent).toBe(false);
+  it('FEATURE_FLAGS.useToolLoopAgent 已默认为 true（迁移完成）', () => {
+    expect(FEATURE_FLAGS.useToolLoopAgent).toBe(true);
   });
 
-  it('可以通过修改 FEATURE_FLAGS 启用', () => {
-    // 注：在实际集成中，调用方会检查此 flag 决定使用哪个 AgentRuntime
-    FEATURE_FLAGS.useToolLoopAgent = true;
-    expect(FEATURE_FLAGS.useToolLoopAgent).toBe(true);
-    // 恢复默认值
+  it('可以通过修改 FEATURE_FLAGS 切换回旧 AgentLoop（回滚场景）', () => {
     FEATURE_FLAGS.useToolLoopAgent = false;
+    expect(FEATURE_FLAGS.useToolLoopAgent).toBe(false);
+    // 恢复默认值
+    FEATURE_FLAGS.useToolLoopAgent = true;
   });
 
   // ── ToolCalls 记录 ────────────────────────────────

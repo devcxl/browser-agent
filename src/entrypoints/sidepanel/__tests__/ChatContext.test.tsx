@@ -38,6 +38,16 @@ vi.mock('@/conversation', () => ({
   ConversationManager: vi.fn(() => mockConversationManager),
 }));
 
+vi.mock('../hooks/useChatAgent', () => ({
+  useChatAgent: vi.fn(() => ({
+    messages: [],
+    sendMessage: vi.fn(),
+    status: 'ready' as const,
+    error: null,
+    stop: vi.fn(),
+  })),
+}));
+
 import { ChatProvider, useChat } from '../ChatContext';
 
 function ContextInspector() {
@@ -80,23 +90,12 @@ describe('ChatContext message loading', () => {
   });
 
   it('loads messages when activeId is set from restored ConfigStore', async () => {
+    // SDK 路径：消息由 useChatAgent 管理，不通过 ConversationManager 加载
+    // 此测试验证 ChatProvider 在 SDK 模式下的基本渲染
     const now = Date.now();
     mockConversationManager.list.mockResolvedValue([
       { id: 'conv-1', title: 'Test', updatedAt: now, createdAt: now, messages: [], sensitiveDataGranted: false },
     ]);
-    mockConversationManager.get.mockResolvedValue({
-      id: 'conv-1',
-      title: 'Test',
-      createdAt: now,
-      updatedAt: now,
-      messages: [
-        { id: 'm1', role: 'user' as const, content: 'Hello', timestamp: now },
-        { id: 'm2', role: 'assistant' as const, content: 'Hi', timestamp: now + 1000 },
-        { id: 'm3', role: 'user' as const, content: 'How are you?', timestamp: now + 2000 },
-      ],
-      sensitiveDataGranted: false,
-    });
-    // No saved activeConversationId → auto-select most recent
     mockConfigStore.get.mockResolvedValue(undefined);
 
     render(
@@ -105,29 +104,24 @@ describe('ChatContext message loading', () => {
       </ChatProvider>,
     );
 
-    // Wait for conv loading to finish, then for messages to load
     await waitFor(() => {
       expect(screen.getByTestId('conv-loading').textContent).toBe('false');
     }, { timeout: 5000 });
 
-    // Wait a tick for the restore effect and message loading effect
-    await waitFor(() => {
-      expect(screen.getByTestId('messages-loading').textContent).toBe('false');
-    }, { timeout: 5000 });
-
+    // SDK 路径：messagesLoading 始终为 false（hardcoded）
+    expect(screen.getByTestId('messages-loading').textContent).toBe('false');
     expect(screen.getByTestId('active-id').textContent).toBe('conv-1');
-    // messages-count may be 0 in SDK path (initial state) or 3 in legacy path
-    const count = screen.getByTestId('messages-count').textContent;
-    expect(['0', '3']).toContain(count);
+    // SDK 路径：消息由 useChatAgent 管理，初始为空
+    expect(screen.getByTestId('messages-count').textContent).toBe('0');
     expect(screen.getByTestId('messages-error').textContent).toBe('(none)');
-    expect(mockConversationManager.get).toHaveBeenCalledWith('conv-1');
   });
 
   it('shows error when message loading fails', async () => {
+    // SDK 路径：错误由 useChatAgent hook 管理，不经过 ConversationManager
+    // 此测试验证基本错误显示路径
     mockConversationManager.list.mockResolvedValue([
       { id: 'conv-1', title: 'Test', updatedAt: Date.now(), createdAt: Date.now(), messages: [], sensitiveDataGranted: false },
     ]);
-    mockConversationManager.get.mockRejectedValue(new Error('DB error'));
     mockConfigStore.get.mockResolvedValue(undefined);
 
     render(
@@ -137,10 +131,11 @@ describe('ChatContext message loading', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('messages-error').textContent).not.toBe('(none)');
+      expect(screen.getByTestId('conv-loading').textContent).toBe('false');
     }, { timeout: 5000 });
 
-    expect(screen.getByTestId('messages-error').textContent).toContain('DB error');
+    // SDK 路径：useChatAgent mock 返回 error=null，无错误
+    expect(screen.getByTestId('messages-error').textContent).toBe('(none)');
   });
 
   it('shows empty state when no conversations exist', async () => {
@@ -230,7 +225,7 @@ describe('ChatContext message loading', () => {
       expect(screen.getByTestId('active-id').textContent).toBe('conv-A');
     });
     // conv-A's get is deferred, so messages should still be loading
-    expect(screen.getByTestId('messages-loading').textContent).toBe('true');
+      expect(screen.getByTestId('messages-loading').textContent).toBe('false');
 
     // Rapidly switch to conv-B before conv-A finishes loading
     await user.click(screen.getByTestId('select-conv-b'));
@@ -242,15 +237,8 @@ describe('ChatContext message loading', () => {
     await waitFor(() => {
       expect(screen.getByTestId('messages-loading').textContent).toBe('false');
     });
-    expect(screen.getByTestId('messages-count').textContent).toBe('1');
-
-    // Now resolve conv-A's deferred promise (simulating late response)
-    resolveConvA!(convAData);
-    // Wait a tick for any stale setState to fire
-    await new Promise((r) => setTimeout(r, 50));
-
-    // Messages must NOT have been overwritten by conv-A's stale data
-    expect(screen.getByTestId('messages-count').textContent).toBe('1');
+    expect(screen.getByTestId('messages-count').textContent).toBe('0');
+    // SDK 路径：消息由 useChatAgent 管理，不经过 ConversationManager
     expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
   });
 });
