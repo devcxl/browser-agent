@@ -1,0 +1,28 @@
+feature: chat-first-run-experience
+title: 聊天首次体验与响应式布局
+parent_issue: 161
+tasks:
+  - id: provider-readiness-wizard-i18n
+    title: Provider 就绪度、Wizard 初始步骤与国际化
+    depends_on: []
+    labels: [task]
+    worktree_root: .worktree/provider-readiness-wizard-i18n/
+    github_issue: 163
+  - id: chat-content-container
+    title: 共享响应式聊天内容容器
+    depends_on: []
+    labels: [task]
+    worktree_root: .worktree/chat-content-container/
+    github_issue: 166
+  - id: chat-select-message-input
+    title: ChatSelect 与 MessageInput 配置选择器
+    depends_on: []
+    labels: [task]
+    worktree_root: .worktree/chat-select-message-input/
+    github_issue: 164
+  - id: chat-provider-onboarding
+    title: 首次 Provider 引导与页面集成
+    depends_on: [provider-readiness-wizard-i18n, chat-content-container]
+    labels: [task]
+    worktree_root: .worktree/chat-provider-onboarding/
+    github_issue: 165
