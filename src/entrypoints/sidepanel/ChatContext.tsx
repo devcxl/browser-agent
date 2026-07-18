@@ -111,6 +111,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return <ChatProviderSDK>{children}</ChatProviderSDK>;
   }
 
+  return <ChatProviderLegacy>{children}</ChatProviderLegacy>;
+}
+
+function ChatProviderLegacy({ children }: { children: React.ReactNode }) {
   const conversations = useConversations();
   const agent = useAgent();
   const browserState = useBrowserState();

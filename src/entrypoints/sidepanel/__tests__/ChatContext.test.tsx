@@ -120,13 +120,13 @@ describe('ChatContext message loading', () => {
       expect(screen.getByTestId('conv-loading').textContent).toBe('false');
     }, { timeout: 5000 });
 
-    // Wait a tick for the restore effect and message loading effect
+    // 等待异步加载的实际结果，不能依赖 effect 启动前的初始 false 状态。
     await waitFor(() => {
-      expect(screen.getByTestId('messages-loading').textContent).toBe('false');
+      expect(screen.getByTestId('messages-count').textContent).toBe('3');
     }, { timeout: 5000 });
 
     expect(screen.getByTestId('active-id').textContent).toBe('conv-1');
-    expect(screen.getByTestId('messages-count').textContent).toBe('3');
+    expect(screen.getByTestId('messages-loading').textContent).toBe('false');
     expect(screen.getByTestId('messages-error').textContent).toBe('(none)');
     expect(mockConversationManager.get).toHaveBeenCalledWith('conv-1');
   });

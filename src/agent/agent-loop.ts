@@ -377,12 +377,8 @@ export class AgentLoop implements IAgentRuntime {
               continue;
             }
 
-            let affectedObjects: Array<{ type: string; title?: string; url?: string; reason?: string }> = [];
-            let warnings: string[] = [];
             if (check.requiresPreflight && tool.preflight) {
-              const preflightResult = await tool.preflight(params);
-              affectedObjects = preflightResult.affectedObjects ?? [];
-              warnings = preflightResult.warnings ?? [];
+              await tool.preflight(params);
             }
 
             let result: import('@/shared/types').ToolResult;
