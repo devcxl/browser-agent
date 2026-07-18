@@ -292,8 +292,25 @@ function ChatLayout() {
         </div>
       )}
 
-      {/* 主区域：首页 or 聊天流 */}
-      {isHome ? (
+      {/* 主区域：引导页 / 首页 / 聊天流 */}
+      {onboardingRequest ? (
+        <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6">
+            <div className="w-full max-w-[560px]">
+              <div className="text-center mb-5">
+                <h2 className="text-lg font-semibold text-ink">{t('chat.onboarding.dialogTitle')}</h2>
+                <p className="text-xs text-mute mt-1">{t('chat.onboarding.noProviderDescription')}</p>
+              </div>
+              <ProviderWizard
+                provider={onboardingRequest.provider}
+                initialStep={onboardingRequest.initialStep}
+                onSave={handleOnboardingSave}
+                onClose={handleCloseOnboarding}
+              />
+            </div>
+          </div>
+        </div>
+      ) : isHome ? (
         <ChatContentContainer className="flex-1 flex flex-col justify-center pb-16 gap-5 overflow-y-auto">
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-primary mb-3">
@@ -375,34 +392,6 @@ function ChatLayout() {
         onDelete={conversations.remove}
         tokenUsage={tokenUsage}
       />
-
-      {onboardingRequest && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center" role="dialog" aria-modal="true">
-          <div className="bg-surface-card rounded-xl shadow-xl w-[90vw] max-w-[750px] max-h-[85vh] flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-5 py-3 border-b border-hairline shrink-0">
-              <h2 className="text-sm font-semibold text-ink">{t('chat.onboarding.dialogTitle')}</h2>
-              <button
-                type="button"
-                onClick={handleCloseOnboarding}
-                className="w-6 h-6 flex items-center justify-center rounded text-mute hover:text-ink hover:bg-surface-soft transition-colors"
-                aria-label={t('common.close')}
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              <ProviderWizard
-                provider={onboardingRequest.provider}
-                initialStep={onboardingRequest.initialStep}
-                onSave={handleOnboardingSave}
-                onClose={handleCloseOnboarding}
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {showSettings && (
         <SettingsPanel

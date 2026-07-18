@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ProviderConfig } from '@/shared/types';
@@ -205,9 +205,9 @@ describe('ChatOnboarding', () => {
 
     renderApp();
 
-    // CTA and dialog should not appear before providersLoaded
+    // CTA and wizard should not appear before providersLoaded
     expect(screen.queryByTestId('onboarding-cta')).toBeNull();
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByTestId('provider-wizard')).toBeNull();
   });
 
   it('所有 Provider 完整时不显示引导', async () => {
@@ -217,7 +217,7 @@ describe('ChatOnboarding', () => {
     renderApp();
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByTestId('provider-wizard')).toBeNull();
     });
   });
 
@@ -227,8 +227,7 @@ describe('ChatOnboarding', () => {
     renderApp();
 
     await waitFor(() => {
-      const dialog = screen.getByRole('dialog');
-      expect(dialog).toBeTruthy();
+      expect(screen.getByTestId('provider-wizard')).toBeTruthy();
     });
   });
 
@@ -239,8 +238,7 @@ describe('ChatOnboarding', () => {
     renderApp();
 
     await waitFor(() => {
-      const dialog = screen.getByRole('dialog');
-      expect(dialog).toBeTruthy();
+      expect(screen.getByTestId('provider-wizard')).toBeTruthy();
     });
   });
 
@@ -252,13 +250,12 @@ describe('ChatOnboarding', () => {
 
     // Wait for auto wizard to appear
     await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(screen.getByTestId('provider-wizard')).toBeTruthy();
     });
 
-    // Close the dialog
-    const dialog1 = screen.getByRole('dialog');
-    const closeButton = within(dialog1).getByRole('button', { name: /close/i });
-    await userEvent.click(closeButton);
+    // Dismiss via wizard back button (first = global back)
+    const backButtons = screen.getAllByRole('button', { name: /back/i });
+    await userEvent.click(backButtons[0]!);
 
     // CTA should appear
     await waitFor(() => {
@@ -274,11 +271,10 @@ describe('ChatOnboarding', () => {
 
     // Wait for auto wizard to appear, then close it
     await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(screen.getByTestId('provider-wizard')).toBeTruthy();
     });
-    const dialogForCta = screen.getByRole('dialog');
-    const closeBtnForCta = within(dialogForCta).getByRole('button', { name: /close/i });
-    await userEvent.click(closeBtnForCta);
+    const backBtnsForCta = screen.getAllByRole('button', { name: /back/i });
+    await userEvent.click(backBtnsForCta[0]!);
 
     // Click CTA
     await waitFor(() => {
@@ -288,7 +284,7 @@ describe('ChatOnboarding', () => {
 
     // Wizard should reappear
     await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(screen.getByTestId('provider-wizard')).toBeTruthy();
     });
   });
 
@@ -300,14 +296,14 @@ describe('ChatOnboarding', () => {
 
     // Wait for auto wizard
     await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(screen.getByTestId('provider-wizard')).toBeTruthy();
     });
 
     // Open settings — should close wizard
     await userEvent.click(screen.getByTestId('settings-button'));
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByTestId('provider-wizard')).toBeNull();
     });
   });
 
@@ -319,16 +315,15 @@ describe('ChatOnboarding', () => {
 
     // Auto wizard appears
     await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeTruthy();
+      expect(screen.getByTestId('provider-wizard')).toBeTruthy();
     });
 
-    // Close wizard
-    const dialogOnce = screen.getByRole('dialog');
-    const closeBtnOnce = within(dialogOnce).getByRole('button', { name: /close/i });
-    await userEvent.click(closeBtnOnce);
+    // Close wizard via back button
+    const backBtnsOnce = screen.getAllByRole('button', { name: /back/i });
+    await userEvent.click(backBtnsOnce[0]!);
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByTestId('provider-wizard')).toBeNull();
     });
 
     // CTA appears — wizard should NOT auto-reopen
@@ -337,7 +332,7 @@ describe('ChatOnboarding', () => {
     // Open and close settings to confirm wizard doesn't auto-reopen
     await userEvent.click(screen.getByTestId('settings-button'));
     await waitFor(() => {
-      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(screen.queryByTestId('provider-wizard')).toBeNull();
     });
   });
 
@@ -346,12 +341,17 @@ describe('ChatOnboarding', () => {
 
     renderApp();
 
+    // Dismiss the auto-opened wizard to see home view
+    await waitFor(() => {
+      expect(screen.getByTestId('provider-wizard')).toBeTruthy();
+    });
+    const backBtns = screen.getAllByRole('button', { name: /back/i });
+    await userEvent.click(backBtns[0]!);
+
     // ChatContentContainer provides the w-full mx-auto class pattern
     await waitFor(() => {
-      // The ChatContentContainer div itself has w-full, mx-auto, and the flex classes
       const container = document.querySelector('.flex-1.flex.flex-col.justify-center');
       expect(container).toBeTruthy();
-      // ChatContentContainer adds w-full mx-auto to its own div
       expect(container?.className).toContain('w-full');
       expect(container?.className).toContain('mx-auto');
     });
