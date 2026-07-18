@@ -63,6 +63,12 @@
   "settings": {
     "title": "设置",
     "language": "界面语言",
+    "theme": {
+      "label": "主题",
+      "system": "跟随系统",
+      "light": "浅色",
+      "dark": "深色"
+    },
     "tabs": {
       "provider": "Provider",
       "agent": "Agent",
@@ -144,7 +150,7 @@
       "hideToken": "隐藏 Token",
       "tokenPlaceholder": "ghp_xxx 或 github_pat_xxx",
       "noSubscriptions": "暂无订阅，输入 GitHub 仓库地址添加",
-    "noSubscriptionsAndSkills": "暂无订阅和技能，输入 GitHub 仓库地址添加",
+      "noSubscriptionsAndSkills": "暂无订阅和技能，输入 GitHub 仓库地址添加",
       "sync": "同步",
       "syncing": "同步中...",
       "delete": "删除",
@@ -198,5 +204,29 @@
     "startFailed": "无法启动录音: {message}",
     "providerLost": "Provider 配置丢失",
     "transcribeFailed": "语音识别失败: {message}"
+  },
+  "home": {
+    "title": "有什么可以帮你？",
+    "subtitle": "管理标签页、窗口、书签，一句话搞定",
+    "sug1": {
+      "title": "整理标签页",
+      "desc": "按域名自动分组当前窗口的标签页",
+      "prompt": "把当前窗口的标签页按域名自动分组"
+    },
+    "sug2": {
+      "title": "静音所有标签",
+      "desc": "找出正在播放声音的标签页并静音",
+      "prompt": "把正在播放声音的标签页全部静音"
+    },
+    "sug3": {
+      "title": "保存会话",
+      "desc": "把当前窗口保存为可恢复的会话",
+      "prompt": "把当前窗口保存为会话"
+    },
+    "sug4": {
+      "title": "清理重复",
+      "desc": "关闭 URL 重复的多余标签页",
+      "prompt": "关闭 URL 重复的标签页"
+    }
   }
 }

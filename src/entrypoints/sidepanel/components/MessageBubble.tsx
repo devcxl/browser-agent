@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { isTextUIPart, isReasoningUIPart, isToolUIPart } from 'ai';
 import type { UIMessage, ToolCallDisplay } from '../types';
-import { cn, formatTime, riskColor, truncate } from '../utils';
+import { cn, formatTime, truncate } from '../utils';
 import { useI18n } from '../i18n/useI18n';
 
 interface Props {
@@ -40,7 +40,7 @@ const markdownComponents = {
     }
     return (
       <code
-        className="px-1 py-0.5 rounded-md bg-surface-soft text-ink text-[0.85em]"
+        className="px-1 py-0.5 rounded bg-accent-soft text-primary text-[0.85em]"
         {...props}
       >
         {children}
@@ -127,6 +127,11 @@ function MessageBubbleLegacy({
   const isStreaming = message.status === 'streaming';
   const hasReasoning = message.role === 'assistant' && !!message.reasoningContent;
 
+  // 空占位气泡（如工具调用先于文本时残留的 streaming 占位）不渲染
+  if (!isStreaming && !message.content && !hasReasoning && message.role === 'assistant') {
+    return null;
+  }
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(message.content ?? '');
@@ -143,7 +148,7 @@ function MessageBubbleLegacy({
     }
     return (
       <div className="flex justify-center my-1">
-        <div className="bg-surface-soft border border-hairline rounded-md px-3 py-1.5 text-xs text-mute max-w-[80%]">
+        <div className="bg-surface-soft border border-hairline rounded-lg px-3 py-1.5 text-xs text-mute max-w-[80%]">
           <span className="font-medium">{message.content}</span>
         </div>
       </div>
@@ -155,14 +160,14 @@ function MessageBubbleLegacy({
   return (
     <div
       data-testid="message-bubble"
-      className={cn('flex mb-3', isUser ? 'justify-end' : 'justify-start')}
+      className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
     >
       <div
         className={cn(
-          'max-w-[80%] px-4 py-2.5 relative',
+          'px-3.5 py-2.5 relative shadow-sm',
           isUser
-            ? 'bg-primary text-on-primary rounded-2xl rounded-br-md'
-            : 'bg-surface-card text-ink rounded-2xl rounded-bl-md border border-hairline',
+            ? 'max-w-[85%] bg-primary text-on-primary rounded-2xl rounded-br'
+            : 'max-w-[92%] bg-surface-soft text-ink rounded-2xl rounded-bl',
         )}
       >
         {message.content && (
@@ -174,7 +179,7 @@ function MessageBubbleLegacy({
               'opacity-40 hover:opacity-100',
               isUser
                 ? 'text-on-primary hover:bg-white/20'
-                : 'text-mute hover:text-ink hover:bg-surface-soft',
+                : 'text-mute hover:text-ink hover:bg-surface-card',
             )}
             title={t('chat.message.copy')}
           >
@@ -195,20 +200,20 @@ function MessageBubbleLegacy({
             <button
               type="button"
               onClick={() => setShowReasoning(!showReasoning)}
-              className="flex items-center gap-1.5 text-xs text-mute hover:text-ink transition-colors"
+              className="flex items-center gap-1.5 text-[11px] font-medium text-mute hover:text-ink transition-colors"
             >
-              <span className="text-xs">{showReasoning ? '▼' : '▶'}</span>
+              <span>{showReasoning ? '▾' : '▸'}</span>
               <span>{showReasoning ? t('chat.message.hideReasoning') : t('chat.message.showReasoning')}</span>
             </button>
             {showReasoning && (
-              <div className="mt-1.5 p-2.5 bg-yellow-50 border border-warning/20 rounded-md text-xs text-yellow-800 whitespace-pre-wrap break-words leading-relaxed">
+              <div className="mt-1.5 pl-2.5 border-l-2 border-hairline text-xs text-mute italic whitespace-pre-wrap break-words leading-relaxed">
                 {message.reasoningContent}
               </div>
             )}
           </div>
         )}
 
-        <div className="text-sm leading-relaxed">
+        <div className="text-[13.5px] leading-relaxed">
           {isUser ? (
             <div className="whitespace-pre-wrap break-words">{message.content}</div>
           ) : isStreaming && !message.content ? (
@@ -219,20 +224,20 @@ function MessageBubbleLegacy({
               <span className="ml-0.5 text-xs">{t('chat.message.thinking')}</span>
             </div>
           ) : (
-            <div className="markdown-body break-words [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-1 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-2 [&_blockquote]:text-gray-600 [&_table]:my-2 [&_table]:border-collapse [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1 [&_hr]:my-2 [&_hr]:border-gray-300">
+            <div className="markdown-body break-words [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-1 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-hairline-strong [&_blockquote]:pl-2 [&_blockquote]:text-mute [&_table]:my-2 [&_table]:border-collapse [&_th]:border [&_th]:border-hairline-strong [&_th]:px-2 [&_th]:py-1 [&_th]:bg-surface-card [&_td]:border [&_td]:border-hairline-strong [&_td]:px-2 [&_td]:py-1 [&_hr]:my-2 [&_hr]:border-hairline">
               <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                 {message.content!}
               </ReactMarkdown>
             </div>
           )}
           {isStreaming && message.content && (
-            <span className="inline-block w-1.5 h-4 bg-ink ml-0.5 animate-pulse" />
+            <span className="block h-0.5 w-2/5 mt-2 bg-primary rounded-full animate-breathe" />
           )}
         </div>
         <div
           className={cn(
             'text-[10px] mt-1',
-            isUser ? 'text-on-dark-soft' : 'text-mute',
+            isUser ? 'text-on-primary/60' : 'text-mute',
           )}
         >
           {formatTime(message.timestamp ?? Date.now())}
@@ -287,14 +292,14 @@ function MessageBubbleSDK({
       {(textContent || reasoningContent || isStreaming) && (
         <div
           data-testid="message-bubble"
-          className={cn('flex mb-3', isUser ? 'justify-end' : 'justify-start')}
+          className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
         >
           <div
             className={cn(
-              'max-w-[80%] px-4 py-2.5 relative',
+              'px-3.5 py-2.5 relative shadow-sm',
               isUser
-                ? 'bg-primary text-on-primary rounded-2xl rounded-br-md'
-                : 'bg-surface-card text-ink rounded-2xl rounded-bl-md border border-hairline',
+                ? 'max-w-[85%] bg-primary text-on-primary rounded-2xl rounded-br'
+                : 'max-w-[92%] bg-surface-soft text-ink rounded-2xl rounded-bl',
             )}
           >
             {textContent && (
@@ -306,7 +311,7 @@ function MessageBubbleSDK({
                   'opacity-40 hover:opacity-100',
                   isUser
                     ? 'text-on-primary hover:bg-white/20'
-                    : 'text-mute hover:text-ink hover:bg-surface-soft',
+                    : 'text-mute hover:text-ink hover:bg-surface-card',
                 )}
                 title={t('chat.message.copy')}
               >
@@ -327,20 +332,20 @@ function MessageBubbleSDK({
                 <button
                   type="button"
                   onClick={() => setShowReasoning(!showReasoning)}
-                  className="flex items-center gap-1.5 text-xs text-mute hover:text-ink transition-colors"
+                  className="flex items-center gap-1.5 text-[11px] font-medium text-mute hover:text-ink transition-colors"
                 >
-                  <span className="text-xs">{showReasoning ? '▼' : '▶'}</span>
+                  <span>{showReasoning ? '▾' : '▸'}</span>
                   <span>{showReasoning ? t('chat.message.hideReasoning') : t('chat.message.showReasoning')}</span>
                 </button>
                 {showReasoning && (
-                  <div className="mt-1.5 p-2.5 bg-yellow-50 border border-warning/20 rounded-md text-xs text-yellow-800 whitespace-pre-wrap break-words leading-relaxed">
+                  <div className="mt-1.5 pl-2.5 border-l-2 border-hairline text-xs text-mute italic whitespace-pre-wrap break-words leading-relaxed">
                     {reasoningContent}
                   </div>
                 )}
               </div>
             )}
 
-            <div className="text-sm leading-relaxed">
+            <div className="text-[13.5px] leading-relaxed">
               {isUser ? (
                 <div className="whitespace-pre-wrap break-words">{textContent}</div>
               ) : isStreaming && !textContent ? (
@@ -351,20 +356,20 @@ function MessageBubbleSDK({
                   <span className="ml-0.5 text-xs">{t('chat.message.thinking')}</span>
                 </div>
               ) : (
-                <div className="markdown-body break-words [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-1 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-2 [&_blockquote]:text-gray-600 [&_table]:my-2 [&_table]:border-collapse [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1 [&_hr]:my-2 [&_hr]:border-gray-300">
+                <div className="markdown-body break-words [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-1 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:border-l-2 [&_blockquote]:border-hairline-strong [&_blockquote]:pl-2 [&_blockquote]:text-mute [&_table]:my-2 [&_table]:border-collapse [&_th]:border [&_th]:border-hairline-strong [&_th]:px-2 [&_th]:py-1 [&_th]:bg-surface-card [&_td]:border [&_td]:border-hairline-strong [&_td]:px-2 [&_td]:py-1 [&_hr]:my-2 [&_hr]:border-hairline">
                   <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                     {textContent}
                   </ReactMarkdown>
                 </div>
               )}
               {isStreaming && textContent && (
-                <span className="inline-block w-1.5 h-4 bg-ink ml-0.5 animate-pulse" />
+                <span className="block h-0.5 w-2/5 mt-2 bg-primary rounded-full animate-breathe" />
               )}
             </div>
             <div
               className={cn(
                 'text-[10px] mt-1',
-                isUser ? 'text-on-dark-soft' : 'text-mute',
+                isUser ? 'text-on-primary/60' : 'text-mute',
               )}
             >
               {formatTime(message.timestamp ?? Date.now())}
@@ -381,46 +386,40 @@ function MessageBubbleSDK({
 function ToolBubble({ call }: { call: ToolCallDisplay }) {
   const [expanded, setExpanded] = useState(false);
 
-  const isHighRisk = call.riskLevel === 'high' || call.riskLevel === 'critical';
-
   return (
-    <div className="flex justify-start mb-3">
-      <div className={cn(
-        'max-w-[80%] bg-surface-card rounded-2xl rounded-bl-md border overflow-hidden',
-        isHighRisk ? 'border-orange-400' : 'border-hairline',
-      )}>
+    <div className="flex justify-start">
+      <div className="w-fit min-w-[13rem] max-w-[92%] sm:max-w-[34rem] bg-surface-card rounded-xl border border-hairline shadow-sm overflow-hidden">
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-2 w-full px-4 py-2.5 text-left hover:bg-surface-soft transition-colors"
+          className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-surface-soft transition-colors"
         >
-          <span className="text-xs text-mute">{expanded ? '▼' : '▶'}</span>
-          <span className="text-sm font-medium text-ink flex-1">
+          <StatusDot status={call.status} />
+          <span className="font-mono text-xs font-medium text-ink flex-1 truncate">
             {call.name}
           </span>
-          <span className={cn('text-[10px] font-medium', riskColor(call.riskLevel).split(' ')[0])}>
-            {call.riskLevel}
-          </span>
-          {call.status === 'running' && (
-            <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          )}
-          {call.status === 'success' && <span className="text-success text-sm">✓</span>}
-          {call.status === 'error' && <span className="text-danger text-sm">✕</span>}
+          <RiskBadge level={call.riskLevel} />
+          <svg
+            className={cn('w-3.5 h-3.5 text-mute transition-transform duration-150', expanded && 'rotate-180')}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" d="M6 9l6 6 6-6" />
+          </svg>
         </button>
         {expanded && (
-          <div className="px-4 pb-3 pt-1 bg-surface-soft border-t border-hairline space-y-1.5 text-xs">
+          <div className="px-3 py-2.5 bg-surface-card border-t border-hairline space-y-2 font-mono text-xs max-h-[120px] overflow-auto">
             <div>
-              <span className="font-medium text-mute">参数: </span>
-              <code className="text-body break-all">
-                {truncate(JSON.stringify(call.params), 200)}
+              <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">参数</div>
+              <code className="text-body break-all whitespace-pre-wrap">
+                {truncate(JSON.stringify(call.params, null, 2), 400)}
               </code>
             </div>
             {call.result && (
               <div>
-                <span className="font-medium text-mute">结果: </span>
-                <code className="text-body break-all">
+                <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">结果</div>
+                <code className="text-body break-all whitespace-pre-wrap">
                   {call.result.success
-                    ? truncate(JSON.stringify(call.result.data ?? 'ok'), 200)
+                    ? truncate(JSON.stringify(call.result.data ?? 'ok', null, 2), 400)
                     : call.result.error}
                 </code>
               </div>
@@ -430,6 +429,32 @@ function ToolBubble({ call }: { call: ToolCallDisplay }) {
       </div>
     </div>
   );
+}
+
+/** 工具调用状态点 */
+export function StatusDot({ status }: { status: 'running' | 'success' | 'error' }) {
+  switch (status) {
+    case 'running':
+      return <span className="w-1.5 h-1.5 rounded-full bg-warning animate-dot-pulse shrink-0" />;
+    case 'success':
+      return <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />;
+    case 'error':
+      return <span className="w-1.5 h-1.5 rounded-full bg-danger shrink-0" />;
+  }
+}
+
+/** 风险等级 badge */
+export function RiskBadge({ level }: { level: ToolCallDisplay['riskLevel'] }) {
+  switch (level) {
+    case 'high':
+      return <span className="text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-primary text-on-primary">high</span>;
+    case 'critical':
+      return <span className="text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 bg-danger text-on-primary">critical</span>;
+    case 'medium':
+      return <span className="text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 text-warning border border-warning">medium</span>;
+    default:
+      return null;
+  }
 }
 
 // ─── AI SDK 工具调用气泡 ──────────────────────────────────
@@ -444,44 +469,45 @@ function SDKToolBubble({ part, t }: { part: any; t: ReturnType<typeof useI18n>['
   const output = part.output;
 
   return (
-    <div className="flex justify-start mb-3">
-      <div className="max-w-[80%] bg-surface-card rounded-2xl rounded-bl-md border border-hairline overflow-hidden">
+    <div className="flex justify-start">
+      <div className="w-fit min-w-[13rem] max-w-[92%] sm:max-w-[34rem] bg-surface-card rounded-xl border border-hairline shadow-sm overflow-hidden">
         <button
           type="button"
           onClick={() => setExpanded(!expanded)}
-          className="flex items-center gap-2 w-full px-4 py-2.5 text-left hover:bg-surface-soft transition-colors"
+          className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-surface-soft transition-colors"
         >
-          <span className="text-xs text-mute">{expanded ? '▼' : '▶'}</span>
-          <span className="text-sm font-medium text-ink flex-1">{toolName}</span>
+          <StatusDot status={status} />
+          <span className="font-mono text-xs font-medium text-ink flex-1 truncate">{toolName}</span>
           <span className="text-[10px] font-medium text-mute">{part.state}</span>
-          {status === 'running' && (
-            <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          )}
-          {status === 'success' && <span className="text-success text-sm">✓</span>}
-          {status === 'error' && <span className="text-danger text-sm">✕</span>}
+          <svg
+            className={cn('w-3.5 h-3.5 text-mute transition-transform duration-150', expanded && 'rotate-180')}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" d="M6 9l6 6 6-6" />
+          </svg>
         </button>
         {expanded && (
-          <div className="px-4 pb-3 pt-1 bg-surface-soft border-t border-hairline space-y-1.5 text-xs">
+          <div className="px-3 py-2.5 bg-surface-card border-t border-hairline space-y-2 font-mono text-xs max-h-[120px] overflow-auto">
             {input != null && (
               <div>
-                <span className="font-medium text-mute">{t('chat.message.params')}: </span>
-                <code className="text-body break-all">
-                  {truncate(JSON.stringify(input), 200)}
+                <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{t('chat.message.params')}</div>
+                <code className="text-body break-all whitespace-pre-wrap">
+                  {truncate(JSON.stringify(input, null, 2), 400)}
                 </code>
               </div>
             )}
             {output != null && (
               <div>
-                <span className="font-medium text-mute">{t('chat.message.result')}: </span>
-                <code className="text-body break-all">
-                  {truncate(JSON.stringify(output), 200)}
+                <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{t('chat.message.result')}</div>
+                <code className="text-body break-all whitespace-pre-wrap">
+                  {truncate(JSON.stringify(output, null, 2), 400)}
                 </code>
               </div>
             )}
             {part.errorText && (
               <div>
-                <span className="font-medium text-mute">{t('chat.message.result')}: </span>
-                <code className="text-danger break-all">{part.errorText}</code>
+                <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{t('chat.message.result')}</div>
+                <code className="text-danger break-all whitespace-pre-wrap">{part.errorText}</code>
               </div>
             )}
           </div>

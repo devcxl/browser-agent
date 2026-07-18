@@ -53,16 +53,17 @@ export function ChatView({ messages }: Props) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="flex-1 overflow-y-auto px-4 py-3 scroll-smooth flex flex-col"
+      className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 pt-4 pb-2 scroll-smooth"
     >
-      {useVirtual ? (
-        <div style={{ paddingTop, paddingBottom }}>
+      <div className="w-full max-w-3xl mx-auto flex flex-col gap-3">
+        {useVirtual ? (
+        <div className="flex flex-col gap-3" style={{ paddingTop, paddingBottom }}>
           {visibleMessages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
           ))}
         </div>
-      ) : (
-        <>
+        ) : (
+          <>
           {messages.length === 0 && (
             <div className="flex-1 flex items-center justify-center text-mute text-sm">
                  {t('chat.emptyState')}
@@ -71,9 +72,10 @@ export function ChatView({ messages }: Props) {
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
           ))}
-        </>
-      )}
-      <div ref={bottomRef} />
+          </>
+        )}
+        <div ref={bottomRef} />
+      </div>
     </div>
   );
 }

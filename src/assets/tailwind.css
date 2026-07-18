@@ -1,31 +1,96 @@
 @import "tailwindcss";
 
-@theme {
-  --color-primary: #292524;
-  --color-primary-active: #0c0a09;
-  --color-ink: #0c0a09;
-  --color-ink-deep: #0c0a09;
-  --color-body: #4e4e4e;
-  --color-body-strong: #292524;
-  --color-mute: #777169;
-  --color-ash: #a8a29e;
-  --color-canvas: #f5f5f5;
-  --color-canvas-soft: #fafafa;
-  --color-surface-card: #ffffff;
-  --color-surface-soft: #f0efed;
+/* 语义 token 映射到运行时 CSS 变量，支持明暗双主题（跟随系统） */
+@theme inline {
+  --color-primary: var(--accent);
+  --color-primary-active: var(--accent-hover);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-on-accent: var(--on-accent);
+  --color-ink: var(--ink);
+  --color-ink-deep: var(--ink);
+  --color-body: var(--body);
+  --color-body-strong: var(--ink);
+  --color-mute: var(--mute);
+  --color-ash: var(--mute);
+  --color-canvas: var(--canvas);
+  --color-canvas-soft: var(--canvas);
+  --color-surface-card: var(--surface);
+  --color-surface-soft: var(--surface-soft);
   --color-surface-dark: #0c0a09;
   --color-surface-dark-elevated: #1c1917;
-  --color-hairline: #e7e5e4;
-  --color-hairline-soft: #f0efed;
-  --color-hairline-strong: #d6d3d1;
-  --color-on-primary: #ffffff;
+  --color-hairline: var(--hairline);
+  --color-hairline-soft: var(--surface-soft);
+  --color-hairline-strong: var(--hairline-strong);
+  --color-on-primary: var(--on-accent);
   --color-on-dark: #ffffff;
   --color-on-dark-soft: #a8a29e;
-  --color-warning: #ff9f0a;
-  --color-danger: #dc2626;
-  --color-danger-hover: #b91c1c;
-  --color-success: #16a34a;
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-danger-hover: var(--danger-hover);
+  --color-success: var(--success);
   --default-font-family: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+:root {
+  --accent: #c2410c;
+  --accent-hover: #9a3412;
+  --accent-soft: #fff7ed;
+  --on-accent: #ffffff;
+  --canvas: #fafaf9;
+  --surface: #ffffff;
+  --surface-soft: #f5f4f2;
+  --ink: #1c1917;
+  --body: #44403c;
+  --mute: #78716c;
+  --hairline: #e7e5e4;
+  --hairline-strong: #d6d3d1;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --success: #16a34a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --accent: #ea580c;
+    --accent-hover: #f97316;
+    --accent-soft: #431407;
+    --on-accent: #ffffff;
+    --canvas: #161412;
+    --surface: #201d1a;
+    --surface-soft: #292522;
+    --ink: #f5f5f4;
+    --body: #d6d3d1;
+    --mute: #a8a29e;
+    --hairline: #38322d;
+    --hairline-strong: #4a443e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --danger-hover: #f87171;
+    --success: #22c55e;
+  }
+}
+
+/* 手动强制暗色（设置面板主题=dark） */
+:root.dark {
+  --accent: #ea580c;
+  --accent-hover: #f97316;
+  --accent-soft: #431407;
+  --on-accent: #ffffff;
+  --canvas: #161412;
+  --surface: #201d1a;
+  --surface-soft: #292522;
+  --ink: #f5f5f4;
+  --body: #d6d3d1;
+  --mute: #a8a29e;
+  --hairline: #38322d;
+  --hairline-strong: #4a443e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --danger-hover: #f87171;
+  --success: #22c55e;
 }
 
 html, body, #root {
@@ -40,4 +105,22 @@ html, body, #root {
 }
 .animate-progress {
   animation: progress 1.5s ease-in-out infinite;
+}
+
+/* 流式输出呼吸条 */
+@keyframes breathe {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+.animate-breathe {
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+/* 状态点脉冲 */
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.animate-dot-pulse {
+  animation: dot-pulse 1s ease-in-out infinite;
 }

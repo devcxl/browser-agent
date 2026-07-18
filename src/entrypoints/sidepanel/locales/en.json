@@ -63,6 +63,12 @@
   "settings": {
     "title": "Settings",
     "language": "Language",
+    "theme": {
+      "label": "Theme",
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
     "tabs": {
       "provider": "Provider",
       "agent": "Agent",
@@ -144,7 +150,7 @@
       "hideToken": "Hide Token",
       "tokenPlaceholder": "ghp_xxx or github_pat_xxx",
       "noSubscriptions": "No subscriptions, enter a GitHub repo URL to add",
-    "noSubscriptionsAndSkills": "No subscriptions or skills, enter a GitHub repo URL to add",
+      "noSubscriptionsAndSkills": "No subscriptions or skills, enter a GitHub repo URL to add",
       "sync": "Sync",
       "syncing": "Syncing...",
       "delete": "Delete",
@@ -198,5 +204,29 @@
     "startFailed": "Failed to start recording: {message}",
     "providerLost": "Provider configuration lost",
     "transcribeFailed": "Speech recognition failed: {message}"
+  },
+  "home": {
+    "title": "How can I help?",
+    "subtitle": "Manage tabs, windows and bookmarks in one sentence",
+    "sug1": {
+      "title": "Organize tabs",
+      "desc": "Group tabs in current window by domain",
+      "prompt": "Group tabs in the current window by domain"
+    },
+    "sug2": {
+      "title": "Mute all tabs",
+      "desc": "Find audible tabs and mute them",
+      "prompt": "Mute all tabs that are playing sound"
+    },
+    "sug3": {
+      "title": "Save session",
+      "desc": "Save current window as a restorable session",
+      "prompt": "Save the current window as a session"
+    },
+    "sug4": {
+      "title": "Close duplicates",
+      "desc": "Close tabs with duplicate URLs",
+      "prompt": "Close tabs with duplicate URLs"
+    }
   }
 }

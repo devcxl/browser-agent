@@ -3,8 +3,6 @@ import { cn } from '../utils';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useI18n } from '../i18n/useI18n';
-import { getProviderClientFactory } from '@/provider/provider-client-factory';
-import type { CatalogModel } from '@/provider/provider-catalog';
 
 interface Props {
   onSend: (text: string) => void;
@@ -12,10 +10,14 @@ interface Props {
   disabled: boolean;
   isRunning: boolean;
   providers: ProviderConfig[];
-  selectedModelId: string;
-  onSelectModel: (modelId: string) => void;
-  reasoningEffort: ReasoningEffort;
-  onReasoningEffortChange: (effort: ReasoningEffort) => void;
+  selectedProviderId?: string;
+  onSelectProvider?: (providerId: string) => void;
+  selectedModelId?: string;
+  onSelectModel?: (modelId: string) => void;
+  reasoningEffort?: ReasoningEffort;
+  onReasoningEffortChange?: (effort: ReasoningEffort | undefined) => void;
+  /** home: 居中大输入框；chat: 底部紧凑输入框 */
+  variant?: 'home' | 'chat';
 }
 
 const SpinnerIcon = (
@@ -27,38 +29,17 @@ const SpinnerIcon = (
 
 export function MessageInput({
   onSend, onAbort, disabled, isRunning,
-  providers, selectedModelId, onSelectModel,
-  reasoningEffort, onReasoningEffortChange,
+  providers, selectedProviderId = '', onSelectProvider = () => {}, selectedModelId = '', onSelectModel = () => {},
+  reasoningEffort, onReasoningEffortChange = () => {},
+  variant = 'chat',
 }: Props) {
   const { t } = useI18n();
   const [text, setText] = useState('');
-  const [models, setModels] = useState<CatalogModel[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const activeProvider = providers.length > 0 ? providers[0]! : null;
-
-  useEffect(() => {
-    if (!activeProvider || activeProvider.isCustom) {
-      setModels([]);
-      return;
-    }
-    let cancelled = false;
-    setLoadingModels(true);
-    getProviderClientFactory()
-      .getModels(activeProvider)
-      .then((m) => {
-        if (!cancelled) {
-          setModels(m);
-          if (m.length > 0 && !selectedModelId) {
-            onSelectModel(m[0]!.id);
-          }
-        }
-      })
-      .catch(() => { if (!cancelled) setModels([]); })
-      .finally(() => { if (!cancelled) setLoadingModels(false); });
-    return () => { cancelled = true; };
-  }, [activeProvider?.id]);
+  const activeProvider = providers.find((provider) => provider.id === selectedProviderId) ?? providers[0] ?? null;
+  const models = Object.values(activeProvider?.models ?? {});
+  const activeModel = activeProvider?.models?.[selectedModelId] ?? null;
 
   const handleTranscribed = useCallback((transcribedText: string) => {
     setText((prev) => {
@@ -72,7 +53,7 @@ export function MessageInput({
 
   const handleSend = () => {
     const trimmed = text.trim();
-    if (!trimmed || disabled) return;
+    if (!trimmed || disabled || (activeProvider && !activeModel)) return;
     onSend(trimmed);
     setText('');
   };
@@ -92,7 +73,7 @@ export function MessageInput({
   }, [text]);
 
   const baseMicClass =
-    'shrink-0 w-9 h-9 flex items-center justify-center rounded-md border border-hairline transition-colors';
+    'shrink-0 w-7 h-7 flex items-center justify-center rounded-full transition-colors';
 
   const renderMicButton = () => {
     if (!voiceAvailable) return null;
@@ -107,7 +88,7 @@ export function MessageInput({
             disabled={disabled}
             className={cn(
               baseMicClass,
-              'text-mute hover:text-ink hover:border-primary',
+              'text-mute hover:text-ink hover:bg-surface-soft',
               disabled && 'opacity-40 cursor-not-allowed',
             )}
             title={t('chat.input.voiceInput')}
@@ -132,7 +113,7 @@ export function MessageInput({
             type="button"
             data-testid="mic-button"
             onClick={() => stopRecording()}
-            className={cn(baseMicClass, 'border-danger bg-red-50 hover:bg-red-100')}
+            className={cn(baseMicClass, 'bg-danger/10 hover:bg-danger/20')}
             title={t('chat.input.stopRecording')}
           >
             <span className="w-3 h-3 rounded-full bg-danger animate-pulse" />
@@ -165,96 +146,128 @@ export function MessageInput({
     }
   };
 
-  const hasConfigRow = models.length > 0;
+  const canSend = !!text.trim() && !disabled && (!activeProvider || !!activeModel);
+  const hasConfigRow = !!activeProvider;
+  const reasoningEfforts = activeModel?.reasoning ? activeModel.reasoningEfforts ?? [] : [];
+  const isHome = variant === 'home';
+
+  const micButton = renderMicButton();
 
   return (
-    <div className="border-t border-hairline bg-canvas">
-      {isRunning && (
-        <div className="h-0.5 bg-hairline overflow-hidden">
-          <div className="h-full bg-primary w-1/3 animate-progress" />
-        </div>
-      )}
+    <div className={cn(!isHome && 'border-t border-hairline bg-canvas px-3 pt-2 pb-3')}>
+      {/* Composer 容器 */}
+      <div
+        className={cn(
+          'bg-surface-card border border-hairline rounded-2xl shadow-sm',
+          'transition-[border-color,box-shadow] duration-150',
+          'focus-within:border-primary focus-within:shadow-[0_0_0_3px_var(--accent-soft)]',
+        )}
+      >
+        <textarea
+          ref={textareaRef}
+          data-testid="message-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          placeholder={disabled ? t('chat.input.disabledPlaceholder') : t('chat.input.placeholder')}
+          rows={isHome ? 3 : 1}
+          className={cn(
+            'w-full resize-none bg-transparent text-ink text-[13.5px] leading-relaxed',
+            'px-4 pt-3.5 pb-2',
+            'placeholder:text-mute',
+            'focus:outline-none',
+            'disabled:text-mute',
+          )}
+        />
 
-      <div className="px-4 py-3">
-        {hasConfigRow && (
-          <div className="flex items-center gap-2 mb-2">
-            <select
-              data-testid="model-select"
-              value={selectedModelId}
-              onChange={(e) => onSelectModel(e.target.value)}
-              className="flex-1 px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:border-primary"
-            >
-              {models.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+        {/* 底部工具行 */}
+        <div className="flex items-center gap-2 px-2.5 pb-2.5">
+          {hasConfigRow && (
+            <>
+              <select
+                data-testid="provider-select"
+                value={activeProvider?.id ?? ''}
+                onChange={(e) => onSelectProvider(e.target.value)}
+                className="max-w-[35%] px-2.5 py-1 text-xs font-medium border-none rounded-full bg-surface-soft text-body hover:text-ink focus:outline-none cursor-pointer truncate"
+              >
+                {providers.map((provider) => (
+                  <option key={provider.id} value={provider.id}>{provider.name}</option>
+                ))}
+              </select>
 
-            <select
-              data-testid="reasoning-select"
-              value={reasoningEffort}
-              onChange={(e) => onReasoningEffortChange(e.target.value as ReasoningEffort)}
-              className="w-24 px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:border-primary"
-              title="Reasoning effort"
-            >
-              <option value="low">Think: Low</option>
-              <option value="medium">Think: Med</option>
-              <option value="high">Think: High</option>
-              <option value="max">Think: Max</option>
-            </select>
+              {models.length > 0 ? (
+                <select
+                  data-testid="model-select"
+                  value={selectedModelId}
+                  onChange={(e) => onSelectModel(e.target.value)}
+                  className="max-w-[45%] px-2.5 py-1 text-xs font-medium border-none rounded-full bg-surface-soft text-body hover:text-ink focus:outline-none cursor-pointer truncate"
+                >
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>{model.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <span className="text-xs text-mute">No models configured</span>
+              )}
 
-            {loadingModels && (
-              <span className="text-xs text-mute">...</span>
+              {reasoningEfforts.length > 0 ? (
+                <select
+                  data-testid="reasoning-select"
+                  value={reasoningEffort ?? ''}
+                  onChange={(e) => onReasoningEffortChange(e.target.value ? e.target.value as ReasoningEffort : undefined)}
+                  className="px-2.5 py-1 text-xs font-medium border-none rounded-full bg-surface-soft text-body hover:text-ink focus:outline-none cursor-pointer"
+                  title="Reasoning effort"
+                >
+                  <option value="">Think: Off</option>
+                  {reasoningEfforts.map((effort) => (
+                    <option key={effort} value={effort}>Think: {effort}</option>
+                  ))}
+                </select>
+              ) : (
+                <span data-testid="reasoning-unsupported" className="px-2.5 py-1 text-xs text-mute rounded-full bg-surface-soft">
+                  Think: Unsupported
+                </span>
+              )}
+            </>
+          )}
+
+          {micButton}
+
+          <div className="ml-auto flex items-center gap-2">
+            {isRunning ? (
+              <button
+                type="button"
+                data-testid="abort-button"
+                onClick={onAbort}
+                className="w-[30px] h-[30px] rounded-full bg-danger text-on-primary flex items-center justify-center hover:bg-danger-hover transition-colors"
+                title={t('chat.input.abort')}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-testid="send-button"
+                onClick={handleSend}
+                disabled={!canSend}
+                aria-label={t('chat.input.send')}
+                className={cn(
+                  'w-[30px] h-[30px] rounded-full flex items-center justify-center transition-all',
+                  canSend
+                    ? 'bg-primary text-on-primary hover:bg-primary-active active:scale-95'
+                    : 'bg-surface-soft text-mute cursor-not-allowed',
+                )}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </button>
             )}
           </div>
-        )}
-
-        <div className={cn('flex items-end gap-3', !hasConfigRow && 'flex-col-reverse')}>
-          {hasConfigRow && renderMicButton()}
-          <textarea
-            ref={textareaRef}
-            data-testid="message-input"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={disabled}
-            placeholder={disabled ? t('chat.input.disabledPlaceholder') : t('chat.input.placeholder')}
-            rows={1}
-            className={cn(
-              'flex-1 resize-none rounded-md bg-surface-card text-ink text-sm p-3',
-              'border border-hairline',
-              'placeholder:text-ash',
-              'focus:outline-none focus:border-primary',
-              'disabled:bg-hairline-soft disabled:text-ash',
-            )}
-          />
-          {isRunning ? (
-            <button
-              type="button"
-              data-testid="abort-button"
-              onClick={onAbort}
-              className="px-5 py-2 rounded-full bg-danger text-on-primary text-sm font-medium hover:bg-danger-hover shrink-0"
-            >
-              {t('chat.input.abort')}
-            </button>
-          ) : (
-            <button
-              type="button"
-              data-testid="send-button"
-              onClick={handleSend}
-              disabled={!text.trim() || disabled}
-              aria-label={t('chat.input.send')}
-              className={cn(
-                'px-5 py-2 rounded-full text-sm font-medium shrink-0',
-                text.trim() && !disabled
-                  ? 'bg-primary text-on-primary hover:bg-primary-active'
-                  : 'bg-hairline-soft text-ash cursor-not-allowed',
-              )}
-            >
-              {t('chat.input.send')}
-            </button>
-          )}
         </div>
-        {!hasConfigRow && <div className="flex justify-center mt-2">{renderMicButton()}</div>}
       </div>
     </div>
   );

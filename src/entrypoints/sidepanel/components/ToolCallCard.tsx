@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import type { ToolCallDisplay } from '../types';
-import { cn, riskColor, truncate } from '../utils';
+import { cn, truncate } from '../utils';
 import { useI18n } from '../i18n/useI18n';
+import { StatusDot, RiskBadge } from './MessageBubble';
 
 interface Props {
   call: ToolCallDisplay;
@@ -11,55 +12,40 @@ export function ToolCallCard({ call }: Props) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
-  const statusIcon = () => {
-    switch (call.status) {
-      case 'running':
-        return <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />;
-      case 'success':
-        return <span className="text-success text-sm">✓</span>;
-      case 'error':
-        return <span className="text-danger text-sm">✕</span>;
-    }
-  };
-
-  const isHighRisk = call.riskLevel === 'high' || call.riskLevel === 'critical';
-
   return (
-    <div
-      className={cn(
-        'border rounded-md text-xs overflow-hidden',
-        isHighRisk ? 'border-orange-400' : 'border-hairline',
-      )}
-    >
+    <div className="w-fit min-w-[13rem] max-w-[92%] sm:max-w-[34rem] bg-surface-card rounded-xl border border-hairline shadow-sm overflow-hidden text-xs">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 w-full px-2.5 py-1.5 bg-canvas hover:bg-surface-soft text-left"
+        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-surface-soft transition-colors"
       >
-        {statusIcon()}
-        <span className="font-medium text-ink flex-1">
+        <StatusDot status={call.status} />
+        <span className="font-mono font-medium text-ink flex-1 truncate">
           {call.name}
         </span>
-        <span className={cn('text-[10px] font-medium', riskColor(call.riskLevel).split(' ')[0])}>
-          {call.riskLevel}
-        </span>
-        <span className="text-mute text-[10px]">{expanded ? '▲' : '▼'}</span>
+        <RiskBadge level={call.riskLevel} />
+        <svg
+          className={cn('w-3.5 h-3.5 text-mute transition-transform duration-150', expanded && 'rotate-180')}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" d="M6 9l6 6 6-6" />
+        </svg>
       </button>
 
       {expanded && (
-        <div className="px-2.5 py-2 bg-surface-soft border-t border-hairline space-y-1.5">
+        <div className="px-3 py-2.5 bg-surface-card border-t border-hairline space-y-2 font-mono max-h-[120px] overflow-auto">
           <div>
-            <span className="font-medium text-mute">{t('chat.message.params')}: </span>
-            <code className="text-body break-all">
-              {truncate(JSON.stringify(call.params), 200)}
+            <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{t('chat.message.params')}</div>
+            <code className="text-body break-all whitespace-pre-wrap">
+              {truncate(JSON.stringify(call.params, null, 2), 400)}
             </code>
           </div>
           {call.result && (
             <div>
-                <span className="font-medium text-mute">{t('chat.message.result')}: </span>
-              <code className="text-body break-all">
+              <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{t('chat.message.result')}</div>
+              <code className="text-body break-all whitespace-pre-wrap">
                 {call.result.success
-                  ? truncate(JSON.stringify(call.result.data ?? 'ok'), 200)
+                  ? truncate(JSON.stringify(call.result.data ?? 'ok', null, 2), 400)
                   : call.result.error}
               </code>
             </div>
@@ -104,51 +90,45 @@ export function ToolCallCardSDK({ toolCallId: _toolCallId, toolName, state, inpu
   const [expanded, setExpanded] = useState(false);
   const status = sdkStateToStatus(state);
 
-  const statusIcon = () => {
-    switch (status) {
-      case 'running':
-        return <span className="inline-block w-3 h-3 border-2 border-primary border-t-transparent rounded-full animate-spin" />;
-      case 'success':
-        return <span className="text-success text-sm">✓</span>;
-      case 'error':
-        return <span className="text-danger text-sm">✕</span>;
-    }
-  };
-
   return (
-    <div className="border border-hairline rounded-md text-xs overflow-hidden">
+    <div className="w-fit min-w-[13rem] max-w-[92%] sm:max-w-[34rem] bg-surface-card rounded-xl border border-hairline shadow-sm overflow-hidden text-xs">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 w-full px-2.5 py-1.5 bg-canvas hover:bg-surface-soft text-left"
+        className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-surface-soft transition-colors"
       >
-        {statusIcon()}
-        <span className="font-medium text-ink flex-1">{toolName}</span>
+        <StatusDot status={status} />
+        <span className="font-mono font-medium text-ink flex-1 truncate">{toolName}</span>
         <span className="text-[10px] font-medium text-mute">{state}</span>
-        <span className="text-mute text-[10px]">{expanded ? '▲' : '▼'}</span>
+        <svg
+          className={cn('w-3.5 h-3.5 text-mute transition-transform duration-150', expanded && 'rotate-180')}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" d="M6 9l6 6 6-6" />
+        </svg>
       </button>
       {expanded && (
-        <div className="px-2.5 py-2 bg-surface-soft border-t border-hairline space-y-1.5">
+        <div className="px-3 py-2.5 bg-surface-card border-t border-hairline space-y-2 font-mono max-h-[120px] overflow-auto">
           {input != null && (
             <div>
-              <span className="font-medium text-mute">{t('chat.message.params')}: </span>
-              <code className="text-body break-all">
-                {truncate(JSON.stringify(input), 200)}
+              <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{t('chat.message.params')}</div>
+              <code className="text-body break-all whitespace-pre-wrap">
+                {truncate(JSON.stringify(input, null, 2), 400)}
               </code>
             </div>
           )}
           {output != null && (
             <div>
-              <span className="font-medium text-mute">{t('chat.message.result')}: </span>
-              <code className="text-body break-all">
-                {truncate(JSON.stringify(output), 200)}
+              <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{t('chat.message.result')}</div>
+              <code className="text-body break-all whitespace-pre-wrap">
+                {truncate(JSON.stringify(output, null, 2), 400)}
               </code>
             </div>
           )}
           {errorText && (
             <div>
-              <span className="font-medium text-mute">{t('chat.message.result')}: </span>
-              <code className="text-danger break-all">{errorText}</code>
+              <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">{t('chat.message.result')}</div>
+              <code className="text-danger break-all whitespace-pre-wrap">{errorText}</code>
             </div>
           )}
         </div>

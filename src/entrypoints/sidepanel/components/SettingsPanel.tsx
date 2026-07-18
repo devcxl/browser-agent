@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
-import type { AgentSettings, ExpertModeSettings, ProviderFormData } from '../types';
+import type { ProviderConfig, UserPreferences } from '@/shared/types';
+import type { AgentSettings, ExpertModeSettings } from '../types';
 import type { Skill, SkillSubscription } from '@/shared/types';
-import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
+import { ConfigStore, SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
-import { ProviderCatalog } from '@/provider/provider-catalog';
 import { cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
 import { EXPERT_API_DOMAINS } from '@/shared/types';
+import { applyTheme } from '../theme';
+import { ProviderWizard } from './ProviderWizard';
 
 interface Props {
   providers: ProviderConfig[];
@@ -18,12 +19,6 @@ interface Props {
   onSaveExpertMode: (e: ExpertModeSettings) => void;
   onTestConnection: (provider: ProviderConfig) => Promise<boolean>;
   onClose: () => void;
-}
-
-interface CatalogEntry {
-  id: string;
-  name: string;
-  npm: string;
 }
 
 export function SettingsPanel({
@@ -38,94 +33,31 @@ export function SettingsPanel({
 }: Props) {
   const { t, locale, setLanguage } = useI18n();
   const [tab, setTab] = useState<'provider' | 'agent' | 'expert' | 'skills' | 'language'>('provider');
+  const [theme, setTheme] = useState<UserPreferences['theme']>('system');
 
   // Provider
-  const [catalogList, setCatalogList] = useState<CatalogEntry[]>([]);
-  const [loadingCatalog, setLoadingCatalog] = useState(false);
-  const [showAddPanel, setShowAddPanel] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
-  const [editApiKey, setEditApiKey] = useState('');
+  const [editingProvider, setEditingProvider] = useState<ProviderConfig | null | undefined>(undefined);
   const [testingIdx, setTestingIdx] = useState<number | null>(null);
   const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
 
-  const audioFormats = [
-    { value: '', label: t('settings.provider.audioFormats.auto') },
-    { value: 'audio/webm;codecs=opus', label: t('settings.provider.audioFormats.webm_opus') },
-    { value: 'audio/webm', label: t('settings.provider.audioFormats.webm') },
-    { value: 'audio/mp4;codecs=mp4a.40.5', label: t('settings.provider.audioFormats.mp4aac') },
-    { value: 'audio/mp4', label: t('settings.provider.audioFormats.mp4') },
-    { value: 'audio/aac', label: t('settings.provider.audioFormats.aac') },
-    { value: 'audio/ogg;codecs=opus', label: t('settings.provider.audioFormats.ogg_opus') },
-    { value: 'audio/wav', label: t('settings.provider.audioFormats.wav') },
-  ];
-
   useEffect(() => {
-    if (tab === 'provider' && catalogList.length === 0) {
-      setLoadingCatalog(true);
-      ProviderCatalog.getInstance()
-        .getProviderList()
-        .then((list) => setCatalogList(list))
-        .catch(() => {})
-        .finally(() => setLoadingCatalog(false));
-    }
-  }, [tab, catalogList.length]);
-
-  const filteredCatalog = useMemo(() => {
-    if (!searchQuery.trim()) return catalogList;
-    const q = searchQuery.toLowerCase();
-    return catalogList.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q),
-    );
-  }, [catalogList, searchQuery]);
-
-  const startAddProvider = (entry: CatalogEntry) => {
-    const catalog = ProviderCatalog.getInstance();
-    catalog.getProvider(entry.id).then((info) => {
-      if (!info) return;
-      setEditingProviderId(entry.id);
-      setEditApiKey('');
-      setShowAddPanel(false);
-      setSearchQuery('');
+    ConfigStore.getInstance().get<UserPreferences>('preferences').then((prefs) => {
+      setTheme(prefs.theme ?? 'system');
     });
+  }, []);
+
+  const handleThemeChange = async (nextTheme: UserPreferences['theme']) => {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    const configStore = ConfigStore.getInstance();
+    const preferences = await configStore.get<UserPreferences>('preferences');
+    await configStore.set('preferences', { ...preferences, theme: nextTheme });
   };
 
-  const startCustomProvider = () => {
-    setEditingProviderId('__custom__');
-    setEditApiKey('');
-    setShowAddPanel(false);
-    setSearchQuery('');
-  };
-
-  const handleSaveProvider = () => {
-    if (!editingProviderId || !editApiKey.trim()) return;
-
-    if (editingProviderId === '__custom__') {
-      return;
-    }
-
-    const catalog = ProviderCatalog.getInstance();
-    catalog.getProvider(editingProviderId).then((info) => {
-      if (!info) return;
-
-      const newProvider: ProviderConfig = {
-        id: crypto.randomUUID(),
-        name: info.name,
-        providerId: editingProviderId,
-        endpoint: info.api,
-        apiKey: editApiKey.trim(),
-        isLocalTrusted: false,
-      };
-
-      const existing = providers.find((p) => p.providerId === editingProviderId && !p.isCustom);
-      if (existing) {
-        onSaveProviders(providers.map((p) => (p.id === existing.id ? { ...newProvider, id: existing.id } : p)));
-      } else {
-        onSaveProviders([...providers, newProvider]);
-      }
-      setEditingProviderId(null);
-      setEditApiKey('');
-    });
+  const handleSaveProvider = (provider: ProviderConfig) => {
+    const exists = providers.some((item) => item.id === provider.id);
+    onSaveProviders(exists ? providers.map((item) => item.id === provider.id ? provider : item) : [...providers, provider]);
+    setEditingProvider(undefined);
   };
 
   const handleDeleteProvider = (id: string) => {
@@ -296,202 +228,39 @@ export function SettingsPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          {tab === 'provider' && (
+          {tab === 'provider' && (editingProvider !== undefined ? (
+            <ProviderWizard
+              provider={editingProvider ?? undefined}
+              onSave={handleSaveProvider}
+              onClose={() => setEditingProvider(undefined)}
+            />
+          ) : (
             <div className="space-y-3">
-              {/* 已保存的 Provider 列表 */}
-              {providers.map((p, idx) => (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between border border-hairline rounded-xl px-3 py-2"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-ink">{p.name}</span>
-                      {p.isCustom && (
-                        <span className="text-[10px] bg-ash/20 text-ash px-1.5 py-0.5 rounded-full">
-                          Custom
-                        </span>
-                      )}
-                      {p.isLocalTrusted && (
-                        <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded-full">
-                          {t('settings.provider.trusted')}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-mute truncate">{p.endpoint}</div>
-                    {p.sttModel && (
-                      <div className="text-xs text-mute truncate mt-0.5">
-                        STT: {p.sttModel}
+              {providers.map((provider, idx) => {
+                const models = Object.values(provider.models ?? {});
+                const defaultModel = provider.models?.[provider.defaultModelId ?? ''];
+                return (
+                  <div key={provider.id} className="border border-hairline rounded-xl p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-ink">{provider.name}</div>
+                        <div className="text-xs text-mute truncate">{provider.api ?? provider.endpoint}</div>
+                        <div className="text-xs text-mute mt-1">Default: {defaultModel?.name ?? 'Not configured'} · {models.length} model(s)</div>
                       </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 ml-2">
-                    <button
-                      type="button"
-                      onClick={() => handleTestConnection(idx)}
-                      disabled={testingIdx === idx}
-                      className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50"
-                    >
-                      {testingIdx === idx ? t('settings.provider.testing') : t('settings.provider.test')}
-                    </button>
-                    {testResult[idx] && (
-                      <span className={testResult[idx] === 'ok' ? 'text-success text-xs' : 'text-danger text-xs'}>
-                        {testResult[idx] === 'ok' ? '✓' : '✕'}
-                      </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteProvider(p.id)}
-                      className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50"
-                    >
-                      {t('settings.provider.delete')}
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {providers.length === 0 && !editingProviderId && (
-                <p className="text-sm text-mute text-center py-4">{t('settings.provider.noProviders')}</p>
-              )}
-
-              {/* 添加 Provider 入口 */}
-              {!editingProviderId ? (
-                <button
-                  type="button"
-                  data-testid="add-provider-button"
-                  onClick={() => setShowAddPanel(true)}
-                  className="w-full py-2.5 text-sm rounded-xl border-2 border-dashed border-primary/40 text-primary hover:border-primary hover:bg-primary/5 font-medium"
-                >
-                  + {t('settings.provider.add')}
-                </button>
-              ) : null}
-
-              {/* Provider 选择面板 */}
-              {showAddPanel && (
-                <div className="border border-hairline rounded-xl overflow-hidden bg-canvas">
-                  {/* 搜索框 */}
-                  <div className="px-3 py-2 border-b border-hairline">
-                    <input
-                      autoFocus
-                      type="text"
-                      placeholder="Search providers..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-hairline rounded-lg bg-surface-soft text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-                    />
-                  </div>
-
-                  {/* Provider 列表 */}
-                  <div className="max-h-64 overflow-y-auto">
-                    {loadingCatalog && (
-                      <div className="text-xs text-mute text-center py-4">Loading...</div>
-                    )}
-                    {!loadingCatalog && filteredCatalog.length === 0 && (
-                      <div className="text-xs text-mute text-center py-4">No providers found</div>
-                    )}
-                    {filteredCatalog.map((entry) => {
-                      const exists = providers.some((p) => p.providerId === entry.id && !p.isCustom);
-                      return (
-                        <button
-                          key={entry.id}
-                          type="button"
-                          onClick={() => startAddProvider(entry)}
-                          disabled={!!exists}
-                          className={cn(
-                            'w-full text-left px-4 py-2.5 text-sm transition-colors border-b border-hairline-soft last:border-0',
-                            exists
-                              ? 'text-mute bg-hairline-soft cursor-not-allowed'
-                              : 'text-ink hover:bg-surface-soft',
-                          )}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{entry.name}</span>
-                            {exists && <span className="text-[10px] text-mute">Added</span>}
-                          </div>
-                          <div className="text-xs text-mute mt-0.5">{entry.id}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Custom Provider */}
-                  <div className="border-t border-hairline px-3 py-2">
-                    <button
-                      type="button"
-                      data-testid="custom-provider-button"
-                      onClick={startCustomProvider}
-                      className="w-full py-2 text-sm rounded-lg border border-dashed border-ash text-mute hover:border-ink hover:text-ink"
-                    >
-                      + Custom Provider
-                    </button>
-                  </div>
-
-                  {/* 取消 */}
-                  <div className="border-t border-hairline px-3 py-2">
-                    <button
-                      type="button"
-                      onClick={() => { setShowAddPanel(false); setSearchQuery(''); }}
-                      className="w-full py-1.5 text-sm text-mute hover:text-ink rounded-lg hover:bg-surface-soft"
-                    >
-                      {t('settings.provider.cancel')}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* API Key 填写表单 (选中 provider 后) */}
-              {editingProviderId && (
-                <div className="border border-hairline rounded-xl p-4 space-y-3 bg-surface-soft">
-                  {editingProviderId === '__custom__' ? (
-                    <div className="text-sm font-medium text-ink">Custom Provider</div>
-                  ) : (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-ink">
-                          {catalogList.find((c) => c.id === editingProviderId)?.name ?? editingProviderId}
-                        </span>
-                      </div>
-                      <div className="text-xs text-mute">
-                        {ProviderCatalog.prototype.getProvider
-                          ? 'Loading endpoint...'
-                          : ''}
+                      <div className="flex gap-1 shrink-0">
+                        <button type="button" onClick={() => setEditingProvider(provider)} className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft">Manage</button>
+                        <button type="button" onClick={() => handleTestConnection(idx)} disabled={testingIdx === idx} className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50">{testingIdx === idx ? 'Testing' : 'Test'}</button>
+                        <button type="button" onClick={() => handleDeleteProvider(provider.id)} className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50">{t('settings.provider.delete')}</button>
                       </div>
                     </div>
-                  )}
-
-                  <input
-                    data-testid="provider-apikey-input"
-                    type="password"
-                    autoFocus
-                    placeholder="API Key"
-                    value={editApiKey}
-                    onChange={(e) => setEditApiKey(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveProvider(); }}
-                    className="w-full px-3 py-2 text-sm border border-hairline rounded-lg bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
-                  />
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      data-testid="save-provider-button"
-                      onClick={handleSaveProvider}
-                      disabled={!editApiKey.trim()}
-                      className="flex-1 py-2 text-sm rounded-lg bg-primary text-on-primary hover:bg-primary-active disabled:bg-hairline-soft disabled:text-ash disabled:cursor-not-allowed font-medium"
-                    >
-                      {t('settings.provider.save')}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setEditingProviderId(null); setEditApiKey(''); }}
-                      className="px-4 py-2 text-sm rounded-lg border border-hairline-strong text-mute hover:bg-surface-soft"
-                    >
-                      {t('settings.provider.cancel')}
-                    </button>
+                    {testResult[idx] && <div className={testResult[idx] === 'ok' ? 'text-xs text-success' : 'text-xs text-danger'}>{testResult[idx] === 'ok' ? 'Connection verified' : 'Connection failed'}</div>}
                   </div>
-                </div>
-              )}
+                );
+              })}
+              {providers.length === 0 && <p className="text-sm text-mute text-center py-4">{t('settings.provider.noProviders')}</p>}
+              <button type="button" data-testid="add-provider-button" onClick={() => setEditingProvider(null)} className="w-full py-2.5 text-sm rounded-xl border-2 border-dashed border-primary/40 text-primary hover:border-primary hover:bg-primary/5 font-medium">+ {t('settings.provider.add')}</button>
             </div>
-          )}
+          ))}
 
           {tab === 'agent' && (
             <div className="space-y-3">
@@ -519,20 +288,6 @@ export function SettingsPanel({
                   className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
                   min={1}
                   max={200}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.contextWindowTokens')}</span>
-                <input
-                  type="number"
-                  value={agentSettings.contextWindowTokens}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, contextWindowTokens: Number(e.target.value) })
-                  }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
-                  min={4096}
-                  max={1048576}
-                  step={1024}
                 />
               </label>
               <label className="block">
@@ -832,6 +587,19 @@ export function SettingsPanel({
 
           {tab === 'language' && (
             <div className="space-y-3">
+              <label className="block">
+                <span className="text-sm font-medium text-ink">{t('settings.theme.label')}</span>
+                <select
+                  data-testid="theme-select"
+                  value={theme}
+                  onChange={(e) => handleThemeChange(e.target.value as UserPreferences['theme'])}
+                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                >
+                  <option value="system">{t('settings.theme.system')}</option>
+                  <option value="light">{t('settings.theme.light')}</option>
+                  <option value="dark">{t('settings.theme.dark')}</option>
+                </select>
+              </label>
               <label className="block">
                 <span className="text-sm font-medium text-ink">{t('settings.language')}</span>
                 <select

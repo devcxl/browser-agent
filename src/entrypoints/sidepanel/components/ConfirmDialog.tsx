@@ -14,20 +14,23 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
   return (
     <div
       data-testid="confirm-dialog"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
     >
-      <div className="bg-canvas rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col">
+      <div className="bg-surface-card rounded-2xl shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col overflow-hidden">
+        {/* 风险等级横条 */}
+        <div className="h-[3px] bg-warning shrink-0" />
+
         <div className="px-5 py-4 border-b border-hairline">
-          <h3 className="text-base font-semibold text-ink">{t('dialog.confirmTitle')}</h3>
-          <p className="text-sm text-mute mt-0.5">
-            {t('dialog.tool')}: <code className="bg-surface-soft px-1 rounded-md">{request.toolName}</code>
+          <h3 className="text-sm font-semibold text-ink">{t('dialog.confirmTitle')}</h3>
+          <p className="text-xs text-mute mt-1">
+            {t('dialog.tool')}: <code className="font-mono bg-accent-soft text-primary px-1 py-0.5 rounded">{request.toolName}</code>
           </p>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
           {request.affectedObjects.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-mute mb-1.5 uppercase tracking-wide">
+              <p className="text-[11px] font-medium text-mute mb-1.5 uppercase tracking-wider">
                 {t('dialog.affectedObjects')}
               </p>
               <table className="w-full text-xs">
@@ -55,12 +58,12 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
 
           {request.warnings.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-orange-600 mb-1.5 uppercase tracking-wide">
+              <p className="text-[11px] font-medium text-warning mb-1.5 uppercase tracking-wider">
                 {t('dialog.warnings')}
               </p>
               <ul className="space-y-1">
                 {request.warnings.map((w, i) => (
-                  <li key={i} className="text-xs text-orange-700 bg-orange-50 rounded-md px-2 py-1">
+                  <li key={i} className="text-xs text-warning bg-warning/10 rounded-lg px-2.5 py-1.5">
                     ⚠ {w}
                   </li>
                 ))}
@@ -69,12 +72,12 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-hairline flex justify-end gap-2">
+        <div className="px-5 py-3.5 border-t border-hairline flex justify-end gap-2">
           <button
             type="button"
             data-testid="cancel-button"
             onClick={onCancel}
-            className="px-4 py-1.5 text-sm rounded-full border border-hairline-strong text-ink hover:bg-surface-soft"
+            className="px-3.5 py-1.5 text-xs font-medium rounded-lg border border-hairline bg-surface-card text-body hover:bg-surface-soft transition-colors"
           >
             {t('dialog.cancel')}
           </button>
@@ -82,7 +85,7 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
             type="button"
             data-testid="confirm-button"
             onClick={onConfirm}
-            className="px-4 py-1.5 text-sm rounded-full bg-primary text-on-primary hover:bg-primary-active"
+            className="px-3.5 py-1.5 text-xs font-medium rounded-lg bg-primary text-on-primary hover:bg-primary-active transition-colors"
           >
             {t('dialog.confirm')}
           </button>
