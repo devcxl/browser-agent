@@ -87,6 +87,8 @@ export const DB_VERSION = 3;
 export interface DbConversation {
   id: string;
   title: string;
+  /** 是否已生成或手动设置标题 */
+  titleGenerated: boolean;
   createdAt: number;
   updatedAt: number;
   summary: string | null;

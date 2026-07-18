@@ -73,6 +73,25 @@ export class Database {
     await db.put(StoreNames.CONVERSATIONS, conv);
   }
 
+  async updateConversationTitleIfPending(id: string, title: string): Promise<boolean> {
+    const db = await this.getDB();
+    const tx = db.transaction(StoreNames.CONVERSATIONS, 'readwrite');
+    const existing = await tx.store.get(id);
+    if (!existing || existing.titleGenerated) {
+      await tx.done;
+      return false;
+    }
+
+    await tx.store.put({
+      ...existing,
+      title,
+      titleGenerated: true,
+      updatedAt: Date.now(),
+    });
+    await tx.done;
+    return true;
+  }
+
   async deleteConversation(id: string): Promise<void> {
     const db = await this.getDB();
     await db.delete(StoreNames.CONVERSATIONS, id);

@@ -71,6 +71,7 @@ describe('Storage types', () => {
       const c: DbConversation = {
         id: 'c-1',
         title: 'Test',
+        titleGenerated: true,
         createdAt: 0,
         updatedAt: 0,
         summary: null,

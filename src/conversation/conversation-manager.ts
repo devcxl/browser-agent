@@ -8,7 +8,6 @@ const SUMMARY_THRESHOLDS = {
   estimatedTokens: 12_000,
 } as const;
 
-const DEFAULT_TITLE_PREFIX = '新对话 ';
 const MAX_TITLE_LENGTH = 40;
 
 function normalizeTitle(rawTitle: string): string {
@@ -53,6 +52,7 @@ export class ConversationManager implements IConversationManager {
     await this.db.putConversation({
       id,
       title: convTitle,
+      titleGenerated: title !== undefined,
       createdAt: now,
       updatedAt: now,
       summary: null,
@@ -63,6 +63,7 @@ export class ConversationManager implements IConversationManager {
     return {
       id,
       title: convTitle,
+      titleGenerated: title !== undefined,
       createdAt: now,
       updatedAt: now,
       messages: [],
@@ -78,6 +79,7 @@ export class ConversationManager implements IConversationManager {
     return {
       id: conv.id,
       title: conv.title,
+      titleGenerated: conv.titleGenerated,
       createdAt: conv.createdAt,
       updatedAt: conv.updatedAt,
       messages: messages.map(dbMsgToStored),
@@ -92,6 +94,7 @@ export class ConversationManager implements IConversationManager {
     return convs.map((c) => ({
       id: c.id,
       title: c.title,
+      titleGenerated: c.titleGenerated,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
       messages: [],
@@ -110,6 +113,9 @@ export class ConversationManager implements IConversationManager {
     await this.db.putConversation({
       ...existing,
       title: patch.title ?? existing.title,
+      titleGenerated: patch.title !== undefined
+        ? true
+        : (patch.titleGenerated ?? existing.titleGenerated),
       summary: patch.summary ?? existing.summary,
       summaryUpToIndex: patch.summaryUpToIndex ?? existing.summaryUpToIndex,
       sensitiveDataGranted:
@@ -161,18 +167,21 @@ export class ConversationManager implements IConversationManager {
     console.debug('[Title] 进入 generateTitle', { conversationId, model });
 
     const conversation = await this.get(conversationId);
-    if (!conversation?.title.startsWith(DEFAULT_TITLE_PREFIX)) {
-      console.debug('[Title] 跳过: 非默认标题', { currentTitle: conversation?.title });
+    if (!conversation || conversation.titleGenerated) {
+      console.debug('[Title] 跳过: 标题已生成', { titleGenerated: conversation?.titleGenerated });
       return undefined;
     }
 
-    const userMessages = conversation.messages.filter((message) => message.role === 'user');
-    const assistantMessage = [...conversation.messages]
-      .reverse()
+    const firstUserIndex = conversation.messages.findIndex(
+      (message) => message.role === 'user' && message.content.trim(),
+    );
+    const userMessage = conversation.messages[firstUserIndex];
+    const assistantMessage = conversation.messages
+      .slice(firstUserIndex + 1)
       .find((message) => message.role === 'assistant' && !message.toolCalls?.length && message.content.trim());
-    if (userMessages.length !== 1 || !assistantMessage) {
+    if (!userMessage || !assistantMessage) {
       console.debug('[Title] 跳过: 不满足生成条件', {
-        userMsgCount: userMessages.length,
+        hasUserText: !!userMessage,
         hasAssistantText: !!assistantMessage,
         totalMsgCount: conversation.messages.length,
       });
@@ -183,7 +192,7 @@ export class ConversationManager implements IConversationManager {
       model,
       messages: [{
         role: 'user',
-        content: `根据以下首轮问答生成一个准确、简洁的会话标题。标题不超过 40 个字符，不要引号、Markdown 或额外解释。\n\n用户：${userMessages[0]!.content}\n\n助手：${assistantMessage.content}`,
+        content: `根据以下首轮问答生成一个准确、简洁的会话标题。标题不超过 40 个字符，不要引号、Markdown 或额外解释。\n\n用户：${userMessage.content}\n\n助手：${assistantMessage.content}`,
       }],
       temperature: 0.2,
       max_tokens: 512,
@@ -203,12 +212,11 @@ export class ConversationManager implements IConversationManager {
       return undefined;
     }
 
-    const existing = await this.db.getConversation(conversationId);
-    if (!existing?.title.startsWith(DEFAULT_TITLE_PREFIX)) {
-      console.debug('[Title] 跳过: 写入前标题已被修改', { currentTitle: existing?.title });
+    const updated = await this.db.updateConversationTitleIfPending(conversationId, title);
+    if (!updated) {
+      console.debug('[Title] 跳过: 写入前标题已更新');
       return undefined;
     }
-    await this.db.putConversation({ ...existing, title, updatedAt: Date.now() });
     console.debug('[Title] 已持久化标题', { conversationId, title });
     return title;
   }

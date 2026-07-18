@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConversationManager } from '../conversation-manager';
-import type { Database } from '@/shared/db/database';
+import { Database } from '@/shared/db/database';
 import type { DbConversation, DbMessage } from '@/shared/types';
 import type { StoredMessage } from '@/shared/types/conversation';
 import type { ILlmClient, ChatCompletionRequest, ChatCompletionResponse } from '@/shared/types/llm';
@@ -12,6 +12,7 @@ function mockConv(overrides: Partial<DbConversation> = {}): DbConversation {
   return {
     id: `conv-${now}-${Math.random().toString(36).slice(2, 8)}`,
     title: 'Test Conversation',
+    titleGenerated: true,
     createdAt: now,
     updatedAt: now,
     summary: null,
@@ -42,6 +43,7 @@ function createMockDb(): Database {
     getConversation: vi.fn(),
     getAllConversations: vi.fn(),
     putConversation: vi.fn(),
+    updateConversationTitleIfPending: vi.fn().mockResolvedValue(true),
     deleteConversation: vi.fn(),
     listConversationsByUpdatedAt: vi.fn(),
     putMessage: vi.fn(),
@@ -87,6 +89,7 @@ describe('ConversationManager', () => {
   it('create() 无标题时生成默认标题', async () => {
     const conv = await mgr.create();
     expect(conv.title).toContain('新对话');
+    expect(conv.titleGenerated).toBe(false);
     expect(conv.id).toBeTruthy();
     expect(conv.messages).toEqual([]);
     expect(conv.sensitiveDataGranted).toBe(false);
@@ -97,6 +100,7 @@ describe('ConversationManager', () => {
   it('create() 带自定义标题', async () => {
     const conv = await mgr.create('我的会话');
     expect(conv.title).toBe('我的会话');
+    expect(conv.titleGenerated).toBe(true);
     expect(db.putConversation).toHaveBeenCalledOnce();
   });
 
@@ -144,7 +148,7 @@ describe('ConversationManager', () => {
 
     await mgr.update('c1', { title: '新标题' });
     expect(db.putConversation).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'c1', title: '新标题' }),
+      expect.objectContaining({ id: 'c1', title: '新标题', titleGenerated: true }),
     );
   });
 
@@ -282,7 +286,11 @@ describe('ConversationManager', () => {
   });
 
   it('generateTitle() 禁用推理并根据首轮问答更新默认标题', async () => {
-    const conv = mockConv({ id: 'c1', title: '新对话 2026/7/18 08:00' });
+    const conv = mockConv({
+      id: 'c1',
+      title: '新对话 2026/7/18 08:00',
+      titleGenerated: false,
+    });
     const msgs = [
       mockMsg('c1', { role: 'user', content: '帮我整理本周会议纪要' }),
       mockMsg('c1', { role: 'assistant', content: '我会按项目和待办事项整理。' }),
@@ -310,13 +318,18 @@ describe('ConversationManager', () => {
       max_tokens: 512,
       reasoning_effort: 'none',
     }));
-    expect(db.putConversation).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'c1', title: '本周会议纪要整理' }),
+    expect(db.updateConversationTitleIfPending).toHaveBeenCalledWith(
+      'c1',
+      '本周会议纪要整理',
     );
   });
 
-  it('generateTitle() 不覆盖用户自定义标题', async () => {
-    const conv = mockConv({ id: 'c1', title: '我的会议' });
+  it('generateTitle() 已生成标题时直接跳过', async () => {
+    const conv = mockConv({
+      id: 'c1',
+      title: '新对话 2026/7/18 08:00',
+      titleGenerated: true,
+    });
     vi.mocked(db.getConversation).mockResolvedValue(conv);
     vi.mocked(db.getMessagesByConversation).mockResolvedValue([]);
     const llm = createMockLlm();
@@ -326,8 +339,128 @@ describe('ConversationManager', () => {
     expect(db.putConversation).not.toHaveBeenCalled();
   });
 
+  it('generateTitle() 首次失败后可根据首轮问答重试', async () => {
+    const conv = mockConv({ id: 'c1', title: '待生成', titleGenerated: false });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    const firstRound = [
+      mockMsg('c1', { role: 'user', content: '第一轮问题', timestamp: 1 }),
+      mockMsg('c1', { role: 'assistant', content: '第一轮回答', timestamp: 2 }),
+    ];
+    vi.mocked(db.getMessagesByConversation)
+      .mockResolvedValueOnce(firstRound)
+      .mockResolvedValueOnce([
+        ...firstRound,
+        mockMsg('c1', { role: 'user', content: '第二轮问题', timestamp: 3 }),
+        mockMsg('c1', { role: 'assistant', content: '第二轮回答', timestamp: 4 }),
+      ]);
+    const llm = createMockLlm();
+    vi.mocked(llm.chat)
+      .mockResolvedValueOnce({
+        id: 'r-empty-title',
+        choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'stop' }],
+      })
+      .mockResolvedValueOnce({
+        id: 'r-title',
+        choices: [{ message: { role: 'assistant', content: '首轮主题' }, finish_reason: 'stop' }],
+      });
+
+    await expect(mgr.generateTitle('c1', llm, 'gpt-4o')).resolves.toBeUndefined();
+    await expect(mgr.generateTitle('c1', llm, 'gpt-4o')).resolves.toBe('首轮主题');
+    expect(llm.chat).toHaveBeenLastCalledWith(expect.objectContaining({
+      messages: [expect.objectContaining({
+        content: expect.stringContaining('用户：第一轮问题\n\n助手：第一轮回答'),
+      })],
+    }));
+  });
+
+  it('generateTitle() 写入前发现标题已更新时不覆盖', async () => {
+    const pending = mockConv({ id: 'c1', title: '待生成', titleGenerated: false });
+    vi.mocked(db.getConversation).mockResolvedValue(pending);
+    vi.mocked(db.updateConversationTitleIfPending).mockResolvedValue(false);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([
+      mockMsg('c1', { role: 'user', content: '问题' }),
+      mockMsg('c1', { role: 'assistant', content: '回答' }),
+    ]);
+    const llm = createMockLlm();
+    vi.mocked(llm.chat).mockResolvedValue({
+      id: 'r-title',
+      choices: [{ message: { role: 'assistant', content: '自动标题' }, finish_reason: 'stop' }],
+    });
+
+    await expect(mgr.generateTitle('c1', llm, 'gpt-4o')).resolves.toBeUndefined();
+    expect(db.updateConversationTitleIfPending).toHaveBeenCalledWith('c1', '自动标题');
+  });
+
+  it('generateTitle() 与手动重命名并发时保留用户标题', async () => {
+    Database.resetInstance();
+    const realDb = Database.getInstance();
+    await realDb.deleteDatabase();
+
+    try {
+      const realManager = new ConversationManager(realDb);
+      const conversation = await realManager.create();
+      await realManager.addMessage(conversation.id, {
+        id: 'user-message',
+        role: 'user',
+        content: '帮我整理会议纪要',
+        timestamp: 1,
+      });
+      await realManager.addMessage(conversation.id, {
+        id: 'assistant-message',
+        role: 'assistant',
+        content: '我会按项目整理。',
+        timestamp: 2,
+      });
+
+      let resolveTitle!: (response: ChatCompletionResponse) => void;
+      const llm = createMockLlm();
+      vi.mocked(llm.chat).mockImplementation(() => new Promise((resolve) => {
+        resolveTitle = resolve;
+      }));
+
+      const generatedTitle = realManager.generateTitle(conversation.id, llm, 'gpt-4o');
+      await vi.waitFor(() => expect(llm.chat).toHaveBeenCalledOnce());
+      await realManager.update(conversation.id, { title: '用户标题' });
+      resolveTitle({
+        id: 'r-title',
+        choices: [{ message: { role: 'assistant', content: '自动标题' }, finish_reason: 'stop' }],
+      });
+
+      await expect(generatedTitle).resolves.toBeUndefined();
+      await expect(realManager.get(conversation.id)).resolves.toEqual(expect.objectContaining({
+        title: '用户标题',
+        titleGenerated: true,
+      }));
+    } finally {
+      await realDb.deleteDatabase();
+      Database.resetInstance();
+    }
+  });
+
+  it('generateTitle() 返回空标题时保持待生成状态', async () => {
+    const conv = mockConv({ id: 'c1', title: '待生成', titleGenerated: false });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([
+      mockMsg('c1', { role: 'user', content: '问题' }),
+      mockMsg('c1', { role: 'assistant', content: '回答' }),
+    ]);
+    const llm = createMockLlm();
+    vi.mocked(llm.chat).mockResolvedValue({
+      id: 'r-title',
+      choices: [{ message: { role: 'assistant', content: '  ' }, finish_reason: 'stop' }],
+    });
+
+    await expect(mgr.generateTitle('c1', llm, 'gpt-4o')).resolves.toBeUndefined();
+    expect(conv.titleGenerated).toBe(false);
+    expect(db.putConversation).not.toHaveBeenCalled();
+  });
+
   it('generateTitle() 截断标题时保留完整 Unicode 字符', async () => {
-    const conv = mockConv({ id: 'c1', title: '新对话 2026/7/18 08:00' });
+    const conv = mockConv({
+      id: 'c1',
+      title: '新对话 2026/7/18 08:00',
+      titleGenerated: false,
+    });
     vi.mocked(db.getConversation).mockResolvedValue(conv);
     vi.mocked(db.getMessagesByConversation).mockResolvedValue([
       mockMsg('c1', { role: 'user', content: '测试' }),

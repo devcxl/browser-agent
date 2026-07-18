@@ -191,6 +191,7 @@ describe('ContextBuilder', () => {
     vi.mocked(conversationManager.get).mockResolvedValue({
       id: 'conv-1',
       title: 'test',
+      titleGenerated: true,
       createdAt: 0,
       updatedAt: 0,
       messages: [],
@@ -391,6 +392,7 @@ describe('ContextBuilder — Token 预算截断', () => {
     vi.mocked(conversationManager.get).mockResolvedValue({
       id: 'conv-1',
       title: 'test',
+      titleGenerated: true,
       createdAt: 0,
       updatedAt: 0,
       messages: [],

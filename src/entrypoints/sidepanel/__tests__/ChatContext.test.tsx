@@ -92,11 +92,12 @@ describe('ChatContext message loading', () => {
   it('loads messages when activeId is set from restored ConfigStore', async () => {
     const now = Date.now();
     mockConversationManager.list.mockResolvedValue([
-      { id: 'conv-1', title: 'Test', updatedAt: now, createdAt: now, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-1', title: 'Test', titleGenerated: true, updatedAt: now, createdAt: now, messages: [], sensitiveDataGranted: false },
     ]);
     mockConversationManager.get.mockResolvedValue({
       id: 'conv-1',
       title: 'Test',
+      titleGenerated: true,
       createdAt: now,
       updatedAt: now,
       messages: [
@@ -133,7 +134,7 @@ describe('ChatContext message loading', () => {
 
   it('shows error when message loading fails', async () => {
     mockConversationManager.list.mockResolvedValue([
-      { id: 'conv-1', title: 'Test', updatedAt: Date.now(), createdAt: Date.now(), messages: [], sensitiveDataGranted: false },
+      { id: 'conv-1', title: 'Test', titleGenerated: true, updatedAt: Date.now(), createdAt: Date.now(), messages: [], sensitiveDataGranted: false },
     ]);
     mockConversationManager.get.mockRejectedValue(new Error('DB error'));
     mockConfigStore.get.mockResolvedValue(undefined);
@@ -173,7 +174,7 @@ describe('ChatContext message loading', () => {
     const now = Date.now();
     let resolveConversation: (value: unknown) => void;
     mockConversationManager.create.mockResolvedValue({
-      id: 'new-conv', title: 'New', createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
+      id: 'new-conv', title: 'New', titleGenerated: false, createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
     });
     mockConversationManager.get.mockImplementation(() => new Promise((resolve) => {
       resolveConversation = resolve;
@@ -191,7 +192,7 @@ describe('ChatContext message loading', () => {
     await waitFor(() => expect(screen.getByTestId('messages-count').textContent).toBe('1'));
 
     resolveConversation!({
-      id: 'new-conv', title: 'New', createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
+      id: 'new-conv', title: 'New', titleGenerated: false, createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
     });
 
     await waitFor(() => expect(screen.getByTestId('messages-loading').textContent).toBe('false'));
@@ -202,7 +203,7 @@ describe('ChatContext message loading', () => {
     const now = Date.now();
     let rejectConversation: (reason?: unknown) => void;
     mockConversationManager.create.mockResolvedValue({
-      id: 'new-conv', title: 'New', createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
+      id: 'new-conv', title: 'New', titleGenerated: false, createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
     });
     mockConversationManager.get.mockImplementation(() => new Promise((_, reject) => {
       rejectConversation = reject;
@@ -234,6 +235,7 @@ describe('ChatContext message loading', () => {
     const convAData = {
       id: 'conv-A',
       title: 'Conv A',
+      titleGenerated: true,
       createdAt: now,
       updatedAt: now + 200,
       messages: [
@@ -245,6 +247,7 @@ describe('ChatContext message loading', () => {
     const convBData = {
       id: 'conv-B',
       title: 'Conv B',
+      titleGenerated: true,
       createdAt: now - 100,
       updatedAt: now + 100,
       messages: [
@@ -260,8 +263,8 @@ describe('ChatContext message loading', () => {
     });
 
     mockConversationManager.list.mockResolvedValue([
-      { id: 'conv-A', title: 'Conv A', updatedAt: now + 200, createdAt: now, messages: [], sensitiveDataGranted: false },
-      { id: 'conv-B', title: 'Conv B', updatedAt: now + 100, createdAt: now - 100, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-A', title: 'Conv A', titleGenerated: true, updatedAt: now + 200, createdAt: now, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-B', title: 'Conv B', titleGenerated: true, updatedAt: now + 100, createdAt: now - 100, messages: [], sensitiveDataGranted: false },
     ]);
     mockConversationManager.get.mockImplementation((id: string) => {
       if (id === 'conv-A') return convAPromise;

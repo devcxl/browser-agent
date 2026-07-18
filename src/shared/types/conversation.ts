@@ -26,6 +26,8 @@ export interface StoredMessage {
 export interface Conversation {
   id: string;
   title: string;
+  /** 是否已生成或手动设置标题 */
+  titleGenerated: boolean;
   createdAt: number;
   updatedAt: number;
   messages: StoredMessage[];

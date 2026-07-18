@@ -98,6 +98,7 @@ describe('ContextPollution (Issue #50)', () => {
     vi.mocked(conversationManager.get).mockResolvedValue({
       id: 'conv-1',
       title: 'test',
+      titleGenerated: true,
       createdAt: 0,
       updatedAt: 0,
       messages: storedMessages,

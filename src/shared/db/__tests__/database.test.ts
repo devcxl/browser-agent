@@ -8,6 +8,7 @@ function makeConv(overrides: Partial<DbConversation> = {}): DbConversation {
   return {
     id: `conv-${now}-${Math.random()}`,
     title: 'Test Conversation',
+    titleGenerated: true,
     createdAt: now,
     updatedAt: now,
     summary: null,
@@ -98,6 +99,22 @@ describe('Database', () => {
     await db.putConversation(conv);
     const got = await db.getConversation('conv-1');
     expect(got?.title).toBe('Test');
+  });
+
+  it('should update a pending title exactly once', async () => {
+    const db = Database.getInstance();
+    await db.putConversation(makeConv({
+      id: 'pending-title',
+      title: '新对话 2026/7/18 08:00',
+      titleGenerated: false,
+    }));
+
+    await expect(db.updateConversationTitleIfPending('pending-title', '自动标题')).resolves.toBe(true);
+    await expect(db.updateConversationTitleIfPending('pending-title', '重复标题')).resolves.toBe(false);
+    await expect(db.getConversation('pending-title')).resolves.toEqual(expect.objectContaining({
+      title: '自动标题',
+      titleGenerated: true,
+    }));
   });
 
   // #4 getConversation

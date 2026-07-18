@@ -39,6 +39,7 @@ describe('Conversation types', () => {
       const conv: Conversation = {
         id: 'conv-1',
         title: 'Test',
+        titleGenerated: true,
         createdAt: Date.now(),
         updatedAt: Date.now(),
         messages: [],
@@ -52,7 +53,7 @@ describe('Conversation types', () => {
     it('should define the manager interface', () => {
       const manager: IConversationManager = {
         create: async () => ({
-          id: '', title: '', createdAt: 0, updatedAt: 0, messages: [], sensitiveDataGranted: false,
+          id: '', title: '', titleGenerated: false, createdAt: 0, updatedAt: 0, messages: [], sensitiveDataGranted: false,
         }),
         get: async () => undefined,
         list: async () => [],
@@ -61,6 +62,7 @@ describe('Conversation types', () => {
         addMessage: async () => {},
         getRecentMessages: async () => [],
         generateSummary: async () => '',
+        generateTitle: async () => undefined,
         needsSummary: async () => false,
       };
       expect(typeof manager.create).toBe('function');
