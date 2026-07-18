@@ -15,6 +15,11 @@ import { applyTheme } from './theme';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 
+import { ChatContentContainer } from './components/ChatContentContainer';
+import { ProviderWizard } from './components/ProviderWizard';
+import { getProviderReadiness } from './provider-readiness';
+import type { ProviderWizardStep } from './provider-readiness';
+
 const store = ConfigStore.getInstance();
 
 const SUGGESTIONS: Array<{ titleKey: string; descKey: string; promptKey: string }> = [
@@ -29,6 +34,12 @@ function ChatLayout() {
   const { conversations, agent, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm, conversationStatuses } = useChat();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [providersLoaded, setProvidersLoaded] = useState(false);
+  const [autoWizardAttempted, setAutoWizardAttempted] = useState(false);
+  const [onboardingRequest, setOnboardingRequest] = useState<{
+    provider?: ProviderConfig;
+    initialStep?: ProviderWizardStep;
+  } | null>(null);
 
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
@@ -60,9 +71,10 @@ function ChatLayout() {
         await store.set('providers', migratedProviders);
       }
       setProviders(migratedProviders);
-      const firstProvider = migratedProviders[0];
-      setSelectedProviderId(firstProvider?.id ?? '');
-      setSelectedModelId(firstProvider?.defaultModelId ?? Object.values(firstProvider?.models ?? {})[0]?.id ?? '');
+      setProvidersLoaded(true);
+      const firstComplete = migratedProviders.filter((p) => getProviderReadiness(p).isComplete)[0];
+      setSelectedProviderId(firstComplete?.id ?? '');
+      setSelectedModelId(firstComplete?.defaultModelId ?? Object.values(firstComplete?.models ?? {})[0]?.id ?? '');
       const saved = await store.get('agentSettings');
       setAgentSettings({
         maxToolRounds: saved.maxToolRounds,
@@ -81,7 +93,9 @@ function ChatLayout() {
     })();
   }, []);
 
-  const activeProvider = providers.find((provider) => provider.id === selectedProviderId) ?? providers[0] ?? null;
+  const completeProviders = providers.filter((p) => getProviderReadiness(p).isComplete);
+
+  const activeProvider = completeProviders.find((provider) => provider.id === selectedProviderId) ?? completeProviders[0] ?? null;
 
   const handleSaveProviders = useCallback(async (p: ProviderConfig[]) => {
     setProviders(p);
@@ -96,12 +110,12 @@ function ChatLayout() {
   }, []);
 
   const handleSelectProvider = useCallback((providerId: string) => {
-    const provider = providers.find((item) => item.id === providerId);
+    const provider = completeProviders.find((item) => item.id === providerId);
     const modelId = provider?.defaultModelId ?? Object.values(provider?.models ?? {})[0]?.id ?? '';
     setSelectedProviderId(providerId);
     setSelectedModelId(modelId);
     setReasoningEffort(provider?.models?.[modelId]?.defaultReasoningEffort);
-  }, [providers]);
+  }, [completeProviders]);
   const handleSaveAgentSettings = useCallback(async (s: AgentSettings) => {
     setAgentSettings(s);
     await store.set('agentSettings', {
@@ -126,6 +140,24 @@ function ChatLayout() {
   }, []);
 
   const activeModel = activeProvider?.models?.[selectedModelId] ?? null;
+
+  // 自动引导：每次挂载无完整 Provider 时弹一次
+  useEffect(() => {
+    if (!providersLoaded) return;
+    if (completeProviders.length > 0) return;
+    if (autoWizardAttempted) return;
+
+    setAutoWizardAttempted(true);
+
+    const firstIncomplete = providers[0];
+    const readiness = firstIncomplete ? getProviderReadiness(firstIncomplete) : null;
+    const initialStep = readiness?.initialStep ?? ('connection' as ProviderWizardStep);
+
+    setOnboardingRequest({
+      provider: firstIncomplete,
+      initialStep,
+    });
+  }, [providersLoaded, completeProviders.length, autoWizardAttempted, providers]);
 
   const handleSelectModel = useCallback((modelId: string) => {
     setSelectedModelId(modelId);
@@ -164,6 +196,33 @@ function ChatLayout() {
     [],
   );
 
+  const handleCloseOnboarding = useCallback(() => {
+    setOnboardingRequest(null);
+  }, []);
+
+  const handleReopenWizard = useCallback(() => {
+    const firstIncomplete = providers[0];
+    const readiness = firstIncomplete ? getProviderReadiness(firstIncomplete) : null;
+    const initialStep = readiness?.initialStep ?? ('connection' as ProviderWizardStep);
+
+    setOnboardingRequest({
+      provider: firstIncomplete,
+      initialStep,
+    });
+  }, [providers]);
+
+  const handleOnboardingSave = useCallback(
+    async (p: ProviderConfig) => {
+      const idx = providers.findIndex((item) => item.id === p.id);
+      const next = idx >= 0
+        ? providers.map((item, i) => (i === idx ? p : item))
+        : [...providers, p];
+      await handleSaveProviders(next);
+      setOnboardingRequest(null);
+    },
+    [providers, handleSaveProviders],
+  );
+
   const handleNewConversation = useCallback(async () => {
     await conversations.create();
     setDrawerOpen(false);
@@ -185,7 +244,7 @@ function ChatLayout() {
     onAbort: agent.abort,
     disabled: agent.status !== 'idle' || !activeProvider,
     isRunning: agent.status !== 'idle',
-    providers,
+    providers: completeProviders,
     selectedProviderId: activeProvider?.id ?? '',
     onSelectProvider: handleSelectProvider,
     selectedModelId,
@@ -215,7 +274,7 @@ function ChatLayout() {
         <button
           type="button"
           data-testid="settings-button"
-          onClick={() => setShowSettings(true)}
+          onClick={() => { setOnboardingRequest(null); setShowSettings(true); }}
           className="w-7 h-7 flex items-center justify-center rounded-md text-mute hover:text-ink hover:bg-surface-soft transition-colors"
           title={t('sidebar.settings')}
         >
@@ -235,7 +294,7 @@ function ChatLayout() {
 
       {/* 主区域：首页 or 聊天流 */}
       {isHome ? (
-        <div className="flex-1 flex flex-col justify-center px-6 pb-16 gap-5 overflow-y-auto">
+        <ChatContentContainer className="flex-1 flex flex-col justify-center pb-16 gap-5 overflow-y-auto">
           <div className="text-center">
             <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-primary mb-3">
               <svg className="w-6 h-6 text-on-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -264,7 +323,21 @@ function ChatLayout() {
               </button>
             ))}
           </div>
-        </div>
+
+          {providersLoaded && completeProviders.length === 0 && (
+            <div className="flex flex-col items-center gap-2 pt-2">
+              <p className="text-xs text-mute text-center">{t('chat.onboarding.noProviderDescription')}</p>
+              <button
+                type="button"
+                data-testid="onboarding-cta"
+                onClick={handleReopenWizard}
+                className="px-4 py-1.5 text-xs font-medium rounded-full bg-primary text-on-primary hover:bg-primary/90 transition-colors"
+              >
+                {t('chat.onboarding.configureCta')}
+              </button>
+            </div>
+          )}
+        </ChatContentContainer>
       ) : (
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
           {messagesLoading && (
@@ -281,10 +354,10 @@ function ChatLayout() {
               {t('app.loadFailed')}: {messagesError}
             </div>
           )}
-          <ChatView messages={messages} />
-          <div className="w-full max-w-3xl mx-auto">
+          <ChatContentContainer className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <ChatView messages={messages} />
             <MessageInput {...inputProps} variant="chat" />
-          </div>
+          </ChatContentContainer>
         </div>
       )}
 
@@ -302,6 +375,34 @@ function ChatLayout() {
         onDelete={conversations.remove}
         tokenUsage={tokenUsage}
       />
+
+      {onboardingRequest && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center" role="dialog" aria-modal="true">
+          <div className="bg-surface-card rounded-xl shadow-xl w-[90vw] max-w-[750px] max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-hairline shrink-0">
+              <h2 className="text-sm font-semibold text-ink">{t('chat.onboarding.dialogTitle')}</h2>
+              <button
+                type="button"
+                onClick={handleCloseOnboarding}
+                className="w-6 h-6 flex items-center justify-center rounded text-mute hover:text-ink hover:bg-surface-soft transition-colors"
+                aria-label={t('common.close')}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <ProviderWizard
+                provider={onboardingRequest.provider}
+                initialStep={onboardingRequest.initialStep}
+                onSave={handleOnboardingSave}
+                onClose={handleCloseOnboarding}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {showSettings && (
         <SettingsPanel

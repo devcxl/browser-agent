@@ -64,6 +64,12 @@
       "model": "模型",
       "reasoning": "思考",
       "reasoningOff": "关闭"
+    },
+    "onboarding": {
+      "noProviderTitle": "配置 Provider 以开始聊天",
+      "noProviderDescription": "需要至少一个完整的 Provider 配置才能使用聊天功能。",
+      "configureCta": "配置 Provider",
+      "dialogTitle": "配置聊天 Provider"
     }
   },
   "settings": {

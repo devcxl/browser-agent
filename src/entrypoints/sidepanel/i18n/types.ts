@@ -69,6 +69,12 @@ export interface MessageSchema {
       reasoning: string;
       reasoningOff: string;
     };
+    onboarding: {
+      noProviderTitle: string;
+      noProviderDescription: string;
+      configureCta: string;
+      dialogTitle: string;
+    };
   };
   settings: {
     title: string;
