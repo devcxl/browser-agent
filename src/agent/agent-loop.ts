@@ -71,12 +71,20 @@ export class AgentLoop implements IAgentRuntime {
 
       // 2. Agent loop
       let invalidRetries = 0;
+      let stepCount = 0;
+      let reachedStepLimit = false;
+      const maxSteps = Math.max(1, this.config.maxToolRounds);
 
       while (true) {
         if (this.abortController.signal.aborted) {
           finalMessage = '操作已被中止。';
           break;
         }
+        if (stepCount >= maxSteps) {
+          reachedStepLimit = true;
+          break;
+        }
+        stepCount++;
 
         // 每轮重建 messages，确保 skill 激活后下一轮 prompt 生效
         let messages = await this.contextBuilder.build(
@@ -450,6 +458,10 @@ export class AgentLoop implements IAgentRuntime {
           finalMessage = streamingContent;
           break;
         }
+      }
+
+      if (reachedStepLimit) {
+        finalMessage = `已达到单次任务最大执行步数（${maxSteps}）。`;
       }
 
       // 4. Store assistant response（toolCalls 已在中间消息持久化，此处只存最终文本）

@@ -237,7 +237,6 @@ function toolCallsResponse(
 const defaultConfig: AgentConfig = {
   maxToolRounds: 15,
   systemPrompt: 'You are a browser assistant.',
-  maxContextMessages: 20,
   contextWindowTokens: 128000,
   tokenBudgetMargin: 4096,
   microcompactKeepRecent: 10,
@@ -294,6 +293,34 @@ describe('AgentLoop', () => {
     expect(output.finalMessage).toBe('当前没有打开的标签页。');
     expect(output.toolCalls).toEqual([]);
     expect(conversationManager.addMessage).toHaveBeenCalledTimes(2); // user + assistant
+  });
+
+  it('达到单次任务最大执行步数后停止旧 AgentLoop', async () => {
+    const toolDef: ToolDefinition = {
+      name: 'tabs_query',
+      description: '查询标签页',
+      schema: { type: 'object', properties: {} },
+      category: 'tabs',
+      riskLevel: 'low',
+      confirmationRequired: false,
+      resultSensitivity: 'low',
+      execute: vi.fn().mockResolvedValue({ success: true, data: [] }),
+    };
+    const llmClient = createMockLlmClient([
+      toolCallsResponse(toolCallDelta('call_1', 'tabs_query', {})),
+    ]);
+    const loop = new AgentLoop(
+      { ...defaultConfig, maxToolRounds: 1 },
+      createMockToolRegistry([toolDef]),
+      createMockGuardrail(),
+      conversationManager,
+      vi.fn().mockReturnValue(llmClient),
+    );
+
+    const output = await loop.run(defaultInput);
+
+    expect(output.finalMessage).toBe('已达到单次任务最大执行步数（1）。');
+    expect(llmClient.chatStream).toHaveBeenCalledOnce();
   });
 
   // === Scenario 2 ===

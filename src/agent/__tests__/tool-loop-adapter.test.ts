@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ToolLoopAdapter } from '../tool-loop-adapter';
-import type { AgentRunInput } from '@/shared/types/agent';
+import type { AgentConfig, AgentRunInput } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types';
 import type { IGuardrail, GuardrailCheck } from '@/shared/types/guardrail';
 import type { Conversation, IConversationManager, StoredMessage } from '@/shared/types/conversation';
@@ -14,6 +14,7 @@ const mockToolLoopAgentStream = vi.fn();
 const mockToolClassifierClassify = vi.hoisted(() => vi.fn());
 const mockGenerateText = vi.hoisted(() => vi.fn());
 const mockPruneMessages = vi.hoisted(() => vi.fn());
+const mockIsStepCount = vi.hoisted(() => vi.fn());
 let capturedToolLoopAgentOptions: Record<string, unknown> | null = null;
 
 vi.mock('ai', async () => {
@@ -21,6 +22,10 @@ vi.mock('ai', async () => {
   return {
     ...actual,
     generateText: mockGenerateText,
+    isStepCount: (steps: number) => {
+      mockIsStepCount(steps);
+      return actual.isStepCount(steps);
+    },
     pruneMessages: (options: unknown) => {
       mockPruneMessages(options);
       return actual.pruneMessages(options as Parameters<typeof actual.pruneMessages>[0]);
@@ -184,6 +189,31 @@ describe('ToolLoopAdapter', () => {
     expect(result.tokenUsage).toEqual({ prompt: 100, completion: 50 });
   });
 
+  it('使用配置的单次任务最大执行步数', async () => {
+    const config: AgentConfig = {
+      maxToolRounds: 7,
+      systemPrompt: 'test',
+      contextWindowTokens: 128000,
+      tokenBudgetMargin: 4096,
+      microcompactKeepRecent: 10,
+      microcompactMinChars: 500,
+      microcompactExcludeTools: [],
+      summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
+    };
+    const configuredAdapter = new ToolLoopAdapter(
+      mockToolRegistry,
+      mockGuardrail,
+      mockConversationManager,
+      providerConfig,
+      'test-model',
+      config,
+    );
+
+    await configuredAdapter.run(basicInput);
+
+    expect(mockIsStepCount).toHaveBeenCalledWith(7);
+  });
+
   it('应该将 toolRegistry 中的所有工具转换为 AI SDK tools', async () => {
     await adapter.run(basicInput);
 
@@ -252,7 +282,6 @@ describe('ToolLoopAdapter', () => {
       {
         maxToolRounds: 99,
         systemPrompt: 'browser assistant',
-        maxContextMessages: 40,
         contextWindowTokens: 1_000,
         tokenBudgetMargin: 100,
         microcompactKeepRecent: 10,
@@ -337,7 +366,6 @@ describe('ToolLoopAdapter', () => {
       {
         maxToolRounds: 99,
         systemPrompt: 'browser assistant',
-        maxContextMessages: 40,
         contextWindowTokens: 10_000,
         tokenBudgetMargin: 100,
         microcompactKeepRecent: 10,
@@ -400,7 +428,6 @@ describe('ToolLoopAdapter', () => {
       {
         maxToolRounds: 99,
         systemPrompt: 'browser assistant',
-        maxContextMessages: 40,
         contextWindowTokens: 10_000,
         tokenBudgetMargin: 100,
         microcompactKeepRecent: 10,

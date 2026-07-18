@@ -9,7 +9,6 @@ Guidelines:
 export const DEFAULT_AGENT_CONFIG = {
   maxToolRounds: 99,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
-  maxContextMessages: 20,
   contextWindowTokens: 128000,
   tokenBudgetMargin: 4096,
   microcompactKeepRecent: 10,

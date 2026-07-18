@@ -36,7 +36,6 @@ function createMockConversationManager(): IConversationManager {
 const defaultConfig: AgentConfig = {
   maxToolRounds: 15,
   systemPrompt: 'You are a browser assistant.',
-  maxContextMessages: 20,
   contextWindowTokens: 128000,
   tokenBudgetMargin: 4096,
   microcompactKeepRecent: 10,
@@ -208,6 +207,36 @@ describe('ContextBuilder', () => {
     );
     expect(summaryMsg).toBeDefined();
     expect(summaryMsg!.content).toContain('用户已完成了标签页查询');
+  });
+
+  it('有摘要时只加载摘要截止点之后的完整历史', async () => {
+    const toolRegistry = createMockToolRegistry([]);
+    const conversationManager = createMockConversationManager();
+    const historyMessages: StoredMessage[] = [
+      { id: 'm1', role: 'user', content: '已被摘要的旧问题' },
+      { id: 'm2', role: 'assistant', content: '已被摘要的旧回答' },
+      { id: 'm3', role: 'user', content: '最近问题' },
+      { id: 'm4', role: 'assistant', content: '最近回答' },
+    ];
+    vi.mocked(conversationManager.get).mockResolvedValue({
+      id: 'conv-1',
+      title: 'test',
+      titleGenerated: true,
+      createdAt: 0,
+      updatedAt: 0,
+      messages: historyMessages,
+      summary: '旧对话摘要',
+      summaryUpToIndex: 2,
+      sensitiveDataGranted: false,
+    });
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const builder = new ContextBuilder(defaultConfig, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    expect(messages.some((message) => message.content === '已被摘要的旧问题')).toBe(false);
+    expect(messages.some((message) => message.content === '最近问题')).toBe(true);
+    expect(conversationManager.getRecentMessages).not.toHaveBeenCalled();
   });
 
   it('有浏览器上下文', async () => {

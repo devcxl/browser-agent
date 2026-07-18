@@ -28,8 +28,6 @@ import {
 import { ToolClassifier } from './tool-classifier';
 import { DEFAULT_AGENT_CONFIG } from './system-prompt';
 
-/** 默认最大工具循环轮数 */
-const DEFAULT_MAX_STEPS = 99;
 const RECENT_TURNS_TO_KEEP = 4;
 const conversationCompactions = new Map<string, Promise<boolean>>();
 
@@ -215,7 +213,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
         reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
         tools: this.tools,
         allowSystemInMessages: true,
-        stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
+        stopWhen: [isStepCount(Math.max(1, this.agentConfig.maxToolRounds)), isLoopFinished()],
         toolApproval: this.createToolApproval(),
         prepareStep: async ({ messages, stepNumber, model }) => {
           // 工具懒加载：step 0 时 LLM 预分类
@@ -245,7 +243,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
       reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
       tools: this.tools,
       allowSystemInMessages: true,
-      stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
+      stopWhen: [isStepCount(Math.max(1, this.agentConfig.maxToolRounds)), isLoopFinished()],
       toolApproval: this.createToolApproval(input),
         prepareStep: async ({ messages, stepNumber, model }) => {
           console.debug('[ToolLoopAdapter] prepareStep step:', stepNumber, 'totalTools:', Object.keys(this.tools).length);
@@ -455,7 +453,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
       ? conversation.messages.slice(conversation.summaryUpToIndex ?? 0)
       : await this.conversationManager.getRecentMessages(
         input.conversationId,
-        this.agentConfig.maxContextMessages,
+        Number.MAX_SAFE_INTEGER,
       );
     const toolNames = new Map<string, string>();
     const pendingToolCallIds = new Set<string>();

@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 // vi.hoisted: 确保 mock 对象在 vi.mock 提升前初始化
-const { mockRun, mockAbort, mockToolLoopAdapterRun, mockToolLoopAdapterAbort, mockGenerateTitle, mockFeatureFlags, state } =
+const { mockRun, mockAbort, mockToolLoopAdapterRun, mockToolLoopAdapterAbort, mockGenerateTitle, mockConfigStoreGet, mockFeatureFlags, state } =
   vi.hoisted(() => ({
     mockRun: vi.fn(),
     mockAbort: vi.fn(),
     mockToolLoopAdapterRun: vi.fn(),
     mockToolLoopAdapterAbort: vi.fn(),
     mockGenerateTitle: vi.fn(),
+    mockConfigStoreGet: vi.fn(),
     mockFeatureFlags: { useToolLoopAgent: false },
     state: {
       capturedHooks: null as any,
@@ -134,7 +135,7 @@ vi.mock('@/shared/storage', () => ({
   },
   ConfigStore: {
     getInstance: vi.fn().mockReturnValue({
-      get: vi.fn().mockResolvedValue(null),
+      get: mockConfigStoreGet,
       set: vi.fn(),
       getAll: vi.fn(),
       patch: vi.fn(),
@@ -159,6 +160,8 @@ describe('useAgent', () => {
     mockToolLoopAdapterAbort.mockReset();
     mockGenerateTitle.mockReset();
     mockGenerateTitle.mockResolvedValue(undefined);
+    mockConfigStoreGet.mockReset();
+    mockConfigStoreGet.mockResolvedValue(null);
     mockFeatureFlags.useToolLoopAgent = false;
   });
 
@@ -442,6 +445,37 @@ describe('useAgent', () => {
     expect(ToolLoopAdapter).toHaveBeenCalled();
     expect(mockToolLoopAdapterRun).toHaveBeenCalled();
     expect(result.current.status).toBe('idle');
+  });
+
+  it('ToolLoopAdapter 使用持久化的单次任务最大执行步数', async () => {
+    mockFeatureFlags.useToolLoopAgent = true;
+    mockConfigStoreGet.mockImplementation((key: string) => Promise.resolve(
+      key === 'agentSettings'
+        ? {
+            maxToolRounds: 7,
+            systemPrompt: 'test',
+            contextWindowTokens: 128000,
+            tokenBudgetMargin: 4096,
+            microcompactKeepRecent: 10,
+            microcompactMinChars: 500,
+            microcompactExcludeTools: [],
+            reasoningEffort: 'medium',
+            summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
+          }
+        : null,
+    ));
+    const { result } = renderHook(() => useAgent());
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key',
+        model: 'gpt-4o', isLocalTrusted: false,
+      });
+    });
+
+    expect(state.capturedToolLoopAdapterArgs[0]?.[5]).toEqual(
+      expect.objectContaining({ maxToolRounds: 7 }),
+    );
   });
 
   it('FEATURE_FLAGS.useToolLoopAgent=true 时生成标题并通知 UI', async () => {

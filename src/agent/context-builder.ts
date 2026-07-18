@@ -55,10 +55,9 @@ export class ContextBuilder {
     });
 
     // 4. Recent messages — 截断后修复序列完整性
-    const recentMessages = await this.conversationManager.getRecentMessages(
-      conversationId,
-      this.config.maxContextMessages,
-    );
+    const recentMessages = conversation
+      ? conversation.messages.slice(conversation.summaryUpToIndex ?? 0)
+      : await this.conversationManager.getRecentMessages(conversationId, Number.MAX_SAFE_INTEGER);
 
     // 修复：移除丢失了前置 assistant(tool_calls) 的 tool 消息
     const fixedMessages = this.repairToolCallSequence(recentMessages);

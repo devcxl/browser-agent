@@ -35,7 +35,6 @@ function createMockConversationManager(): IConversationManager {
 const defaultConfig: AgentConfig = {
   maxToolRounds: 15,
   systemPrompt: 'You are a browser assistant.',
-  maxContextMessages: 20,
   contextWindowTokens: 128000,
   tokenBudgetMargin: 4096,
   microcompactKeepRecent: 10,

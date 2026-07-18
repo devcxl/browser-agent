@@ -164,6 +164,18 @@ export function useAgent() {
         setStatus('streaming');
 
         const { AgentLoop, ToolLoopAdapter, registry, guardrail, convManager, LlmClient, skillStore } = await getDeps();
+        const savedAgentSettings = await ConfigStore.getInstance().get('agentSettings');
+        const agentConfig: AgentConfig = {
+          maxToolRounds: savedAgentSettings?.maxToolRounds ?? 99,
+          systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
+          contextWindowTokens: modelConfig?.limit?.context ?? 128000,
+          tokenBudgetMargin: 4096,
+          microcompactKeepRecent: 10,
+          microcompactMinChars: 500,
+          microcompactExcludeTools: [],
+          reasoningEffort,
+          summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
+        };
         const generateTitle = () => {
           console.debug('[Title] fire-and-forget 启动', { conversationId, model });
           void convManager
@@ -187,18 +199,7 @@ export function useAgent() {
             convManager,
             providerConfig,
             model,
-            {
-              maxToolRounds: 99,
-              systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
-              maxContextMessages: 40,
-              contextWindowTokens: modelConfig?.limit?.context ?? 128000,
-              tokenBudgetMargin: 4096,
-              microcompactKeepRecent: 10,
-              microcompactMinChars: 500,
-              microcompactExcludeTools: [],
-              reasoningEffort,
-              summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
-            },
+            agentConfig,
             async (request) => {
               return new Promise<'approve' | 'deny'>((resolve) => {
                 setStatus('waitingConfirmation');
@@ -303,19 +304,6 @@ export function useAgent() {
           generateTitle();
         } else {
           // ── 旧 AgentLoop 路径 ──
-        const agentConfig: AgentConfig = {
-          maxToolRounds: 15,
-          systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
-          maxContextMessages: 40,
-          contextWindowTokens: modelConfig?.limit?.context ?? 128000,
-          tokenBudgetMargin: 4096,
-          microcompactKeepRecent: 10,
-          microcompactMinChars: 500,
-          microcompactExcludeTools: [],
-          reasoningEffort,
-          summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
-        };
-
         const hooks: AgentLoopHooks = {
           onStreamChunk: (chunk: string) => {
             // 如果上次助理消息已结束（被 tool call 拆分），新建一个
