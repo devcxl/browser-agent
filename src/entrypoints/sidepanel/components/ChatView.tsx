@@ -55,7 +55,7 @@ export function ChatView({ messages }: Props) {
       onScroll={handleScroll}
       className="flex-1 overflow-y-auto px-4 sm:px-6 lg:px-10 pt-4 pb-2 scroll-smooth"
     >
-      <div className="w-full max-w-3xl mx-auto flex flex-col gap-3">
+      <div className="w-full mx-auto flex flex-col gap-3">
         {useVirtual ? (
         <div className="flex flex-col gap-3" style={{ paddingTop, paddingBottom }}>
           {visibleMessages.map((msg) => (
