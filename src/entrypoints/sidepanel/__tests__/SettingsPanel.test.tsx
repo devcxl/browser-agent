@@ -145,7 +145,7 @@ describe('SettingsPanel - Provider wizard', () => {
     await userEvent.click(screen.getByTestId('add-provider-button'));
 
     expect(screen.getByTestId('provider-wizard')).toBeTruthy();
-    expect(screen.getByPlaceholderText('Search models.dev providers...')).toBeTruthy();
+    expect(screen.getByPlaceholderText('搜索 models.dev provider...')).toBeTruthy();
     expect(screen.getByTestId('custom-template-button')).toBeTruthy();
   });
 
@@ -199,7 +199,7 @@ describe('SettingsPanel - Provider wizard', () => {
     await userEvent.click(screen.getByTestId('provider-connection-next'));
     await userEvent.click(screen.getByTestId('add-model-button'));
     await userEvent.type(screen.getByPlaceholderText('Model ID'), 'qwen3-32b');
-    await userEvent.type(screen.getByPlaceholderText('Display name'), 'Qwen3 32B');
+    await userEvent.type(screen.getByPlaceholderText('显示名称'), 'Qwen3 32B');
     await userEvent.click(screen.getByTestId('save-provider-button'));
 
     expect(onSave).toHaveBeenCalledOnce();

@@ -93,6 +93,64 @@ export interface MessageSchema {
         sttModel: string;
       };
       audioFormats: Record<string, string>;
+      wizard: {
+        stepLabels: {
+          template: string;
+          connection: string;
+          models: string;
+        };
+        back: string;
+        template: {
+          title: string;
+          description: string;
+          useCustom: string;
+          useCustomDesc: string;
+          searchPlaceholder: string;
+          itemCount: string;
+        };
+        connection: {
+          title: string;
+          description: string;
+          nameLabel: string;
+          namePlaceholder: string;
+          endpointLabel: string;
+          endpointPlaceholder: string;
+          apiKeyLabel: string;
+          apiKeyPlaceholder: string;
+          trustedLabel: string;
+          trustedDescription: string;
+          back: string;
+          continue: string;
+        };
+        models: {
+          title: string;
+          description: string;
+          idPlaceholder: string;
+          namePlaceholder: string;
+          contextPlaceholder: string;
+          maxOutputPlaceholder: string;
+          defaultOutputPlaceholder: string;
+          temperaturePlaceholder: string;
+          supportsTools: string;
+          supportsReasoning: string;
+          discoverButton: string;
+          discovering: string;
+          discovered: string;
+          discoverFailed: string;
+          addModel: string;
+          newModel: string;
+          defaultModel: string;
+          deleteModel: string;
+          noValidModels: string;
+          duplicateId: string;
+          back: string;
+          save: string;
+        };
+        validation: {
+          modelInvalid: string;
+          noModels: string;
+        };
+      };
     };
     agent: {
       maxToolRounds: string;

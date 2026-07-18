@@ -106,6 +106,64 @@
         "aac": "AAC",
         "ogg_opus": "OGG Opus",
         "wav": "WAV"
+      },
+      "wizard": {
+        "stepLabels": {
+          "template": "1. Template",
+          "connection": "2. Connection",
+          "models": "3. Models"
+        },
+        "back": "Back",
+        "template": {
+          "title": "Choose a template",
+          "description": "Copy model capabilities from models.dev or start with an OpenAI-compatible endpoint.",
+          "useCustom": "OpenAI-compatible endpoint",
+          "useCustomDesc": "For Ollama, vLLM, LiteLLM, and compatible gateways.",
+          "searchPlaceholder": "Search models.dev providers...",
+          "itemCount": "{count} models · {id}"
+        },
+        "connection": {
+          "title": "Connection",
+          "description": "Credentials belong to this Provider snapshot, not an individual model.",
+          "nameLabel": "Provider name",
+          "namePlaceholder": "Enter name",
+          "endpointLabel": "Base URL",
+          "endpointPlaceholder": "https://api.example.com/v1",
+          "apiKeyLabel": "API Key (optional)",
+          "apiKeyPlaceholder": "Enter API Key",
+          "trustedLabel": "Local trusted connection",
+          "trustedDescription": "Mark as locally trusted to allow sending sensitive data.",
+          "back": "Back",
+          "continue": "Continue"
+        },
+        "models": {
+          "title": "Models",
+          "description": "Limits are model capabilities; default output and temperature are request preferences.",
+          "idPlaceholder": "Model ID",
+          "namePlaceholder": "Display name",
+          "contextPlaceholder": "Context window",
+          "maxOutputPlaceholder": "Max output",
+          "defaultOutputPlaceholder": "Default output",
+          "temperaturePlaceholder": "Temperature",
+          "supportsTools": "Tool calling",
+          "supportsReasoning": "Reasoning",
+          "discoverButton": "Discover",
+          "discovering": "Discovering...",
+          "discovered": "Discovered {count} model(s). Complete their limits before saving.",
+          "discoverFailed": "Model discovery failed: {message}. Add models manually instead.",
+          "addModel": "+ Add model",
+          "newModel": "New model",
+          "defaultModel": "Default",
+          "deleteModel": "Delete",
+          "noValidModels": "Add at least one model.",
+          "duplicateId": "Model IDs must be unique.",
+          "back": "Back",
+          "save": "Save provider"
+        },
+        "validation": {
+          "modelInvalid": "Complete every model configuration before saving.",
+          "noModels": "At least one valid model is required."
+        }
       }
     },
     "agent": {
