@@ -2,7 +2,7 @@
 export const FEATURE_FLAGS = {
   /** AI SDK ToolLoopAgent 替代旧 AgentLoop */
   useToolLoopAgent: true,
-  /** AI SDK prepareStep (ContextManager) 上下文管理 */
+  /** AI SDK prepareStep + pruneMessages 上下文管理 */
   usePrepareStepContext: true,
   /** Guardrail riskLevel → toolApproval 映射 */
   useToolApproval: true,
