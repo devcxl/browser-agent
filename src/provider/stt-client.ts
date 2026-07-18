@@ -14,7 +14,7 @@ export class SttClient {
   constructor(private config: ProviderConfig) {}
 
   private get apiUrl(): string {
-    const base = this.config.endpoint.replace(/\/+$/, '');
+    const base = (this.config.api ?? this.config.endpoint ?? '').replace(/\/+$/, '');
     return `${base}/v1/audio/transcriptions`;
   }
 
@@ -134,7 +134,7 @@ export class SttClient {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10_000);
-      const base = this.config.endpoint.replace(/\/+$/, '');
+      const base = (this.config.api ?? this.config.endpoint ?? '').replace(/\/+$/, '');
       const response = await fetch(`${base}/v1/models`, {
         method: 'GET',
         headers: this.config.apiKey

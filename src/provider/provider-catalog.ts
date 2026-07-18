@@ -1,3 +1,7 @@
+import type { ProviderConfig, ProviderModelConfig as CatalogModel } from '@/shared/types/llm';
+
+export type { ProviderModelConfig as CatalogModel } from '@/shared/types/llm';
+
 export interface CatalogProvider {
   id: string;
   name: string;
@@ -5,17 +9,6 @@ export interface CatalogProvider {
   api: string;
   env: string[];
   models: Record<string, CatalogModel>;
-}
-
-export interface CatalogModel {
-  id: string;
-  name: string;
-  limit?: {
-    context?: number;
-    output?: number;
-  };
-  reasoning?: boolean;
-  tool_call?: boolean;
 }
 
 interface CatalogData {
@@ -136,6 +129,47 @@ export class ProviderCatalog {
       return { ...raw, api: KNOWN_ENDPOINTS[providerId]! };
     }
     return raw;
+  }
+
+  /** 将目录模板转换为插件运行时使用的独立 Provider 快照。 */
+  createProviderSnapshot(template: CatalogProvider, config: Pick<ProviderConfig, 'id' | 'apiKey' | 'isLocalTrusted'>): ProviderConfig {
+    return {
+      ...config,
+      name: template.name,
+      sourceProviderId: template.id,
+      npm: template.npm,
+      api: template.api,
+      env: template.env,
+      models: structuredClone(template.models),
+      defaultModelId: Object.values(template.models)[0]?.id,
+      // 保留旧字段，便于升级前的调用方和已存储数据平滑过渡。
+      providerId: template.id,
+      endpoint: template.api,
+    };
+  }
+
+  /** 为旧 ProviderConfig 补齐本地模型目录快照。 */
+  async migrateProviderConfig(config: ProviderConfig): Promise<ProviderConfig> {
+    if (config.npm && config.api && config.models) return config;
+
+    let template: CatalogProvider | null = null;
+    try {
+      template = config.providerId ? await this.getProvider(config.providerId) : null;
+    } catch {
+      template = null;
+    }
+
+    const fallbackApi = config.endpoint ?? template?.api ?? '';
+    return {
+      ...config,
+      sourceProviderId: config.sourceProviderId ?? config.providerId,
+      npm: config.npm ?? template?.npm ?? '@ai-sdk/openai-compatible',
+      api: config.api ?? fallbackApi,
+      env: config.env ?? template?.env ?? [],
+      models: config.models ?? structuredClone(template?.models ?? {}),
+      defaultModelId: config.defaultModelId ?? Object.values(template?.models ?? {})[0]?.id,
+      endpoint: fallbackApi,
+    };
   }
 
   /** 获取 provider 列表（用于下拉选择） */

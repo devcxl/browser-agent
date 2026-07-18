@@ -6,14 +6,44 @@ export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max';
 
 // ==================== Provider Config ====================
 
+export interface ProviderModelConfig {
+  id: string;
+  name: string;
+  limit?: {
+    context?: number;
+    output?: number;
+  };
+  reasoning?: boolean;
+  tool_call?: boolean;
+  /** 模型实际支持的思考等级；未配置时不在聊天区暴露等级选择。 */
+  reasoningEfforts?: ReasoningEffort[];
+  defaultReasoningEffort?: ReasoningEffort;
+  defaults?: {
+    maxOutputTokens?: number;
+    temperature?: number;
+  };
+}
+
 export interface ProviderConfig {
   id: string;
   /** 显示名称 */
   name: string;
+  /** models.dev 来源，用于主动同步，运行时不依赖它。 */
+  sourceProviderId?: string;
+  /** Provider adapter 包名，与 models.dev 的 npm 字段保持一致。 */
+  npm?: string;
+  /** Base URL，与 models.dev 的 api 字段保持一致。 */
+  api?: string;
+  /** models.dev 环境变量提示。 */
+  env?: string[];
+  /** 本地可编辑的模型目录快照。 */
+  models?: Record<string, ProviderModelConfig>;
+  /** 默认模型 ID。 */
+  defaultModelId?: string;
   /** models.dev 中的 provider id，用于查找 endpoint 和可用模型列表 */
-  providerId: string;
+  providerId?: string;
   /** API 端点 (e.g., https://api.openai.com/v1) */
-  endpoint: string;
+  endpoint?: string;
   /** API Key */
   apiKey: string;
   /** 是否为自定义 provider（不在 models.dev 列表中） */
@@ -62,7 +92,7 @@ export interface ChatCompletionRequest {
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
-  reasoning_effort?: ReasoningEffort;
+  reasoning_effort?: ReasoningEffort | 'none';
 }
 
 export interface ChatCompletionResponse {

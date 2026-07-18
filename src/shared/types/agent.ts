@@ -1,4 +1,4 @@
-import type { ProviderConfig, ReasoningEffort } from './llm';
+import type { ProviderConfig, ProviderModelConfig, ReasoningEffort } from './llm';
 import type { LowSensitivityContext } from './browser';
 import type { RiskLevel, ToolResult } from './tool';
 import type { Skill } from './skill';
@@ -41,6 +41,10 @@ export interface AgentRunInput {
   providerConfig: ProviderConfig;
   /** 模型 ID（如 "gpt-4o", "deepseek/deepseek-chat"） */
   model: string;
+  /** 当前模型的能力与默认请求参数快照。 */
+  modelConfig?: ProviderModelConfig;
+  /** 当前会话对模型默认思考等级的临时覆盖。 */
+  reasoningEffort?: ReasoningEffort;
   browserContext: LowSensitivityContext;
   abortSignal?: AbortSignal;
   /** 可用技能列表，用于 skill tool call 拦截和 context 注入 */

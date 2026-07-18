@@ -31,7 +31,7 @@ const NPM_TO_MODULE: Record<string, string> = {
 };
 
 function mapReasoningEffort(effort?: string): string | undefined {
-  if (!effort) return undefined;
+  if (!effort || effort === 'none') return undefined;
   const map: Record<string, string> = {
     low: 'low',
     medium: 'medium',
@@ -101,8 +101,8 @@ function mapOpenAITools(tools?: OpenAIToolSchema[]): any[] | undefined {
 export class ProviderClientFactory {
   async createClient(providerConfig: ProviderConfig, modelId: string): Promise<ILlmClient> {
     const catalog = await ProviderCatalog.getInstance().getCatalog();
-    const providerInfo = catalog[providerConfig.providerId];
-    const npm = providerInfo?.npm ?? '@ai-sdk/openai-compatible';
+    const providerInfo = providerConfig.providerId ? catalog[providerConfig.providerId] : undefined;
+    const npm = providerConfig.npm ?? providerInfo?.npm ?? '@ai-sdk/openai-compatible';
     const moduleName = NPM_TO_MODULE[npm] ?? '@ai-sdk/openai-compatible';
 
     const model = await this.loadModel(moduleName, providerConfig, modelId);
@@ -263,10 +263,11 @@ export class ProviderClientFactory {
   }
 
   private async loadModel(moduleName: string, config: ProviderConfig, modelId: string): Promise<any> {
-    const endpoint = config.endpoint.replace(/\/+$/, '');
-    const headers: Record<string, string> = config.apiKey
-      ? { Authorization: `Bearer ${config.apiKey}` }
-      : {};
+    const endpoint = (config.api ?? config.endpoint ?? '').replace(/\/+$/, '');
+    const headers: Record<string, string> = {
+      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+      ...config.extraHeaders,
+    };
 
     const baseUrl = endpoint || undefined;
 
@@ -321,8 +322,9 @@ export class ProviderClientFactory {
   }
 
   async getModels(providerConfig: ProviderConfig): Promise<CatalogModel[]> {
+    if (providerConfig.models) return Object.values(providerConfig.models);
     const catalog = await ProviderCatalog.getInstance().getCatalog();
-    const providerInfo = catalog[providerConfig.providerId];
+    const providerInfo = providerConfig.providerId ? catalog[providerConfig.providerId] : undefined;
     if (!providerInfo) return [];
     return Object.values(providerInfo.models);
   }
