@@ -8,7 +8,6 @@ const DEFAULTS: StorageSchema = {
   agentSettings: {
     maxToolRounds: 99,
     systemPrompt: '',
-    maxContextMessages: 40,
     contextWindowTokens: 128000,
     tokenBudgetMargin: 4096,
     microcompactKeepRecent: 10,

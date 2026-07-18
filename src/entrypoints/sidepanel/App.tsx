@@ -47,7 +47,6 @@ function ChatLayout() {
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort | undefined>(undefined);
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     maxToolRounds: 99,
-    maxContextMessages: 40,
     contextWindowTokens: 128000,
     tokenBudgetMargin: 4096,
     microcompactKeepRecent: 10,
@@ -105,7 +104,6 @@ function ChatLayout() {
       const saved = await store.get('agentSettings');
       setAgentSettings({
         maxToolRounds: saved.maxToolRounds,
-        maxContextMessages: saved.maxContextMessages,
         contextWindowTokens: saved.contextWindowTokens ?? 128000,
         tokenBudgetMargin: saved.tokenBudgetMargin ?? 4096,
         microcompactKeepRecent: saved.microcompactKeepRecent ?? 10,
@@ -153,7 +151,6 @@ function ChatLayout() {
     await store.set('agentSettings', {
       maxToolRounds: s.maxToolRounds,
       systemPrompt: s.systemPrompt,
-      maxContextMessages: s.maxContextMessages,
       contextWindowTokens: s.contextWindowTokens,
       tokenBudgetMargin: s.tokenBudgetMargin,
       microcompactKeepRecent: s.microcompactKeepRecent,

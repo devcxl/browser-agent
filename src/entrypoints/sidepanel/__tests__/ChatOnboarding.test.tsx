@@ -190,7 +190,6 @@ describe('ChatOnboarding', () => {
       providers: [],
       agentSettings: {
         maxToolRounds: 10,
-        maxContextMessages: 50,
         systemPrompt: '',
         reasoningEffort: 'medium',
       },

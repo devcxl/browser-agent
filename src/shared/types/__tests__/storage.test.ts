@@ -20,7 +20,6 @@ describe('Storage types', () => {
         agentSettings: {
           maxToolRounds: 99,
           systemPrompt: '',
-          maxContextMessages: 40,
           reasoningEffort: 'medium',
           summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
         },
@@ -38,7 +37,6 @@ describe('Storage types', () => {
       const s: AgentSettings = {
         maxToolRounds: 10,
         systemPrompt: 'You are a browser agent',
-        maxContextMessages: 20,
         summaryThreshold: { messageCount: 25, estimatedTokens: 10000 },
       };
       expect(s.maxToolRounds).toBe(10);
@@ -134,7 +132,6 @@ describe('Storage types', () => {
           agentSettings: {
             maxToolRounds: 99,
             systemPrompt: '',
-            maxContextMessages: 40,
             reasoningEffort: 'medium',
             summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
           },

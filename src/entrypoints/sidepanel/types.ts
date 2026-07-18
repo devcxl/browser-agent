@@ -62,7 +62,6 @@ export interface ConversationSummary {
 
 export interface AgentSettings {
   maxToolRounds: number;
-  maxContextMessages: number;
   contextWindowTokens: number;
   tokenBudgetMargin: number;
   microcompactKeepRecent: number;
