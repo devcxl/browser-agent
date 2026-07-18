@@ -8,6 +8,20 @@ const SUMMARY_THRESHOLDS = {
   estimatedTokens: 12_000,
 } as const;
 
+const DEFAULT_TITLE_PREFIX = '新对话 ';
+const MAX_TITLE_LENGTH = 40;
+
+function normalizeTitle(rawTitle: string): string {
+  const firstLine = rawTitle.split(/\r?\n/).find((line) => line.trim()) ?? '';
+  const sanitizedTitle = firstLine
+    .trim()
+    .replace(/^标题[：:]\s*/, '')
+    .replace(/^[-*]\s+/, '')
+    .replace(/^["'“”`]+|["'“”`]+$/g, '')
+    .trim();
+  return Array.from(sanitizedTitle).slice(0, MAX_TITLE_LENGTH).join('');
+}
+
 function dbMsgToStored(msg: {
   id: string;
   role: string;
@@ -121,7 +135,7 @@ export class ConversationManager implements IConversationManager {
         ? JSON.stringify(message.toolCalls)
         : undefined,
       toolCallId: message.toolCallId,
-      timestamp: message.timestamp,
+      timestamp: message.timestamp ?? Date.now(),
     });
 
     const existing = await this.db.getConversation(conversationId);
@@ -137,6 +151,66 @@ export class ConversationManager implements IConversationManager {
   ): Promise<StoredMessage[]> {
     const messages = await this.db.getRecentMessages(conversationId, count);
     return messages.map(dbMsgToStored);
+  }
+
+  async generateTitle(
+    conversationId: string,
+    llmClient: ILlmClient,
+    model: string,
+  ): Promise<string | undefined> {
+    console.debug('[Title] 进入 generateTitle', { conversationId, model });
+
+    const conversation = await this.get(conversationId);
+    if (!conversation?.title.startsWith(DEFAULT_TITLE_PREFIX)) {
+      console.debug('[Title] 跳过: 非默认标题', { currentTitle: conversation?.title });
+      return undefined;
+    }
+
+    const userMessages = conversation.messages.filter((message) => message.role === 'user');
+    const assistantMessage = [...conversation.messages]
+      .reverse()
+      .find((message) => message.role === 'assistant' && !message.toolCalls?.length && message.content.trim());
+    if (userMessages.length !== 1 || !assistantMessage) {
+      console.debug('[Title] 跳过: 不满足生成条件', {
+        userMsgCount: userMessages.length,
+        hasAssistantText: !!assistantMessage,
+        totalMsgCount: conversation.messages.length,
+      });
+      return undefined;
+    }
+
+    const response = await llmClient.chat({
+      model,
+      messages: [{
+        role: 'user',
+        content: `根据以下首轮问答生成一个准确、简洁的会话标题。标题不超过 40 个字符，不要引号、Markdown 或额外解释。\n\n用户：${userMessages[0]!.content}\n\n助手：${assistantMessage.content}`,
+      }],
+      temperature: 0.2,
+      max_tokens: 512,
+      reasoning_effort: 'none',
+    });
+
+    const rawContent = response.choices[0]?.message?.content ?? '';
+    console.debug('[Title] LLM 响应', {
+      rawContent: rawContent.slice(0, 80),
+      contentLength: rawContent.length,
+      finishReason: response.choices[0]?.finish_reason,
+    });
+
+    const title = normalizeTitle(rawContent);
+    if (!title) {
+      console.debug('[Title] 跳过: normalizeTitle 返回空', { rawContent: rawContent.slice(0, 80) });
+      return undefined;
+    }
+
+    const existing = await this.db.getConversation(conversationId);
+    if (!existing?.title.startsWith(DEFAULT_TITLE_PREFIX)) {
+      console.debug('[Title] 跳过: 写入前标题已被修改', { currentTitle: existing?.title });
+      return undefined;
+    }
+    await this.db.putConversation({ ...existing, title, updatedAt: Date.now() });
+    console.debug('[Title] 已持久化标题', { conversationId, title });
+    return title;
   }
 
   async needsSummary(conversationId: string): Promise<boolean> {

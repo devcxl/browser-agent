@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
-import type { ProviderConfig } from '@/shared/types';
+import type { ProviderConfig, ProviderModelConfig } from '@/shared/types';
 import type { AgentLoopHooks } from '@/agent/agent-loop';
 import type { ToolCallRecord } from '@/shared/types/agent';
 import type { IAgentRuntime, AgentConfig } from '@/shared/types/agent';
@@ -18,6 +18,7 @@ interface AgentCallbacks {
   onMessage?: (msg: UIMessage) => void;
   onConfirm?: (req: ConfirmRequest) => void;
   onTokenUsage?: (usage: TokenUsage) => void;
+  onConversationTitle?: (conversationId: string, title: string) => void;
 }
 
 interface AgentDeps {
@@ -135,6 +136,7 @@ export function useAgent() {
       providerConfig: ProviderConfig,
       model: string,
       reasoningEffort?: import('@/shared/types').ReasoningEffort,
+      modelConfig?: ProviderModelConfig,
     ) => {
       setRunningConversationId(conversationId);
       setStatus('running');
@@ -162,6 +164,20 @@ export function useAgent() {
         setStatus('streaming');
 
         const { AgentLoop, ToolLoopAdapter, registry, guardrail, convManager, LlmClient, skillStore } = await getDeps();
+        const generateTitle = () => {
+          console.debug('[Title] fire-and-forget 启动', { conversationId, model });
+          void convManager
+            .generateTitle(conversationId, new LlmClient(providerConfig, model), model)
+            .then((title) => {
+              if (title) {
+                console.debug('[Title] 生成成功, 通知 UI', { conversationId, title });
+                cbRef.current.onConversationTitle?.(conversationId, title);
+              } else {
+                console.debug('[Title] 生成返回空, 可能是非默认标题或条件不满足', { conversationId });
+              }
+            })
+            .catch((titleError) => console.warn('[Conversation] Failed to generate title', titleError));
+        };
 
         // ── Feature Flag：useToolLoopAgent=true 时使用 AI SDK ToolLoopAgent ──
         if (FEATURE_FLAGS.useToolLoopAgent) {
@@ -171,7 +187,18 @@ export function useAgent() {
             convManager,
             providerConfig,
             model,
-            undefined,
+            {
+              maxToolRounds: 99,
+              systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
+              maxContextMessages: 40,
+              contextWindowTokens: modelConfig?.limit?.context ?? 128000,
+              tokenBudgetMargin: 4096,
+              microcompactKeepRecent: 10,
+              microcompactMinChars: 500,
+              microcompactExcludeTools: [],
+              reasoningEffort,
+              summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
+            },
             async (request) => {
               return new Promise<'approve' | 'deny'>((resolve) => {
                 setStatus('waitingConfirmation');
@@ -188,12 +215,15 @@ export function useAgent() {
             },
           );
           loopRef.current = adapter;
+          const displayedToolCallIds = new Set<string>();
 
           const output = await adapter.run({
             conversationId,
             userMessage,
             providerConfig,
             model,
+            modelConfig,
+            reasoningEffort,
             browserContext: {
               currentWindow: { tabs: [] },
               allWindows: [],
@@ -201,6 +231,16 @@ export function useAgent() {
             },
             callbacks: {
               onStreamChunk: (chunk: string) => {
+                // 工具调用后开启新的文本气泡
+                if (assistantMsg.status === 'complete') {
+                  cbRef.current.onMessage?.({ ...assistantMsg });
+                  assistantMsg.id = uid();
+                  assistantMsg.content = '';
+                  assistantMsg.reasoningContent = undefined;
+                  assistantMsg.toolCallDisplay = undefined;
+                  assistantMsg.status = 'streaming';
+                  assistantMsg.timestamp = Date.now();
+                }
                 assistantMsg.content += chunk;
                 cbRef.current.onMessage?.({ ...assistantMsg });
               },
@@ -209,37 +249,65 @@ export function useAgent() {
                 assistantMsg.reasoningContent = existing + chunk;
                 cbRef.current.onMessage?.({ ...assistantMsg });
               },
+              onToolCall: (record: ToolCallRecord) => {
+                // 当前 assistant 消息如有内容则先终结，保证思考/文本/工具按时间顺序分格
+                if (assistantMsg.content || assistantMsg.reasoningContent) {
+                  cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined });
+                }
+                const display = recordToDisplay(record);
+                displayedToolCallIds.add(record.toolCallId);
+                cbRef.current.onMessage?.({
+                  id: uid(),
+                  role: 'tool',
+                  content: record.toolName,
+                  toolCallDisplay: display,
+                  timestamp: Date.now(),
+                  status: display.status,
+                });
+                // 重置 assistant 消息准备接收下一轮文本
+                assistantMsg.id = uid();
+                assistantMsg.content = '';
+                assistantMsg.reasoningContent = undefined;
+                assistantMsg.toolCallDisplay = undefined;
+                assistantMsg.status = 'streaming';
+                assistantMsg.timestamp = Date.now();
+              },
             },
           });
 
-          // 展示工具调用记录
-          for (const tc of output.toolCalls) {
-            const display = recordToDisplay(tc);
+          // 正常路径会在 onStepFinish 中实时展示；兼容不触发回调的 runtime/test adapter。
+          for (const record of output.toolCalls) {
+            if (displayedToolCallIds.has(record.toolCallId)) continue;
+            const display = recordToDisplay(record);
             cbRef.current.onMessage?.({
               id: uid(),
               role: 'tool',
-              content: tc.toolName,
+              content: record.toolName,
               toolCallDisplay: display,
               timestamp: Date.now(),
               status: display.status,
             });
           }
 
-          assistantMsg.content = output.finalMessage;
+          // 仅终结最后的文本气泡
+          if (assistantMsg.content || assistantMsg.reasoningContent || !output.toolCalls.length) {
+            assistantMsg.content = assistantMsg.content || output.finalMessage;
+            assistantMsg.status = 'complete';
+            cbRef.current.onMessage?.({ ...assistantMsg });
+          }
           if (output.tokenUsage) {
             cbRef.current.onTokenUsage?.(output.tokenUsage);
           }
-          assistantMsg.status = 'complete';
-          cbRef.current.onMessage?.({ ...assistantMsg });
           setRunningConversationId(null);
           setStatus('idle');
+          generateTitle();
         } else {
           // ── 旧 AgentLoop 路径 ──
         const agentConfig: AgentConfig = {
           maxToolRounds: 15,
           systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
           maxContextMessages: 40,
-          contextWindowTokens: 128000,
+          contextWindowTokens: modelConfig?.limit?.context ?? 128000,
           tokenBudgetMargin: 4096,
           microcompactKeepRecent: 10,
           microcompactMinChars: 500,
@@ -359,7 +427,9 @@ export function useAgent() {
           conversationId,
           userMessage,
           providerConfig,
-          model,
+            model,
+            modelConfig,
+            reasoningEffort,
           browserContext: {
             currentWindow: { tabs: [] },
             allWindows: [],
@@ -381,6 +451,7 @@ export function useAgent() {
         cbRef.current.onMessage?.({ ...assistantMsg });
         setRunningConversationId(null);
         setStatus('idle');
+        generateTitle();
         } // ── 结束旧 AgentLoop 路径 ──
       } catch (err) {
         if ((err as Error).name === 'AbortError') {

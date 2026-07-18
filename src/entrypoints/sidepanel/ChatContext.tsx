@@ -122,6 +122,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [conversationStatuses, setConversationStatuses] = useState<Record<string, AgentStatus>>({});
   const prevActiveIdRef = useRef<string | null>(null);
   const prevTokenResetIdRef = useRef<string | null>(null);
+  const messageVersionRef = useRef(0);
 
   // 跟踪每个会话的 agent 状态 — 使用 agent.runningConversationId 而非 activeId
   useEffect(() => {
@@ -142,6 +143,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, [agent.status, conversations.activeId]);
 
   const addMessage = useCallback((msg: UIMessage) => {
+    messageVersionRef.current += 1;
     setMessages((prev) => {
       const idx = prev.findIndex((m) => m.id === msg.id);
       if (idx >= 0) {
@@ -153,7 +155,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const clearMessages = useCallback(() => setMessages([]), []);
+  const clearMessages = useCallback(() => {
+    messageVersionRef.current += 1;
+    setMessages([]);
+  }, []);
 
   agent.setCallbacks({
     onMessage: addMessage,
@@ -161,6 +166,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       setConfirmRequest(req);
     },
     onTokenUsage: setTokenUsage,
+    onConversationTitle: () => {
+      console.debug('[Title] UI 收到标题更新通知, 刷新会话列表');
+      void conversations.refresh();
+    },
   });
 
   // Reset tokenUsage on conversation switch
@@ -186,6 +195,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     prevActiveIdRef.current = activeId;
 
     if (!activeId) {
+      messageVersionRef.current += 1;
       setMessages([]);
       setMessagesLoading(false);
       setMessagesError(null);
@@ -193,6 +203,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
 
     let cancelled = false;
+    const messageVersionAtLoadStart = messageVersionRef.current;
     setMessagesLoading(true);
     setMessagesError(null);
 
@@ -201,14 +212,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const conv = await manager.get(activeId);
         if (cancelled) return;
         if (conv) {
-          setMessages(storedMessagesToUIMessages(conv.messages));
+          setMessages((currentMessages) => (
+            messageVersionRef.current === messageVersionAtLoadStart
+              ? storedMessagesToUIMessages(conv.messages)
+              : currentMessages
+          ));
         } else {
-          setMessages([]);
+          setMessages((currentMessages) => (
+            messageVersionRef.current === messageVersionAtLoadStart ? [] : currentMessages
+          ));
         }
       } catch (e) {
         if (cancelled) return;
-        setMessagesError((e as Error).message);
-        setMessages([]);
+        if (messageVersionRef.current === messageVersionAtLoadStart) {
+          setMessagesError((e as Error).message);
+          setMessages([]);
+        }
       } finally {
         if (!cancelled) setMessagesLoading(false);
       }

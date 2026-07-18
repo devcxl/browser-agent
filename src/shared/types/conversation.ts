@@ -17,6 +17,8 @@ export interface StoredMessage {
   toolCallId?: string;
   /** 推理/思考内容（仅 assistant 消息） */
   reasoningContent?: string;
+  /** 消息时间戳，缺省时由 ConversationManager 写入 Date.now() */
+  timestamp?: number;
 }
 
 // ==================== 会话 ====================
@@ -47,6 +49,8 @@ export interface IConversationManager {
   getRecentMessages(conversationId: string, count: number): Promise<StoredMessage[]>;
   /** 生成摘要 */
   generateSummary(conversationId: string, llmClient: ILlmClient): Promise<string>;
+  /** 根据首轮问答生成标题，无法生成时返回 undefined */
+  generateTitle(conversationId: string, llmClient: ILlmClient, model: string): Promise<string | undefined>;
   /** 检查是否需要生成摘要 */
   needsSummary(conversationId: string): Promise<boolean>;
 }
