@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo-128.png" alt="Browser Agent Logo" width="128" height="128">
+</p>
+
 <h1 align="center">Browser Agent Extension</h1>
 
 <p align="center">
