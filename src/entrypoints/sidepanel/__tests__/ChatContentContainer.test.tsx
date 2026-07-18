@@ -27,7 +27,7 @@ describe('ChatContentContainer', () => {
     expect(div.className).toContain('sm:px-6');
     expect(div.className).toContain('lg:w-[90%]');
     expect(div.className).toContain('lg:px-0');
-    expect(div.className).toContain('min-[1440px]:w-3/4');
+    expect(div.className).toContain('2xl:w-3/4');
   });
 
   it('merges className prop with default classes', () => {
@@ -51,7 +51,7 @@ describe('ChatContentContainer', () => {
     );
     const div = container.firstChild as HTMLElement;
     expect(div.className).toBe(
-      'w-full mx-auto px-4 sm:px-6 lg:w-[90%] lg:px-0 min-[1440px]:w-3/4',
+      'w-full mx-auto px-4 sm:px-6 lg:w-[90%] lg:px-0 2xl:w-3/4',
     );
   });
 
