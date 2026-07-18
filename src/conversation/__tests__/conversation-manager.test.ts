@@ -3,7 +3,7 @@ import { ConversationManager } from '../conversation-manager';
 import type { Database } from '@/shared/db/database';
 import type { DbConversation, DbMessage, DbToolCallLog } from '@/shared/types';
 import type { StoredMessage } from '@/shared/types/conversation';
-import type { ILlmClient, ChatCompletionResponse } from '@/shared/types/llm';
+import type { ILlmClient, ChatCompletionRequest, ChatCompletionResponse } from '@/shared/types/llm';
 
 // ── Mock helpers ──
 
@@ -297,6 +297,67 @@ describe('ConversationManager', () => {
 
     const result = await mgr.getRecentMessages('c1', 100);
     expect(result).toHaveLength(1);
+  });
+
+  it('generateTitle() 禁用推理并根据首轮问答更新默认标题', async () => {
+    const conv = mockConv({ id: 'c1', title: '新对话 2026/7/18 08:00' });
+    const msgs = [
+      mockMsg('c1', { role: 'user', content: '帮我整理本周会议纪要' }),
+      mockMsg('c1', { role: 'assistant', content: '我会按项目和待办事项整理。' }),
+    ];
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue(msgs);
+    const llm = createMockLlm();
+    vi.mocked(llm.chat).mockImplementation(async (request: ChatCompletionRequest): Promise<ChatCompletionResponse> => ({
+      id: 'r-title',
+      choices: [{
+        message: {
+          role: 'assistant',
+          content: request.reasoning_effort === 'none' && (request.max_tokens ?? 0) >= 512
+            ? '“本周会议纪要整理”'
+            : null,
+        },
+        finish_reason: 'stop',
+      }],
+      usage: undefined,
+    }));
+
+    await expect(mgr.generateTitle('c1', llm, 'gpt-4o')).resolves.toBe('本周会议纪要整理');
+    expect(llm.chat).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gpt-4o',
+      max_tokens: 512,
+      reasoning_effort: 'none',
+    }));
+    expect(db.putConversation).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c1', title: '本周会议纪要整理' }),
+    );
+  });
+
+  it('generateTitle() 不覆盖用户自定义标题', async () => {
+    const conv = mockConv({ id: 'c1', title: '我的会议' });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([]);
+    const llm = createMockLlm();
+
+    await expect(mgr.generateTitle('c1', llm, 'gpt-4o')).resolves.toBeUndefined();
+    expect(llm.chat).not.toHaveBeenCalled();
+    expect(db.putConversation).not.toHaveBeenCalled();
+  });
+
+  it('generateTitle() 截断标题时保留完整 Unicode 字符', async () => {
+    const conv = mockConv({ id: 'c1', title: '新对话 2026/7/18 08:00' });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([
+      mockMsg('c1', { role: 'user', content: '测试' }),
+      mockMsg('c1', { role: 'assistant', content: '完成' }),
+    ]);
+    const llm = createMockLlm();
+    vi.mocked(llm.chat).mockResolvedValue({
+      id: 'r-title',
+      choices: [{ message: { role: 'assistant', content: '😀'.repeat(41) }, finish_reason: 'stop' }],
+    });
+
+    await expect(mgr.generateTitle('c1', llm, 'gpt-4o')).resolves.toBe('😀'.repeat(40));
   });
 
   // #13

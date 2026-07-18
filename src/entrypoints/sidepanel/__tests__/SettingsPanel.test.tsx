@@ -96,6 +96,11 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof SettingsPanel>
     agentSettings: {
       maxToolRounds: 10,
       maxContextMessages: 50,
+      contextWindowTokens: 128000,
+      tokenBudgetMargin: 4096,
+      microcompactKeepRecent: 10,
+      microcompactMinChars: 500,
+      microcompactExcludeTools: [],
       systemPrompt: '',
       reasoningEffort: 'medium' as const,
     },
@@ -127,50 +132,47 @@ function renderWithI18n(ui: React.ReactElement) {
 
 // ==================== 测试用例 ====================
 
-describe('SettingsPanel - sttModel', () => {
+describe('SettingsPanel - Provider wizard', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     await mockBrowser.local.set({ preferences: { language: 'zh-CN' } });
   });
 
-  it('点击 Add Provider 按钮应显示搜索面板', async () => {
-    const props = makeProps();
-    renderWithI18n(<SettingsPanel {...props} />);
-
-    const addBtn = screen.getByTestId('add-provider-button');
-    await userEvent.click(addBtn);
-
-    expect(screen.getByPlaceholderText('Search providers...')).toBeTruthy();
-    expect(screen.getByTestId('custom-provider-button')).toBeTruthy();
-  });
-
-  it('选中 provider 后应显示 API Key 输入框', async () => {
+  it('点击 Add Provider 按钮应打开三步配置器', async () => {
     const props = makeProps();
     renderWithI18n(<SettingsPanel {...props} />);
 
     await userEvent.click(screen.getByTestId('add-provider-button'));
-    await userEvent.click(screen.getByTestId('custom-provider-button'));
+
+    expect(screen.getByTestId('provider-wizard')).toBeTruthy();
+    expect(screen.getByPlaceholderText('Search models.dev providers...')).toBeTruthy();
+    expect(screen.getByTestId('custom-template-button')).toBeTruthy();
+  });
+
+  it('选择兼容模板后应显示连接配置', async () => {
+    const props = makeProps();
+    renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByTestId('add-provider-button'));
+    await userEvent.click(screen.getByTestId('custom-template-button'));
 
     expect(screen.getByTestId('provider-apikey-input')).toBeTruthy();
-    expect(screen.getByTestId('save-provider-button')).toBeTruthy();
+    expect(screen.getByTestId('provider-name-input')).toBeTruthy();
+    expect(screen.getByTestId('provider-api-input')).toBeTruthy();
   });
 
-  it('已有 provider 时应显示 provider 卡片', () => {
-    const provider = makeProvider({ sttModel: 'whisper-1' });
+  it('已有 provider 时应显示默认模型与模型数量', () => {
+    const provider = makeProvider({
+      models: {
+        'gpt-test': { id: 'gpt-test', name: 'GPT Test', limit: { context: 32768, output: 8192 } },
+      },
+      defaultModelId: 'gpt-test',
+    });
     const props = makeProps({ providers: [provider] });
     renderWithI18n(<SettingsPanel {...props} />);
 
     expect(screen.getByText('Test Provider')).toBeTruthy();
-    expect(screen.getByText(/whisper-1/)).toBeTruthy();
-  });
-
-  it('已有 provider 无 sttModel 时不显示语音模型信息', () => {
-    const provider = makeProvider();
-    const props = makeProps({ providers: [provider] });
-    renderWithI18n(<SettingsPanel {...props} />);
-
-    expect(screen.getByText('Test Provider')).toBeTruthy();
-    expect(screen.queryByText(/STT:/)).toBeFalsy();
+    expect(screen.getByText(/Default: GPT Test/)).toBeTruthy();
   });
 
   it('可删除已有 provider', async () => {
@@ -185,15 +187,32 @@ describe('SettingsPanel - sttModel', () => {
     expect(onSave.mock.calls[0][0]).toHaveLength(0);
   });
 
-  it('API key 为空时保存按钮应禁用', async () => {
+  it('可保存无 API Key 的自定义 OpenAI-compatible Provider 与模型快照', async () => {
     const onSave = vi.fn();
     const props = makeProps({ onSaveProviders: onSave });
     renderWithI18n(<SettingsPanel {...props} />);
 
     await userEvent.click(screen.getByTestId('add-provider-button'));
-    await userEvent.click(screen.getByTestId('custom-provider-button'));
+    await userEvent.click(screen.getByTestId('custom-template-button'));
+    await userEvent.type(screen.getByTestId('provider-name-input'), 'My Gateway');
+    await userEvent.type(screen.getByTestId('provider-api-input'), 'https://gateway.example.com/v1');
+    await userEvent.click(screen.getByTestId('provider-connection-next'));
+    await userEvent.click(screen.getByTestId('add-model-button'));
+    await userEvent.type(screen.getByPlaceholderText('Model ID'), 'qwen3-32b');
+    await userEvent.type(screen.getByPlaceholderText('Display name'), 'Qwen3 32B');
+    await userEvent.click(screen.getByTestId('save-provider-button'));
 
-    const saveBtn = screen.getByTestId('save-provider-button');
-    expect(saveBtn).toBeDisabled();
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({
+        name: 'My Gateway',
+        api: 'https://gateway.example.com/v1',
+        npm: '@ai-sdk/openai-compatible',
+        isCustom: true,
+        models: expect.objectContaining({
+          'qwen3-32b': expect.objectContaining({ id: 'qwen3-32b', name: 'Qwen3 32B' }),
+        }),
+      }),
+    ]);
   });
 });

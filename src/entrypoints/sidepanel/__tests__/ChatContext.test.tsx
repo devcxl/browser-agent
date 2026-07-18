@@ -53,12 +53,22 @@ function ContextInspector() {
   );
 }
 
+function QuickMessageStarter() {
+  const chat = useChat();
+  const sendQuickMessage = async () => {
+    await chat.conversations.create();
+    chat.addMessage({ id: 'quick-message', role: 'user', content: 'Quick action', timestamp: Date.now() });
+  };
+  return <button type="button" data-testid="quick-message" onClick={sendQuickMessage}>Send</button>;
+}
+
 describe('ChatContext message loading', () => {
   beforeEach(() => {
     mockConfigStore.get.mockReset();
     mockConfigStore.set.mockReset();
     mockConfigStore.get.mockResolvedValue(undefined);
     mockConversationManager.get.mockReset();
+    mockConversationManager.create.mockReset();
     mockConversationManager.list.mockReset();
     mockConversationManager.list.mockResolvedValue([]);
   });
@@ -157,6 +167,62 @@ describe('ChatContext message loading', () => {
 
     expect(screen.getByTestId('messages-count').textContent).toBe('0');
     expect(screen.getByTestId('active-id').textContent).toBe('(none)');
+  });
+
+  it('does not overwrite a quick message with the new conversation empty history', async () => {
+    const now = Date.now();
+    let resolveConversation: (value: unknown) => void;
+    mockConversationManager.create.mockResolvedValue({
+      id: 'new-conv', title: 'New', createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
+    });
+    mockConversationManager.get.mockImplementation(() => new Promise((resolve) => {
+      resolveConversation = resolve;
+    }));
+
+    render(
+      <ChatProvider>
+        <ContextInspector />
+        <QuickMessageStarter />
+      </ChatProvider>,
+    );
+
+    await userEvent.click(screen.getByTestId('quick-message'));
+    await waitFor(() => expect(screen.getByTestId('active-id').textContent).toBe('new-conv'));
+    await waitFor(() => expect(screen.getByTestId('messages-count').textContent).toBe('1'));
+
+    resolveConversation!({
+      id: 'new-conv', title: 'New', createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
+    });
+
+    await waitFor(() => expect(screen.getByTestId('messages-loading').textContent).toBe('false'));
+    expect(screen.getByTestId('messages-count').textContent).toBe('1');
+  });
+
+  it('does not overwrite a quick message when loading the new conversation fails', async () => {
+    const now = Date.now();
+    let rejectConversation: (reason?: unknown) => void;
+    mockConversationManager.create.mockResolvedValue({
+      id: 'new-conv', title: 'New', createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
+    });
+    mockConversationManager.get.mockImplementation(() => new Promise((_, reject) => {
+      rejectConversation = reject;
+    }));
+
+    render(
+      <ChatProvider>
+        <ContextInspector />
+        <QuickMessageStarter />
+      </ChatProvider>,
+    );
+
+    await userEvent.click(screen.getByTestId('quick-message'));
+    await waitFor(() => expect(screen.getByTestId('messages-count').textContent).toBe('1'));
+
+    rejectConversation!(new Error('DB error'));
+
+    await waitFor(() => expect(screen.getByTestId('messages-loading').textContent).toBe('false'));
+    expect(screen.getByTestId('messages-count').textContent).toBe('1');
+    expect(screen.getByTestId('messages-error').textContent).toBe('(none)');
   });
 
   it('prevents stale messages from overwriting current conversation on rapid switch', async () => {

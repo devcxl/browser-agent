@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 
 // vi.hoisted: 确保 mock 对象在 vi.mock 提升前初始化
-const { mockRun, mockAbort, mockToolLoopAdapterRun, mockToolLoopAdapterAbort, mockFeatureFlags, state } =
+const { mockRun, mockAbort, mockToolLoopAdapterRun, mockToolLoopAdapterAbort, mockGenerateTitle, mockFeatureFlags, state } =
   vi.hoisted(() => ({
     mockRun: vi.fn(),
     mockAbort: vi.fn(),
     mockToolLoopAdapterRun: vi.fn(),
     mockToolLoopAdapterAbort: vi.fn(),
+    mockGenerateTitle: vi.fn(),
     mockFeatureFlags: { useToolLoopAgent: false },
     state: {
       capturedHooks: null as any,
@@ -65,6 +66,7 @@ vi.mock('@/conversation', () => ({
     delete: vi.fn(),
     addMessage: vi.fn(),
     getRecentMessages: vi.fn().mockResolvedValue([]),
+    generateTitle: mockGenerateTitle,
   })),
 }));
 vi.mock('@/guardrail', () => ({
@@ -155,6 +157,8 @@ describe('useAgent', () => {
     mockToolLoopAdapterRun.mockReset();
     mockToolLoopAdapterRun.mockResolvedValue({ finalMessage: '完成', toolCalls: [] });
     mockToolLoopAdapterAbort.mockReset();
+    mockGenerateTitle.mockReset();
+    mockGenerateTitle.mockResolvedValue(undefined);
     mockFeatureFlags.useToolLoopAgent = false;
   });
 
@@ -215,6 +219,24 @@ describe('useAgent', () => {
     expect(userCalls[0][0].content).toBe('测试消息');
     expect(assistantCalls.length).toBeGreaterThanOrEqual(1);
     expect(assistantCalls[assistantCalls.length - 1][0].status).toBe('complete');
+  });
+
+  it('首轮完成后异步生成标题并通知 UI', async () => {
+    mockGenerateTitle.mockResolvedValue('测试会话标题');
+    const { result } = renderHook(() => useAgent());
+    const onConversationTitle = vi.fn();
+    result.current.setCallbacks({ onConversationTitle });
+
+    await act(async () => {
+      await result.current.run('conv-1', '测试消息', {
+        id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key', model: 'gpt-4o', isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    await waitFor(() => {
+      expect(mockGenerateTitle).toHaveBeenCalledWith('conv-1', expect.anything(), 'gpt-4o');
+      expect(onConversationTitle).toHaveBeenCalledWith('conv-1', '测试会话标题');
+    });
   });
 
   it('abort 在运行后调用 AgentLoop.abort', async () => {
@@ -420,6 +442,26 @@ describe('useAgent', () => {
     expect(ToolLoopAdapter).toHaveBeenCalled();
     expect(mockToolLoopAdapterRun).toHaveBeenCalled();
     expect(result.current.status).toBe('idle');
+  });
+
+  it('FEATURE_FLAGS.useToolLoopAgent=true 时生成标题并通知 UI', async () => {
+    mockFeatureFlags.useToolLoopAgent = true;
+    mockGenerateTitle.mockResolvedValue('测试会话标题');
+    const { result } = renderHook(() => useAgent());
+    const onConversationTitle = vi.fn();
+    result.current.setCallbacks({ onConversationTitle });
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test', name: 'Test', endpoint: 'https://api.test.com', apiKey: 'key',
+        model: 'gpt-4o', isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    await waitFor(() => {
+      expect(mockGenerateTitle).toHaveBeenCalledWith('conv-1', expect.anything(), 'gpt-4o');
+      expect(onConversationTitle).toHaveBeenCalledWith('conv-1', '测试会话标题');
+    });
   });
 
   it('FEATURE_FLAGS.useToolLoopAgent=true 时正确发送 assistant 消息', async () => {

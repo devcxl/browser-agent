@@ -304,10 +304,10 @@ describe('MessageBubble', () => {
         ],
         timestamp: Date.now(),
       };
-      wrappedRender(<MessageBubble message={msg} />);
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
       expect(screen.getByText('bad_tool')).toBeDefined();
-      // error 状态显示 ✕ 图标
-      expect(screen.getByText('✕')).toBeDefined();
+      // error 状态显示危险色状态点
+      expect(container.querySelector('.bg-danger')).toBeDefined();
     });
   });
 });

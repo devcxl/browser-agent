@@ -257,4 +257,76 @@ describe('MessageInput', () => {
 
     expect(onSend).toHaveBeenCalledWith('hello during recording');
   });
+
+  it('按当前 Provider 的模型能力显示思考等级', () => {
+    const provider: ProviderConfig = {
+      id: 'local',
+      name: 'Local Gateway',
+      apiKey: '',
+      isLocalTrusted: true,
+      models: {
+        qwen: {
+          id: 'qwen',
+          name: 'Qwen',
+          limit: { context: 32768, output: 8192 },
+          reasoning: true,
+          reasoningEfforts: ['low', 'high'],
+          defaultReasoningEffort: 'high',
+        },
+      },
+      defaultModelId: 'qwen',
+    };
+
+    wrappedRender(
+      <MessageInput
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        disabled={false}
+        isRunning={false}
+        providers={[provider]}
+        selectedProviderId="local"
+        onSelectProvider={vi.fn()}
+        selectedModelId="qwen"
+        onSelectModel={vi.fn()}
+        reasoningEffort="high"
+        onReasoningEffortChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('provider-select')).toHaveValue('local');
+    expect(screen.getByTestId('model-select')).toHaveValue('qwen');
+    expect(screen.getByTestId('reasoning-select')).toHaveValue('high');
+    expect(screen.getByRole('option', { name: 'Think: low' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'Think: medium' })).toBeNull();
+  });
+
+  it('模型未配置思考等级时展示不支持状态', () => {
+    const provider: ProviderConfig = {
+      id: 'local',
+      name: 'Local Gateway',
+      apiKey: '',
+      isLocalTrusted: true,
+      models: {
+        chat: { id: 'chat', name: 'Chat', limit: { context: 32768, output: 8192 } },
+      },
+      defaultModelId: 'chat',
+    };
+
+    wrappedRender(
+      <MessageInput
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        disabled={false}
+        isRunning={false}
+        providers={[provider]}
+        selectedProviderId="local"
+        onSelectProvider={vi.fn()}
+        selectedModelId="chat"
+        onSelectModel={vi.fn()}
+        onReasoningEffortChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('reasoning-unsupported')).toHaveTextContent('Think: Unsupported');
+  });
 });

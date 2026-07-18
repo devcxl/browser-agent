@@ -18,22 +18,21 @@ describe('ConversationSidebar', () => {
     { id: '2', title: '对话2', updatedAt: Date.now() - 10000 },
   ];
 
+  const defaultProps = {
+    conversations,
+    activeId: null,
+    loading: false,
+    error: null,
+    open: true,
+    onClose: vi.fn(),
+    onSelect: vi.fn(),
+    onNew: vi.fn(),
+    onRename: vi.fn(),
+    onDelete: vi.fn(),
+  };
+
   it('wrappedRenders conversation list', () => {
-    wrappedRender(
-      <ConversationSidebar
-        conversations={conversations}
-        activeId={null}
-        loading={false}
-        error={null}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        onSelect={vi.fn()}
-        onNew={vi.fn()}
-        onRename={vi.fn()}
-        onDelete={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
-    );
+    wrappedRender(<ConversationSidebar {...defaultProps} />);
 
     expect(screen.getByTestId('conversation-sidebar')).toBeDefined();
     expect(screen.getByText('对话1')).toBeDefined();
@@ -41,43 +40,15 @@ describe('ConversationSidebar', () => {
   });
 
   it('highlights active conversation', () => {
-    wrappedRender(
-      <ConversationSidebar
-        conversations={conversations}
-        activeId="1"
-        loading={false}
-        error={null}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        onSelect={vi.fn()}
-        onNew={vi.fn()}
-        onRename={vi.fn()}
-        onDelete={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
-    );
+    wrappedRender(<ConversationSidebar {...defaultProps} activeId="1" />);
 
     const items = screen.getAllByTestId('conversation-item');
-    expect(items[0]?.className).toContain('bg-surface-soft');
+    expect(items[0]?.className).toContain('bg-accent-soft');
   });
 
   it('calls onSelect when item clicked', async () => {
     const onSelect = vi.fn();
-    wrappedRender(
-      <ConversationSidebar
-        conversations={conversations}
-        activeId={null}
-        loading={false}
-        error={null}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        onSelect={onSelect}
-        onNew={vi.fn()}
-        onRename={vi.fn()}
-        onDelete={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
-    );
+    wrappedRender(<ConversationSidebar {...defaultProps} onSelect={onSelect} />);
 
     await userEvent.click(screen.getByText('对话1'));
     expect(onSelect).toHaveBeenCalledWith('1');
@@ -85,84 +56,44 @@ describe('ConversationSidebar', () => {
 
   it('calls onNew when new button clicked', async () => {
     const onNew = vi.fn();
-    wrappedRender(
-      <ConversationSidebar
-        conversations={conversations}
-        activeId={null}
-        loading={false}
-        error={null}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        onSelect={vi.fn()}
-        onNew={onNew}
-        onRename={vi.fn()}
-        onDelete={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
-    );
+    wrappedRender(<ConversationSidebar {...defaultProps} onNew={onNew} />);
 
     await userEvent.click(screen.getByTestId('new-conversation-button'));
     expect(onNew).toHaveBeenCalledOnce();
   });
 
   it('shows empty state', () => {
-    wrappedRender(
-      <ConversationSidebar
-        conversations={[]}
-        activeId={null}
-        loading={false}
-        error={null}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        onSelect={vi.fn()}
-        onNew={vi.fn()}
-        onRename={vi.fn()}
-        onDelete={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
-    );
+    wrappedRender(<ConversationSidebar {...defaultProps} conversations={[]} />);
 
     expect(screen.getByText('暂无会话')).toBeDefined();
   });
 
   it('shows loading state', () => {
-    wrappedRender(
-      <ConversationSidebar
-        conversations={[]}
-        activeId={null}
-        loading={true}
-        error={null}
-        collapsed={false}
-        onToggleCollapse={vi.fn()}
-        onSelect={vi.fn()}
-        onNew={vi.fn()}
-        onRename={vi.fn()}
-        onDelete={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
-    );
+    wrappedRender(<ConversationSidebar {...defaultProps} conversations={[]} loading={true} />);
 
     expect(screen.getByText('加载中...')).toBeDefined();
   });
 
-  it('collapsed mode shows only toggle button', () => {
-    wrappedRender(
-      <ConversationSidebar
-        conversations={conversations}
-        activeId={null}
-        loading={false}
-        error={null}
-        collapsed={true}
-        onToggleCollapse={vi.fn()}
-        onSelect={vi.fn()}
-        onNew={vi.fn()}
-        onRename={vi.fn()}
-        onDelete={vi.fn()}
-        onOpenSettings={vi.fn()}
-      />,
-    );
+  it('closed drawer hides content off-screen', () => {
+    wrappedRender(<ConversationSidebar {...defaultProps} open={false} />);
 
-    expect(screen.getByTestId('conversation-sidebar-toggle')).toBeDefined();
-    expect(screen.queryByText('对话1')).toBeNull();
+    const drawer = screen.getByTestId('conversation-sidebar');
+    expect(drawer.className).toContain('-translate-x-full');
+  });
+
+  it('calls onClose when mask clicked', async () => {
+    const onClose = vi.fn();
+    wrappedRender(<ConversationSidebar {...defaultProps} onClose={onClose} />);
+
+    await userEvent.click(screen.getByTestId('drawer-mask'));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('calls onClose when toggle button clicked', async () => {
+    const onClose = vi.fn();
+    wrappedRender(<ConversationSidebar {...defaultProps} onClose={onClose} />);
+
+    await userEvent.click(screen.getByTestId('conversation-sidebar-toggle'));
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });
