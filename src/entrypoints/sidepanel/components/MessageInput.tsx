@@ -3,6 +3,7 @@ import { cn } from '../utils';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useI18n } from '../i18n/useI18n';
+import { ChatSelect } from './ChatSelect';
 
 interface Props {
   onSend: (text: string) => void;
@@ -151,7 +152,16 @@ export function MessageInput({
   const reasoningEfforts = activeModel?.reasoning ? activeModel.reasoningEfforts ?? [] : [];
   const isHome = variant === 'home';
 
+  const [openSelectId, setOpenSelectId] = useState<string | null>(null);
+
   const micButton = renderMicButton();
+
+  const providerOptions = providers.map((p) => ({ value: p.id, label: p.name }));
+  const modelOptions = models.map((m) => ({ value: m.id, label: m.name || m.id }));
+  const reasoningOptions: { value: string; label: string }[] = [
+    { value: '', label: t('chat.configuration.reasoningOff') },
+    ...reasoningEfforts.map((e) => ({ value: e, label: e })),
+  ];
 
   return (
     <div className={cn(!isHome && 'border-t border-hairline bg-canvas px-3 pt-2 pb-3')}>
@@ -185,47 +195,47 @@ export function MessageInput({
         <div className="flex items-center gap-2 px-2.5 pb-2.5">
           {hasConfigRow && (
             <>
-              <select
-                data-testid="provider-select"
+              <ChatSelect
+                id="provider-select"
+                label={t('chat.configuration.provider')}
                 value={activeProvider?.id ?? ''}
-                onChange={(e) => onSelectProvider(e.target.value)}
-                className="max-w-[35%] px-2.5 py-1 text-xs font-medium border-none rounded-full bg-surface-soft text-body hover:text-ink focus:outline-none cursor-pointer truncate"
-              >
-                {providers.map((provider) => (
-                  <option key={provider.id} value={provider.id}>{provider.name}</option>
-                ))}
-              </select>
+                options={providerOptions}
+                onChange={onSelectProvider}
+                openSelectId={openSelectId}
+                onOpenChange={setOpenSelectId}
+              />
 
               {models.length > 0 ? (
-                <select
-                  data-testid="model-select"
+                <ChatSelect
+                  id="model-select"
+                  label={t('chat.configuration.model')}
                   value={selectedModelId}
-                  onChange={(e) => onSelectModel(e.target.value)}
-                  className="max-w-[45%] px-2.5 py-1 text-xs font-medium border-none rounded-full bg-surface-soft text-body hover:text-ink focus:outline-none cursor-pointer truncate"
-                >
-                  {models.map((model) => (
-                    <option key={model.id} value={model.id}>{model.name}</option>
-                  ))}
-                </select>
+                  options={modelOptions}
+                  onChange={onSelectModel}
+                  disabled={!selectedProviderId}
+                  openSelectId={openSelectId}
+                  onOpenChange={setOpenSelectId}
+                />
               ) : (
                 <span className="text-xs text-mute">No models configured</span>
               )}
 
               {reasoningEfforts.length > 0 ? (
-                <select
-                  data-testid="reasoning-select"
+                <ChatSelect
+                  id="reasoning-select"
+                  label={t('chat.configuration.reasoning')}
                   value={reasoningEffort ?? ''}
-                  onChange={(e) => onReasoningEffortChange(e.target.value ? e.target.value as ReasoningEffort : undefined)}
-                  className="px-2.5 py-1 text-xs font-medium border-none rounded-full bg-surface-soft text-body hover:text-ink focus:outline-none cursor-pointer"
-                  title="Reasoning effort"
-                >
-                  <option value="">Think: Off</option>
-                  {reasoningEfforts.map((effort) => (
-                    <option key={effort} value={effort}>Think: {effort}</option>
-                  ))}
-                </select>
+                  options={reasoningOptions}
+                  onChange={(v) => onReasoningEffortChange?.(v ? (v as ReasoningEffort) : undefined)}
+                  disabled={reasoningEfforts.length === 0}
+                  openSelectId={openSelectId}
+                  onOpenChange={setOpenSelectId}
+                />
               ) : (
-                <span data-testid="reasoning-unsupported" className="px-2.5 py-1 text-xs text-mute rounded-full bg-surface-soft">
+                <span
+                  data-testid="reasoning-unsupported"
+                  className="px-2.5 py-1 text-xs text-mute rounded-full bg-surface-soft"
+                >
                   Think: Unsupported
                 </span>
               )}

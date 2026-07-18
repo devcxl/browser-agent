@@ -258,7 +258,7 @@ describe('MessageInput', () => {
     expect(onSend).toHaveBeenCalledWith('hello during recording');
   });
 
-  it('按当前 Provider 的模型能力显示思考等级', () => {
+  it('按当前 Provider 的模型能力显示思考等级', async () => {
     const provider: ProviderConfig = {
       id: 'local',
       name: 'Local Gateway',
@@ -293,11 +293,23 @@ describe('MessageInput', () => {
       />,
     );
 
-    expect(screen.getByTestId('provider-select')).toHaveValue('local');
-    expect(screen.getByTestId('model-select')).toHaveValue('qwen');
-    expect(screen.getByTestId('reasoning-select')).toHaveValue('high');
-    expect(screen.getByRole('option', { name: 'Think: low' })).toBeTruthy();
-    expect(screen.queryByRole('option', { name: 'Think: medium' })).toBeNull();
+    // Provider combobox 显示正确的 provider 名称
+    const providerBtn = screen.getByRole('combobox', { name: 'Provider' });
+    expect(providerBtn).toHaveTextContent('Local Gateway');
+
+    // Model combobox 显示正确的 model 名称
+    const modelBtn = screen.getByRole('combobox', { name: '模型' });
+    expect(modelBtn).toHaveTextContent('Qwen');
+
+    // Reasoning combobox 显示正确的 reasoning 值
+    const reasoningBtn = screen.getByRole('combobox', { name: '思考' });
+    expect(reasoningBtn).toHaveTextContent('high');
+
+    // 打开 reasoning 菜单，检查选项
+    await userEvent.click(reasoningBtn);
+    expect(screen.getByRole('option', { name: 'low' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: 'high' })).toBeTruthy();
+    expect(screen.queryByRole('option', { name: 'medium' })).toBeNull();
   });
 
   it('模型未配置思考等级时展示不支持状态', () => {

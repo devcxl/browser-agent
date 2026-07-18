@@ -58,6 +58,12 @@
       "result": "Result",
       "copy": "Copy",
       "copied": "Copied"
+    },
+    "configuration": {
+      "provider": "Provider",
+      "model": "Model",
+      "reasoning": "Reasoning",
+      "reasoningOff": "Off"
     }
   },
   "settings": {

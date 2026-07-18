@@ -58,6 +58,12 @@
       "result": "结果",
       "copy": "复制",
       "copied": "已复制"
+    },
+    "configuration": {
+      "provider": "Provider",
+      "model": "模型",
+      "reasoning": "思考",
+      "reasoningOff": "关闭"
     }
   },
   "settings": {
