@@ -8,6 +8,7 @@ import type { ToolResult, RiskLevel } from '@/shared/types/tool';
 import { ToolLoopAgent, isStepCount, isLoopFinished } from 'ai';
 import type {
   ModelMessage,
+  ToolModelMessage,
   Tool as AISdkTool,
   StepResult,
   LanguageModel,
@@ -528,8 +529,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
               toolName: toolName ?? '',
               output: { type: 'text', value: msg.content },
             },
-          ] as ModelMessage,
-        } as ModelMessage;
+          ],
+        } satisfies ToolModelMessage;
       default:
         return { role: 'user', content: msg.content };
     }

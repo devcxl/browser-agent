@@ -542,8 +542,8 @@ export async function registerBuiltinSkills(): Promise<void> {
   const { SkillStore } = await import('@/shared/storage');
   const skillStore = SkillStore.getInstance();
 
-  const result = await browser.storage.local.get('builtin_skills_version');
-  const storedVersion = (result as Record<string, unknown>).builtin_skills_version as number | undefined;
+  const result = await browser.storage.local.get(BUILTIN_VERSION_KEY);
+  const storedVersion = (result as Record<string, unknown>)[BUILTIN_VERSION_KEY] as number | undefined;
   const needsUpdate = storedVersion !== CURRENT_VERSION;
 
   const existingSkills = await skillStore.getAll();
@@ -572,7 +572,7 @@ export async function registerBuiltinSkills(): Promise<void> {
   }
 
   if (needsUpdate) {
-    await browser.storage.local.set({ builtin_skills_version: CURRENT_VERSION });
+    await browser.storage.local.set({ [BUILTIN_VERSION_KEY]: CURRENT_VERSION });
   }
 }
 
