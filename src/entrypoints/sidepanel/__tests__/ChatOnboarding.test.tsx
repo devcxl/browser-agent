@@ -221,7 +221,7 @@ describe('ChatOnboarding', () => {
     });
   });
 
-  it('无 Provider 时自动弹出引导', async () => {
+  it('无 Provider 时自动弹出引导并从模板步骤开始', async () => {
     mockBrowserHolder.storage = makeBaseStorage({ providers: [] });
 
     renderApp();
@@ -229,6 +229,10 @@ describe('ChatOnboarding', () => {
     await waitFor(() => {
       expect(screen.getByTestId('provider-wizard')).toBeTruthy();
     });
+
+    // Should show template step (not connection)
+    expect(screen.getByTestId('custom-template-button')).toBeTruthy();
+    expect(screen.queryByTestId('provider-name-input')).toBeNull();
   });
 
   it('残缺 Provider 时弹出引导并进入正确步骤 (有 endpoint 无模型 → models step)', async () => {

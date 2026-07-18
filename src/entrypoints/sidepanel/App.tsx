@@ -151,7 +151,7 @@ function ChatLayout() {
 
     const firstIncomplete = providers[0];
     const readiness = firstIncomplete ? getProviderReadiness(firstIncomplete) : null;
-    const initialStep = readiness?.initialStep ?? ('connection' as ProviderWizardStep);
+    const initialStep = readiness?.initialStep ?? undefined;
 
     setOnboardingRequest({
       provider: firstIncomplete,
@@ -203,7 +203,7 @@ function ChatLayout() {
   const handleReopenWizard = useCallback(() => {
     const firstIncomplete = providers[0];
     const readiness = firstIncomplete ? getProviderReadiness(firstIncomplete) : null;
-    const initialStep = readiness?.initialStep ?? ('connection' as ProviderWizardStep);
+    const initialStep = readiness?.initialStep ?? undefined;
 
     setOnboardingRequest({
       provider: firstIncomplete,
