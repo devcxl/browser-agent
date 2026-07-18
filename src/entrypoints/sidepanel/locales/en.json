@@ -279,24 +279,24 @@
     "title": "How can I help?",
     "subtitle": "Manage tabs, windows and bookmarks in one sentence",
     "sug1": {
-      "title": "Organize tabs",
-      "desc": "Group tabs in current window by domain",
-      "prompt": "Group tabs in the current window by domain"
+      "title": "Organize tabs intelligently",
+      "desc": "Suggest groups based on purpose, task, and content relevance",
+      "prompt": "Analyze all tabs in the current window and propose sensible groups based on page purpose, task, and content relevance. Do not group solely by domain: different sites used for the same task may belong together, while pages from the same site may belong in different groups when their purposes differ. First list each suggested group, its tabs, and the reasoning. Wait for my confirmation before moving or grouping anything."
     },
     "sug2": {
-      "title": "Mute all tabs",
-      "desc": "Find audible tabs and mute them",
-      "prompt": "Mute all tabs that are playing sound"
+      "title": "Find duplicate tabs",
+      "desc": "List tabs with duplicate URLs without closing them",
+      "prompt": "Find tabs with duplicate URLs in the current window and list their titles, URLs, and groups. Do not close any tabs yet."
     },
     "sug3": {
-      "title": "Save session",
-      "desc": "Save current window as a restorable session",
-      "prompt": "Save the current window as a session"
+      "title": "Find sound sources",
+      "desc": "Find audible tabs without muting them",
+      "prompt": "Find tabs that are currently playing sound and list their titles, URLs, and windows. Do not mute, close, or switch tabs."
     },
     "sug4": {
-      "title": "Close duplicates",
-      "desc": "Close tabs with duplicate URLs",
-      "prompt": "Close tabs with duplicate URLs"
+      "title": "Recently closed",
+      "desc": "Review recently closed tabs and windows",
+      "prompt": "Review recently closed tabs and windows, ordered from most recently closed, and list their titles and URLs. Do not restore anything automatically."
     }
   }
 }
