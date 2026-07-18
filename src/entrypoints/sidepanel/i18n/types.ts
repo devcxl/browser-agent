@@ -60,6 +60,14 @@ export interface MessageSchema {
       thinking: string;
       params: string;
       result: string;
+      copy: string;
+      copied: string;
+    };
+    configuration: {
+      provider: string;
+      model: string;
+      reasoning: string;
+      reasoningOff: string;
     };
   };
   settings: {
