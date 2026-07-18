@@ -95,7 +95,6 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof SettingsPanel>
     providers: [],
     agentSettings: {
       maxToolRounds: 10,
-      maxContextMessages: 50,
       contextWindowTokens: 128000,
       tokenBudgetMargin: 4096,
       microcompactKeepRecent: 10,
@@ -130,17 +129,51 @@ function renderWithI18n(ui: React.ReactElement) {
   return render(<I18nProvider>{ui}</I18nProvider>);
 }
 
+async function openProviderSettings() {
+  await userEvent.click(screen.getByTestId('settings-provider-tab'));
+}
+
 // ==================== 测试用例 ====================
 
-describe('SettingsPanel - Provider wizard', () => {
+describe('SettingsPanel', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     await mockBrowser.local.set({ preferences: { language: 'zh-CN' } });
   });
 
+  it('默认将外观放在首个 Tab 并使用互斥的自定义下拉', async () => {
+    const props = makeProps();
+    renderWithI18n(<SettingsPanel {...props} />);
+
+    const appearanceTab = screen.getByTestId('settings-appearance-tab');
+    expect(appearanceTab.parentElement?.firstElementChild).toBe(appearanceTab);
+    const themeSelect = screen.getByRole('combobox', { name: '主题' });
+    const languageSelect = screen.getByRole('combobox', { name: '界面语言' });
+    expect(themeSelect).toBeTruthy();
+    expect(languageSelect).toBeTruthy();
+    expect(screen.queryByTestId('add-provider-button')).toBeNull();
+
+    await userEvent.click(themeSelect);
+    expect(screen.getByRole('listbox', { name: '主题' })).toBeTruthy();
+    await userEvent.click(languageSelect);
+    expect(screen.queryByRole('listbox', { name: '主题' })).toBeNull();
+    expect(screen.getByRole('listbox', { name: '界面语言' })).toBeTruthy();
+  });
+
+  it('Agent 设置使用执行步数并移除消息数上限', async () => {
+    const props = makeProps();
+    renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+
+    expect(screen.getByText('单次任务最大执行步数')).toBeTruthy();
+    expect(screen.queryByText('上下文最大消息数')).toBeNull();
+  });
+
   it('点击 Add Provider 按钮应打开三步配置器', async () => {
     const props = makeProps();
     renderWithI18n(<SettingsPanel {...props} />);
+    await openProviderSettings();
 
     await userEvent.click(screen.getByTestId('add-provider-button'));
 
@@ -152,6 +185,7 @@ describe('SettingsPanel - Provider wizard', () => {
   it('选择兼容模板后应显示连接配置', async () => {
     const props = makeProps();
     renderWithI18n(<SettingsPanel {...props} />);
+    await openProviderSettings();
 
     await userEvent.click(screen.getByTestId('add-provider-button'));
     await userEvent.click(screen.getByTestId('custom-template-button'));
@@ -161,7 +195,7 @@ describe('SettingsPanel - Provider wizard', () => {
     expect(screen.getByTestId('provider-api-input')).toBeTruthy();
   });
 
-  it('已有 provider 时应显示默认模型与模型数量', () => {
+  it('已有 provider 时应显示默认模型与模型数量', async () => {
     const provider = makeProvider({
       models: {
         'gpt-test': { id: 'gpt-test', name: 'GPT Test', limit: { context: 32768, output: 8192 } },
@@ -170,6 +204,7 @@ describe('SettingsPanel - Provider wizard', () => {
     });
     const props = makeProps({ providers: [provider] });
     renderWithI18n(<SettingsPanel {...props} />);
+    await openProviderSettings();
 
     expect(screen.getByText('Test Provider')).toBeTruthy();
     expect(screen.getByText(/Default: GPT Test/)).toBeTruthy();
@@ -180,6 +215,7 @@ describe('SettingsPanel - Provider wizard', () => {
     const provider = makeProvider();
     const props = makeProps({ providers: [provider], onSaveProviders: onSave });
     renderWithI18n(<SettingsPanel {...props} />);
+    await openProviderSettings();
 
     await userEvent.click(screen.getByText('删除'));
 
@@ -191,6 +227,7 @@ describe('SettingsPanel - Provider wizard', () => {
     const onSave = vi.fn();
     const props = makeProps({ onSaveProviders: onSave });
     renderWithI18n(<SettingsPanel {...props} />);
+    await openProviderSettings();
 
     await userEvent.click(screen.getByTestId('add-provider-button'));
     await userEvent.click(screen.getByTestId('custom-template-button'));

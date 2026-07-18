@@ -86,7 +86,7 @@
       "agent": "Agent",
       "expert": "Expert Mode",
       "skills": "Skills",
-      "language": "Language"
+      "appearance": "Appearance"
     },
     "provider": {
       "noProviders": "No providers configured",
@@ -179,8 +179,7 @@
       }
     },
     "agent": {
-      "maxToolRounds": "Max Tool Rounds",
-      "maxContextMessages": "Max Context Messages",
+      "maxToolRounds": "Max Steps per Task",
       "contextWindowTokens": "Context Window Tokens",
       "tokenBudgetMargin": "Token Budget Margin",
       "microcompactKeepRecent": "Microcompact: Keep Recent Count",

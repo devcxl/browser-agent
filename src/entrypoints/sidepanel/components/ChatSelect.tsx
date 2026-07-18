@@ -16,11 +16,12 @@ export interface ChatSelectProps {
   disabled?: boolean;
   openSelectId?: string | null;
   onOpenChange?: (id: string | null) => void;
+  variant?: 'pill' | 'field';
 }
 
 /** 根据选项数量和预估行高估算菜单高度 */
-function estimateMenuHeight(optionCount: number): number {
-  return Math.min(optionCount * 32 + 8, 240);
+function estimateMenuHeight(optionCount: number, rowHeight: number): number {
+  return Math.min(optionCount * rowHeight + 8, 240);
 }
 
 export function ChatSelect({
@@ -32,6 +33,7 @@ export function ChatSelect({
   disabled = false,
   openSelectId = null,
   onOpenChange,
+  variant = 'pill',
 }: ChatSelectProps) {
   const isOpen = openSelectId === id;
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -51,7 +53,7 @@ export function ChatSelect({
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const estimatedHeight = estimateMenuHeight(options.length);
+    const estimatedHeight = estimateMenuHeight(options.length, variant === 'field' ? 36 : 32);
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const flip = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
@@ -60,12 +62,10 @@ export function ChatSelect({
       position: 'fixed',
       left: rect.left,
       width: Math.max(rect.width, 160),
-      top: flip
-        ? rect.top - Math.min(estimatedHeight, availableHeight)
-        : rect.bottom,
+      top: flip ? rect.top - Math.min(estimatedHeight, availableHeight) : rect.bottom,
       maxHeight: Math.min(availableHeight, 240),
     });
-  }, [options.length]);
+  }, [options.length, variant]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -168,7 +168,7 @@ export function ChatSelect({
   const selectedOption = options.find((o) => o.value === value);
 
   return (
-    <div className="relative">
+    <div className={cn('relative', variant === 'field' && 'w-full')}>
       <button
         ref={triggerRef}
         type="button"
@@ -176,9 +176,7 @@ export function ChatSelect({
         aria-expanded={isOpen}
         aria-controls={isOpen ? `${id}-listbox` : undefined}
         aria-activedescendant={
-          isOpen && activeIndex >= 0
-            ? `${id}-option-${activeIndex}`
-            : undefined
+          isOpen && activeIndex >= 0 ? `${id}-option-${activeIndex}` : undefined
         }
         aria-label={label}
         disabled={disabled}
@@ -187,19 +185,34 @@ export function ChatSelect({
         }}
         onKeyDown={handleKeyDown}
         className={cn(
-          'px-2.5 py-1 text-xs font-medium border-none rounded-full',
-          'bg-surface-soft text-body hover:text-ink',
-          'focus:outline-none cursor-pointer text-left',
-          'flex items-center gap-1 max-w-[200px]',
+          'flex cursor-pointer items-center text-left focus:outline-none',
+          variant === 'field'
+            ? 'w-full justify-between gap-2 rounded-lg border border-hairline bg-surface-card px-3 py-2 text-sm text-ink shadow-sm transition-colors hover:border-hairline-strong focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15'
+            : 'max-w-[200px] gap-1 rounded-full border-none bg-surface-soft px-2.5 py-1 text-xs font-medium text-body hover:text-ink',
           disabled && 'opacity-40 cursor-not-allowed',
         )}
       >
-        <span className="truncate">
-          {selectedOption?.label || value || label}
-        </span>
-        <span className="shrink-0 text-mute" aria-hidden="true">
-          ▼
-        </span>
+        <span className="truncate">{selectedOption?.label || value || label}</span>
+        {variant === 'field' ? (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 20 20"
+            fill="none"
+            className="size-4 shrink-0 text-mute"
+          >
+            <path
+              d="m6 8 4 4 4-4"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : (
+          <span className="shrink-0 text-mute" aria-hidden="true">
+            ▼
+          </span>
+        )}
       </button>
 
       {isOpen &&
@@ -223,7 +236,8 @@ export function ChatSelect({
                 role="option"
                 aria-selected={opt.value === value}
                 className={cn(
-                  'px-3 py-1.5 text-xs cursor-pointer truncate select-none',
+                  'cursor-pointer truncate px-3 select-none',
+                  variant === 'field' ? 'py-2 text-sm' : 'py-1.5 text-xs',
                   'hover:bg-accent-soft',
                   i === activeIndex && 'bg-accent-soft',
                   opt.value === value && 'font-semibold text-ink',

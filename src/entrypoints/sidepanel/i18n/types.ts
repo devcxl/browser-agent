@@ -80,6 +80,7 @@ export interface MessageSchema {
     title: string;
     language: string;
     tabs: {
+      appearance: string;
       provider: string;
       agent: string;
       expert: string;
@@ -168,7 +169,6 @@ export interface MessageSchema {
     };
     agent: {
       maxToolRounds: string;
-      maxContextMessages: string;
       contextWindowTokens: string;
       tokenBudgetMargin: string;
       microcompactKeepRecent: string;

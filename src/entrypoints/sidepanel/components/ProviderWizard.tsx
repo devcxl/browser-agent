@@ -5,6 +5,7 @@ import { useI18n } from '../i18n/useI18n';
 import { isProviderModelValid } from '../provider-readiness';
 import type { ProviderWizardStep } from '../provider-readiness';
 import { cn } from '../utils';
+import { SettingsCheckbox, SettingsInput, SettingsRadio } from './SettingsControls';
 
 interface Props {
   provider?: ProviderConfig;
@@ -199,11 +200,10 @@ export function ProviderWizard({ provider, onSave, onClose, initialStep }: Props
             <div className="text-sm font-medium text-ink">{t('settings.provider.wizard.template.useCustom')}</div>
             <div className="text-xs text-mute mt-1">{t('settings.provider.wizard.template.useCustomDesc')}</div>
           </button>
-          <input
+          <SettingsInput
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t('settings.provider.wizard.template.searchPlaceholder')}
-            className="w-full px-3 py-2 text-sm border border-hairline rounded-lg bg-surface-soft text-ink focus:outline-none focus:border-primary"
           />
           <div className="max-h-64 overflow-y-auto border border-hairline rounded-xl divide-y divide-hairline">
             {filteredCatalog.map((item) => (
@@ -226,39 +226,39 @@ export function ProviderWizard({ provider, onSave, onClose, initialStep }: Props
           </div>
           <label className="block text-sm text-mute">
             {t('settings.provider.wizard.connection.nameLabel')}
-            <input
+            <SettingsInput
               data-testid="provider-name-input"
               value={draft.name}
               onChange={(event) => updateDraft({ name: event.target.value })}
               placeholder={t('settings.provider.wizard.connection.namePlaceholder')}
-              className="mt-1 w-full px-3 py-2 border border-hairline rounded-lg bg-surface-soft text-ink focus:outline-none focus:border-primary"
+              className="mt-1"
             />
           </label>
           <label className="block text-sm text-mute">
             {t('settings.provider.wizard.connection.endpointLabel')}
-            <input
+            <SettingsInput
               data-testid="provider-api-input"
               type="url"
               value={draft.api ?? ''}
               onChange={(event) => updateDraft({ api: event.target.value, endpoint: event.target.value })}
               placeholder={t('settings.provider.wizard.connection.endpointPlaceholder')}
-              className="mt-1 w-full px-3 py-2 border border-hairline rounded-lg bg-surface-soft text-ink focus:outline-none focus:border-primary"
+              className="mt-1"
             />
           </label>
           <label className="block text-sm text-mute">
             {t('settings.provider.wizard.connection.apiKeyLabel')}
-            <input
+            <SettingsInput
               data-testid="provider-apikey-input"
               type="password"
               value={draft.apiKey}
               onChange={(event) => updateDraft({ apiKey: event.target.value })}
               placeholder={t('settings.provider.wizard.connection.apiKeyPlaceholder')}
-              className="mt-1 w-full px-3 py-2 border border-hairline rounded-lg bg-surface-soft text-ink focus:outline-none focus:border-primary"
+              className="mt-1"
             />
           </label>
-          <label className="flex items-center gap-2 text-sm text-mute">
-            <input type="checkbox" checked={draft.isLocalTrusted} onChange={(event) => updateDraft({ isLocalTrusted: event.target.checked })} />
-            {' '}{t('settings.provider.wizard.connection.trustedLabel')}
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-mute">
+            <SettingsCheckbox checked={draft.isLocalTrusted} onChange={(event) => updateDraft({ isLocalTrusted: event.target.checked })} />
+            {t('settings.provider.wizard.connection.trustedLabel')}
           </label>
           <div className="flex justify-between pt-2">
             <button type="button" onClick={() => (provider ? onClose() : setStep('template'))} className="px-3 py-2 text-sm text-mute hover:text-ink">
@@ -297,9 +297,9 @@ export function ProviderWizard({ provider, onSave, onClose, initialStep }: Props
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium text-ink">{model.name || t('settings.provider.wizard.models.newModel')}</span>
                   <div className="flex gap-2">
-                    <label className="text-xs text-mute">
-                      <input type="radio" name="default-model" checked={isDefault} onChange={() => updateDraft({ defaultModelId: model.id })} />
-                      {' '}{t('settings.provider.wizard.models.defaultModel')}
+                    <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-mute">
+                      <SettingsRadio name="default-model" checked={isDefault} onChange={() => updateDraft({ defaultModelId: model.id })} />
+                      {t('settings.provider.wizard.models.defaultModel')}
                     </label>
                     <button type="button" onClick={() => removeModel(key)} className="text-xs text-danger">
                       {t('settings.provider.wizard.models.deleteModel')}
@@ -307,29 +307,29 @@ export function ProviderWizard({ provider, onSave, onClose, initialStep }: Props
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <input value={model.id} onChange={(event) => updateModel(key, { id: event.target.value })} placeholder={t('settings.provider.wizard.models.idPlaceholder')} className="px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink" />
-                  <input value={model.name} onChange={(event) => updateModel(key, { name: event.target.value })} placeholder={t('settings.provider.wizard.models.namePlaceholder')} className="px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink" />
-                  <input type="number" value={model.limit?.context ?? ''} onChange={(event) => updateModel(key, { limit: { ...model.limit, context: Number(event.target.value) } })} placeholder={t('settings.provider.wizard.models.contextPlaceholder')} className="px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink" />
-                  <input type="number" value={model.limit?.output ?? ''} onChange={(event) => updateModel(key, { limit: { ...model.limit, output: Number(event.target.value) } })} placeholder={t('settings.provider.wizard.models.maxOutputPlaceholder')} className="px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink" />
-                  <input type="number" value={model.defaults?.maxOutputTokens ?? ''} onChange={(event) => updateModel(key, { defaults: { ...model.defaults, maxOutputTokens: Number(event.target.value) } })} placeholder={t('settings.provider.wizard.models.defaultOutputPlaceholder')} className="px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink" />
-                  <input type="number" step="0.1" value={model.defaults?.temperature ?? ''} onChange={(event) => updateModel(key, { defaults: { ...model.defaults, temperature: Number(event.target.value) } })} placeholder={t('settings.provider.wizard.models.temperaturePlaceholder')} className="px-2 py-1.5 text-xs border border-hairline rounded-md bg-surface-soft text-ink" />
+                  <SettingsInput compact value={model.id} onChange={(event) => updateModel(key, { id: event.target.value })} placeholder={t('settings.provider.wizard.models.idPlaceholder')} />
+                  <SettingsInput compact value={model.name} onChange={(event) => updateModel(key, { name: event.target.value })} placeholder={t('settings.provider.wizard.models.namePlaceholder')} />
+                  <SettingsInput compact type="number" value={model.limit?.context ?? ''} onChange={(event) => updateModel(key, { limit: { ...model.limit, context: Number(event.target.value) } })} placeholder={t('settings.provider.wizard.models.contextPlaceholder')} />
+                  <SettingsInput compact type="number" value={model.limit?.output ?? ''} onChange={(event) => updateModel(key, { limit: { ...model.limit, output: Number(event.target.value) } })} placeholder={t('settings.provider.wizard.models.maxOutputPlaceholder')} />
+                  <SettingsInput compact type="number" value={model.defaults?.maxOutputTokens ?? ''} onChange={(event) => updateModel(key, { defaults: { ...model.defaults, maxOutputTokens: Number(event.target.value) } })} placeholder={t('settings.provider.wizard.models.defaultOutputPlaceholder')} />
+                  <SettingsInput compact type="number" step="0.1" value={model.defaults?.temperature ?? ''} onChange={(event) => updateModel(key, { defaults: { ...model.defaults, temperature: Number(event.target.value) } })} placeholder={t('settings.provider.wizard.models.temperaturePlaceholder')} />
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-mute">
-                  <label>
-                    <input type="checkbox" checked={model.tool_call ?? false} onChange={(event) => updateModel(key, { tool_call: event.target.checked })} />
-                    {' '}{t('settings.provider.wizard.models.supportsTools')}
+                  <label className="inline-flex cursor-pointer items-center gap-1.5">
+                    <SettingsCheckbox checked={model.tool_call ?? false} onChange={(event) => updateModel(key, { tool_call: event.target.checked })} />
+                    {t('settings.provider.wizard.models.supportsTools')}
                   </label>
-                  <label>
-                    <input type="checkbox" checked={model.reasoning ?? false} onChange={(event) => updateModel(key, { reasoning: event.target.checked, reasoningEfforts: event.target.checked ? selectedEfforts : [], defaultReasoningEffort: event.target.checked ? model.defaultReasoningEffort : undefined })} />
-                    {' '}{t('settings.provider.wizard.models.supportsReasoning')}
+                  <label className="inline-flex cursor-pointer items-center gap-1.5">
+                    <SettingsCheckbox checked={model.reasoning ?? false} onChange={(event) => updateModel(key, { reasoning: event.target.checked, reasoningEfforts: event.target.checked ? selectedEfforts : [], defaultReasoningEffort: event.target.checked ? model.defaultReasoningEffort : undefined })} />
+                    {t('settings.provider.wizard.models.supportsReasoning')}
                   </label>
                   {model.reasoning && EFFORTS.map((effort) => (
-                    <label key={effort}>
-                      <input type="checkbox" checked={selectedEfforts.includes(effort)} onChange={(event) => {
+                    <label key={effort} className="inline-flex cursor-pointer items-center gap-1.5">
+                      <SettingsCheckbox checked={selectedEfforts.includes(effort)} onChange={(event) => {
                         const next = event.target.checked ? [...selectedEfforts, effort] : selectedEfforts.filter((item) => item !== effort);
                         updateModel(key, { reasoningEfforts: next, defaultReasoningEffort: next.includes(model.defaultReasoningEffort ?? '') ? model.defaultReasoningEffort : next[0] });
                       }} />
-                      {' '}{t(`settings.agent.reasoningOptions.${effort}`)}
+                      {t(`settings.agent.reasoningOptions.${effort}`)}
                     </label>
                   ))}
                 </div>

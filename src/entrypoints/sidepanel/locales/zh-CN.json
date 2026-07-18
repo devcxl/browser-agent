@@ -86,7 +86,7 @@
       "agent": "Agent",
       "expert": "Expert Mode",
       "skills": "Skills",
-      "language": "语言"
+      "appearance": "外观"
     },
     "provider": {
       "noProviders": "暂无 Provider 配置",
@@ -179,8 +179,7 @@
       }
     },
     "agent": {
-      "maxToolRounds": "最大工具调用轮次",
-      "maxContextMessages": "上下文最大消息数",
+      "maxToolRounds": "单次任务最大执行步数",
       "contextWindowTokens": "上下文窗口 Token 上限",
       "tokenBudgetMargin": "Token 预算安全边际",
       "microcompactKeepRecent": "工具结果微压缩：保留最近条数",

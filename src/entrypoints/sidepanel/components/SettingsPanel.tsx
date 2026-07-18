@@ -9,6 +9,13 @@ import { useI18n } from '../i18n/useI18n';
 import { EXPERT_API_DOMAINS } from '@/shared/types';
 import { applyTheme } from '../theme';
 import { ProviderWizard } from './ProviderWizard';
+import {
+  SettingsCheckbox,
+  SettingsInput,
+  SettingsSelect,
+  SettingsSwitch,
+  SettingsTextarea,
+} from './SettingsControls';
 
 interface Props {
   providers: ProviderConfig[];
@@ -32,8 +39,9 @@ export function SettingsPanel({
   onClose,
 }: Props) {
   const { t, locale, setLanguage } = useI18n();
-  const [tab, setTab] = useState<'provider' | 'agent' | 'expert' | 'skills' | 'language'>('provider');
+  const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'skills'>('appearance');
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
+  const [openSelectId, setOpenSelectId] = useState<string | null>(null);
 
   // Provider
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null | undefined>(undefined);
@@ -209,11 +217,17 @@ export function SettingsPanel({
         </div>
 
         <div className="flex border-b border-hairline px-5">
-          {(['provider', 'agent', 'expert', 'skills', 'language'] as const).map((tabKey) => (
+          {(['appearance', 'provider', 'agent', 'expert', 'skills'] as const).map((tabKey) => (
             <button
               key={tabKey}
               type="button"
-              data-testid={tabKey === 'provider' ? 'settings-provider-tab' : undefined}
+              data-testid={
+                tabKey === 'appearance'
+                  ? 'settings-appearance-tab'
+                  : tabKey === 'provider'
+                    ? 'settings-provider-tab'
+                    : undefined
+              }
               onClick={() => setTab(tabKey)}
               className={cn(
                 'px-3 py-2 text-sm font-medium border-b-2 transition-colors',
@@ -266,39 +280,26 @@ export function SettingsPanel({
             <div className="space-y-3">
               <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.maxToolRounds')}</span>
-                <input
+                <SettingsInput
                   type="number"
                   value={agentSettings.maxToolRounds}
                   onChange={(e) =>
                     onSaveAgentSettings({ ...agentSettings, maxToolRounds: Number(e.target.value) })
                   }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  containerClassName="mt-1"
                   min={1}
                   max={100}
                 />
               </label>
               <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.maxContextMessages')}</span>
-                <input
-                  type="number"
-                  value={agentSettings.maxContextMessages}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, maxContextMessages: Number(e.target.value) })
-                  }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
-                  min={1}
-                  max={200}
-                />
-              </label>
-              <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.tokenBudgetMargin')}</span>
-                <input
+                <SettingsInput
                   type="number"
                   value={agentSettings.tokenBudgetMargin}
                   onChange={(e) =>
                     onSaveAgentSettings({ ...agentSettings, tokenBudgetMargin: Number(e.target.value) })
                   }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  containerClassName="mt-1"
                   min={256}
                   max={32768}
                   step={256}
@@ -306,26 +307,26 @@ export function SettingsPanel({
               </label>
               <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.microcompactKeepRecent')}</span>
-                <input
+                <SettingsInput
                   type="number"
                   value={agentSettings.microcompactKeepRecent}
                   onChange={(e) =>
                     onSaveAgentSettings({ ...agentSettings, microcompactKeepRecent: Number(e.target.value) })
                   }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  containerClassName="mt-1"
                   min={0}
                   max={100}
                 />
               </label>
               <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.microcompactMinChars')}</span>
-                <input
+                <SettingsInput
                   type="number"
                   value={agentSettings.microcompactMinChars}
                   onChange={(e) =>
                     onSaveAgentSettings({ ...agentSettings, microcompactMinChars: Number(e.target.value) })
                   }
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  containerClassName="mt-1"
                   min={100}
                   max={100000}
                   step={100}
@@ -333,7 +334,7 @@ export function SettingsPanel({
               </label>
               <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.microcompactExcludeTools')}</span>
-                <input
+                <SettingsInput
                   type="text"
                   value={agentSettings.microcompactExcludeTools.join(', ')}
                   onChange={(e) =>
@@ -346,18 +347,18 @@ export function SettingsPanel({
                     })
                   }
                   placeholder={t('settings.agent.microcompactExcludeToolsPlaceholder')}
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
+                  className="mt-1"
                 />
               </label>
               <label className="block">
                 <span className="text-sm text-mute">{t('settings.agent.systemPrompt')}</span>
-                <textarea
+                <SettingsTextarea
                   value={agentSettings.systemPrompt}
                   onChange={(e) =>
                     onSaveAgentSettings({ ...agentSettings, systemPrompt: e.target.value })
                   }
                   rows={4}
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink resize-none focus:outline-none focus:bg-canvas focus:border-primary"
+                  className="mt-1 resize-none"
                 />
               </label>
             </div>
@@ -365,14 +366,12 @@ export function SettingsPanel({
 
           {tab === 'expert' && (
             <div className="space-y-3">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+              <label className="flex cursor-pointer items-center gap-2">
+                <SettingsCheckbox
                   checked={expertMode.enabled}
                   onChange={(e) =>
                     onSaveExpertMode({ ...expertMode, enabled: e.target.checked })
                   }
-                  className="rounded-sm"
                 />
                 <span className="text-sm font-medium text-ink">{t('settings.expert.title')}</span>
               </label>
@@ -380,9 +379,8 @@ export function SettingsPanel({
                 <div className="ml-5 space-y-2 border-l-2 border-hairline-strong pl-3">
                   <p className="text-xs text-mute">{t('settings.expert.subSwitchHint')}</p>
                   {EXPERT_API_DOMAINS.map((domain) => (
-                    <div key={domain} className="flex items-start gap-2 py-1">
-                      <input
-                        type="checkbox"
+                    <label key={domain} className="flex cursor-pointer items-start gap-2 py-1">
+                      <SettingsCheckbox
                         checked={expertMode.switches[domain] ?? false}
                         onChange={(e) =>
                           onSaveExpertMode({
@@ -390,13 +388,13 @@ export function SettingsPanel({
                             switches: { ...expertMode.switches, [domain]: e.target.checked },
                           })
                         }
-                        className="mt-0.5 rounded-sm shrink-0"
+                        className="mt-0.5"
                       />
-                      <div className="min-w-0">
-                        <span className="text-sm font-medium text-ink">{domain}</span>
-                        <p className="text-xs text-mute leading-tight">{t(`settings.expert.domains.${domain}` as any)}</p>
-                      </div>
-                    </div>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-ink">{domain}</span>
+                        <span className="block text-xs text-mute leading-tight">{t(`settings.expert.domains.${domain}` as any)}</span>
+                      </span>
+                    </label>
                   ))}
                 </div>
               )}
@@ -406,12 +404,12 @@ export function SettingsPanel({
           {tab === 'skills' && (
             <div className="space-y-4">
               <div className="flex gap-2">
-                <input
+                <SettingsInput
                   value={subInput}
                   onChange={(e) => setSubInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubscription(); }}
                   placeholder={t('settings.skills.placeholder')}
-                  className="flex-1 px-3 py-1.5 text-sm border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
+                  className="min-w-0 flex-1"
                 />
                 <button
                   type="button"
@@ -434,12 +432,12 @@ export function SettingsPanel({
               </div>
 
               {showToken && (
-                <input
+                <SettingsInput
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
                   placeholder={t('settings.skills.tokenPlaceholder')}
                   type="password"
-                  className="w-full px-3 py-1.5 text-xs border border-hairline rounded-md bg-canvas text-ink placeholder:text-mute focus:outline-none focus:border-primary"
+                  compact
                 />
               )}
 
@@ -501,23 +499,11 @@ export function SettingsPanel({
                               )}
                             </div>
                             <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
+                              <SettingsSwitch
+                                aria-label={skill.name}
+                                checked={skill.enabled}
                                 onClick={() => handleToggleSkill(skill)}
-                                className={cn(
-                                  'relative inline-flex h-4 w-8 items-center rounded-full transition-colors',
-                                  skill.enabled ? 'bg-primary' : 'bg-hairline-strong',
-                                )}
-                                role="switch"
-                                aria-checked={skill.enabled}
-                              >
-                                <span
-                                  className={cn(
-                                    'inline-block h-3 w-3 rounded-full bg-white shadow transition-transform',
-                                    skill.enabled ? 'translate-x-[18px]' : 'translate-x-[2px]',
-                                  )}
-                                />
-                              </button>
+                              />
                               <button
                                 type="button"
                                 onClick={() => handleDeleteSkill(skill)}
@@ -552,23 +538,11 @@ export function SettingsPanel({
                           )}
                         </div>
                         <div className="flex items-center gap-1 ml-2 shrink-0">
-                          <button
-                            type="button"
+                          <SettingsSwitch
+                            aria-label={skill.name}
+                            checked={skill.enabled}
                             onClick={() => handleToggleSkill(skill)}
-                            className={cn(
-                              'relative inline-flex h-5 w-9 items-center rounded-full transition-colors',
-                              skill.enabled ? 'bg-primary' : 'bg-hairline-strong',
-                            )}
-                            role="switch"
-                            aria-checked={skill.enabled}
-                          >
-                            <span
-                              className={cn(
-                                'inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform',
-                                skill.enabled ? 'translate-x-[18px]' : 'translate-x-[3px]',
-                              )}
-                            />
-                          </button>
+                          />
                           <button
                             type="button"
                             onClick={() => handleDeleteSkill(skill)}
@@ -585,32 +559,41 @@ export function SettingsPanel({
             </div>
           )}
 
-          {tab === 'language' && (
+          {tab === 'appearance' && (
             <div className="space-y-3">
-              <label className="block">
+              <div>
                 <span className="text-sm font-medium text-ink">{t('settings.theme.label')}</span>
-                <select
-                  data-testid="theme-select"
+                <SettingsSelect
+                  id="settings-theme-select"
+                  label={t('settings.theme.label')}
                   value={theme}
-                  onChange={(e) => handleThemeChange(e.target.value as UserPreferences['theme'])}
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
-                >
-                  <option value="system">{t('settings.theme.system')}</option>
-                  <option value="light">{t('settings.theme.light')}</option>
-                  <option value="dark">{t('settings.theme.dark')}</option>
-                </select>
-              </label>
-              <label className="block">
+                  options={[
+                    { value: 'system', label: t('settings.theme.system') },
+                    { value: 'light', label: t('settings.theme.light') },
+                    { value: 'dark', label: t('settings.theme.dark') },
+                  ]}
+                  onChange={(value) => handleThemeChange(value as UserPreferences['theme'])}
+                  openSelectId={openSelectId}
+                  onOpenChange={setOpenSelectId}
+                  className="mt-1"
+                />
+              </div>
+              <div>
                 <span className="text-sm font-medium text-ink">{t('settings.language')}</span>
-                <select
+                <SettingsSelect
+                  id="settings-language-select"
+                  label={t('settings.language')}
                   value={locale}
-                  onChange={(e) => setLanguage(e.target.value as 'zh-CN' | 'en')}
-                  className="mt-1 w-full px-2 py-1.5 text-sm border border-hairline rounded-md bg-surface-soft text-ink focus:outline-none focus:bg-canvas focus:border-primary"
-                >
-                  <option value="zh-CN">中文</option>
-                  <option value="en">English</option>
-                </select>
-              </label>
+                  options={[
+                    { value: 'zh-CN', label: '中文' },
+                    { value: 'en', label: 'English' },
+                  ]}
+                  onChange={(value) => setLanguage(value as 'zh-CN' | 'en')}
+                  openSelectId={openSelectId}
+                  onOpenChange={setOpenSelectId}
+                  className="mt-1"
+                />
+              </div>
             </div>
           )}
         </div>
