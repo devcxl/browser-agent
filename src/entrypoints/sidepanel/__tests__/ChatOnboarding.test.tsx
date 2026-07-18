@@ -360,4 +360,91 @@ describe('ChatOnboarding', () => {
       expect(container?.className).toContain('mx-auto');
     });
   });
+
+  it('重新打开时恢复上次选择的 Provider、模型和思考等级', async () => {
+    const first = makeCompleteProvider({ id: 'p-first', name: 'First Provider' });
+    const remembered = makeCompleteProvider({
+      id: 'p-remembered',
+      name: 'Remembered Provider',
+      isDefault: true,
+      defaultModelId: 'reasoning-model',
+      models: {
+        'reasoning-model': {
+          id: 'reasoning-model',
+          name: 'Reasoning Model',
+          limit: { context: 32768, output: 8192 },
+          defaults: { maxOutputTokens: 4096 },
+          tool_call: true,
+          reasoning: true,
+          reasoningEfforts: ['low', 'high'],
+          defaultReasoningEffort: 'high',
+        },
+      },
+    });
+    mockBrowserHolder.storage = makeBaseStorage({ providers: [first, remembered] });
+
+    renderApp();
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Provider' }).textContent).toContain('Remembered Provider');
+    });
+    expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('Reasoning Model');
+    expect(screen.getByRole('combobox', { name: 'Reasoning' }).textContent).toContain('high');
+  });
+
+  it('切换 Provider、模型和思考等级后写回 Provider 配置', async () => {
+    const first = makeCompleteProvider({ id: 'p-first', name: 'First Provider', isDefault: true });
+    const second = makeCompleteProvider({
+      id: 'p-second',
+      name: 'Second Provider',
+      defaultModelId: 'm-low',
+      models: {
+        'm-low': {
+          id: 'm-low',
+          name: 'Low Model',
+          limit: { context: 32768, output: 8192 },
+          defaults: { maxOutputTokens: 4096 },
+          tool_call: true,
+          reasoning: true,
+          reasoningEfforts: ['low', 'high'],
+          defaultReasoningEffort: 'low',
+        },
+        'm-high': {
+          id: 'm-high',
+          name: 'High Model',
+          limit: { context: 32768, output: 8192 },
+          defaults: { maxOutputTokens: 4096 },
+          tool_call: true,
+          reasoning: true,
+          reasoningEfforts: ['low', 'high'],
+          defaultReasoningEffort: 'low',
+        },
+      },
+    });
+    mockBrowserHolder.storage = makeBaseStorage({ providers: [first, second] });
+    const user = userEvent.setup();
+
+    renderApp();
+
+    const providerSelect = await screen.findByRole('combobox', { name: 'Provider' });
+    await user.click(providerSelect);
+    await user.click(screen.getByRole('option', { name: 'Second Provider' }));
+    await waitFor(() => {
+      const saved = mockBrowserHolder.storage.providers as ProviderConfig[];
+      expect(saved.find((provider) => provider.id === 'p-second')?.isDefault).toBe(true);
+      expect(saved.find((provider) => provider.id === 'p-first')?.isDefault).toBe(false);
+    });
+
+    await user.click(screen.getByRole('combobox', { name: 'Model' }));
+    await user.click(screen.getByRole('option', { name: 'High Model' }));
+    await user.click(screen.getByRole('combobox', { name: 'Reasoning' }));
+    await user.click(screen.getByRole('option', { name: 'high' }));
+
+    await waitFor(() => {
+      const saved = mockBrowserHolder.storage.providers as ProviderConfig[];
+      const savedProvider = saved.find((provider) => provider.id === 'p-second');
+      expect(savedProvider?.defaultModelId).toBe('m-high');
+      expect(savedProvider?.models?.['m-high']?.defaultReasoningEffort).toBe('high');
+    });
+  });
 });

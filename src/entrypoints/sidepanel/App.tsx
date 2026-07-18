@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { ChatProvider, useChat } from './ChatContext';
 import { ChatView } from './components/ChatView';
 import { MessageInput } from './components/MessageInput';
@@ -60,6 +60,28 @@ function ChatLayout() {
     enabled: false,
     switches: {},
   });
+  const providersRef = useRef<ProviderConfig[]>([]);
+  const providerWriteQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const replaceProviders = useCallback((next: ProviderConfig[]) => {
+    providersRef.current = next;
+    setProviders(next);
+  }, []);
+
+  const queueProviderWrite = useCallback((next: ProviderConfig[]) => {
+    providerWriteQueueRef.current = providerWriteQueueRef.current
+      .then(() => store.set('providers', next))
+      .catch((error) => {
+        console.warn('[ChatLayout] 保存 Provider 配置失败', error);
+      });
+    return providerWriteQueueRef.current;
+  }, []);
+
+  const persistProviderSelection = useCallback((update: (current: ProviderConfig[]) => ProviderConfig[]) => {
+    const next = update(providersRef.current);
+    replaceProviders(next);
+    void queueProviderWrite(next);
+  }, [queueProviderWrite, replaceProviders]);
 
   useEffect(() => {
     (async () => {
@@ -70,11 +92,16 @@ function ChatLayout() {
       if (JSON.stringify(savedProviders) !== JSON.stringify(migratedProviders)) {
         await store.set('providers', migratedProviders);
       }
-      setProviders(migratedProviders);
+      replaceProviders(migratedProviders);
       setProvidersLoaded(true);
-      const firstComplete = migratedProviders.filter((p) => getProviderReadiness(p).isComplete)[0];
+      const complete = migratedProviders.filter((p) => getProviderReadiness(p).isComplete);
+      const firstComplete = complete.find((provider) => provider.isDefault) ?? complete[0];
+      const firstModelId = firstComplete?.defaultModelId
+        ?? Object.values(firstComplete?.models ?? {})[0]?.id
+        ?? '';
       setSelectedProviderId(firstComplete?.id ?? '');
-      setSelectedModelId(firstComplete?.defaultModelId ?? Object.values(firstComplete?.models ?? {})[0]?.id ?? '');
+      setSelectedModelId(firstModelId);
+      setReasoningEffort(firstComplete?.models?.[firstModelId]?.defaultReasoningEffort);
       const saved = await store.get('agentSettings');
       setAgentSettings({
         maxToolRounds: saved.maxToolRounds,
@@ -91,31 +118,36 @@ function ChatLayout() {
       const prefs = await store.get('preferences');
       applyTheme(prefs.theme ?? 'system');
     })();
-  }, []);
+  }, [replaceProviders]);
 
   const completeProviders = providers.filter((p) => getProviderReadiness(p).isComplete);
 
   const activeProvider = completeProviders.find((provider) => provider.id === selectedProviderId) ?? completeProviders[0] ?? null;
 
   const handleSaveProviders = useCallback(async (p: ProviderConfig[]) => {
-    setProviders(p);
-    setSelectedProviderId((currentId) => {
-      const nextProvider = p.find((provider) => provider.id === currentId) ?? p[0];
-      const nextModelId = nextProvider?.defaultModelId ?? Object.values(nextProvider?.models ?? {})[0]?.id ?? '';
-      setSelectedModelId(nextModelId);
-      setReasoningEffort(nextProvider?.models?.[nextModelId]?.defaultReasoningEffort);
-      return nextProvider?.id ?? '';
-    });
-    await store.set('providers', p);
-  }, []);
+    replaceProviders(p);
+    const nextProvider = p.find((provider) => provider.id === selectedProviderId)
+      ?? p.find((provider) => provider.isDefault)
+      ?? p[0];
+    const nextModelId = nextProvider?.defaultModelId ?? Object.values(nextProvider?.models ?? {})[0]?.id ?? '';
+    setSelectedProviderId(nextProvider?.id ?? '');
+    setSelectedModelId(nextModelId);
+    setReasoningEffort(nextProvider?.models?.[nextModelId]?.defaultReasoningEffort);
+    await queueProviderWrite(p);
+  }, [queueProviderWrite, replaceProviders, selectedProviderId]);
 
   const handleSelectProvider = useCallback((providerId: string) => {
     const provider = completeProviders.find((item) => item.id === providerId);
-    const modelId = provider?.defaultModelId ?? Object.values(provider?.models ?? {})[0]?.id ?? '';
+    if (!provider) return;
+    const modelId = provider.defaultModelId ?? Object.values(provider.models ?? {})[0]?.id ?? '';
     setSelectedProviderId(providerId);
     setSelectedModelId(modelId);
-    setReasoningEffort(provider?.models?.[modelId]?.defaultReasoningEffort);
-  }, [completeProviders]);
+    setReasoningEffort(provider.models?.[modelId]?.defaultReasoningEffort);
+    persistProviderSelection((current) => current.map((item) => ({
+      ...item,
+      isDefault: item.id === providerId,
+    })));
+  }, [completeProviders, persistProviderSelection]);
   const handleSaveAgentSettings = useCallback(async (s: AgentSettings) => {
     setAgentSettings(s);
     await store.set('agentSettings', {
@@ -160,9 +192,30 @@ function ChatLayout() {
   }, [providersLoaded, completeProviders.length, autoWizardAttempted, providers]);
 
   const handleSelectModel = useCallback((modelId: string) => {
+    if (!activeProvider) return;
     setSelectedModelId(modelId);
-    setReasoningEffort(activeProvider?.models?.[modelId]?.defaultReasoningEffort);
-  }, [activeProvider]);
+    setReasoningEffort(activeProvider.models?.[modelId]?.defaultReasoningEffort);
+    persistProviderSelection((current) => current.map((provider) => (
+      provider.id === activeProvider.id
+        ? { ...provider, defaultModelId: modelId }
+        : provider
+    )));
+  }, [activeProvider, persistProviderSelection]);
+
+  const handleReasoningEffortChange = useCallback((effort: ReasoningEffort | undefined) => {
+    if (!activeProvider || !activeModel) return;
+    setReasoningEffort(effort);
+    persistProviderSelection((current) => current.map((provider) => {
+      if (provider.id !== activeProvider.id) return provider;
+      const model = provider.models?.[activeModel.id];
+      if (!model) return provider;
+      const nextModel = { ...model, defaultReasoningEffort: effort };
+      return {
+        ...provider,
+        models: { ...provider.models, [activeModel.id]: nextModel },
+      };
+    }));
+  }, [activeProvider, activeModel, persistProviderSelection]);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -213,14 +266,15 @@ function ChatLayout() {
 
   const handleOnboardingSave = useCallback(
     async (p: ProviderConfig) => {
-      const idx = providers.findIndex((item) => item.id === p.id);
+      const current = providersRef.current;
+      const idx = current.findIndex((item) => item.id === p.id);
       const next = idx >= 0
-        ? providers.map((item, i) => (i === idx ? p : item))
-        : [...providers, p];
+        ? current.map((item, i) => (i === idx ? p : item))
+        : [...current, p];
       await handleSaveProviders(next);
       setOnboardingRequest(null);
     },
-    [providers, handleSaveProviders],
+    [handleSaveProviders],
   );
 
   const handleNewConversation = useCallback(async () => {
@@ -250,7 +304,7 @@ function ChatLayout() {
     selectedModelId,
     onSelectModel: handleSelectModel,
     reasoningEffort,
-    onReasoningEffortChange: setReasoningEffort,
+    onReasoningEffortChange: handleReasoningEffortChange,
   };
 
   return (
