@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { ProviderConfig, UserPreferences } from '@/shared/types';
 import type { AgentSettings, ExpertModeSettings } from '../types';
 import type { Skill, SkillSubscription } from '@/shared/types';

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ConversationManager } from '../conversation-manager';
 import type { Database } from '@/shared/db/database';
-import type { DbConversation, DbMessage, DbToolCallLog } from '@/shared/types';
+import type { DbConversation, DbMessage } from '@/shared/types';
 import type { StoredMessage } from '@/shared/types/conversation';
 import type { ILlmClient, ChatCompletionRequest, ChatCompletionResponse } from '@/shared/types/llm';
 
@@ -36,24 +36,6 @@ function mockMsg(
   };
 }
 
-function mockLog(
-  conversationId: string,
-  overrides: Partial<DbToolCallLog> = {},
-): DbToolCallLog {
-  const now = Date.now();
-  return {
-    id: `log-${now}-${Math.random().toString(36).slice(2, 8)}`,
-    conversationId,
-    toolName: 'testTool',
-    riskLevel: 'low',
-    paramsSummary: '{}',
-    resultSummary: 'ok',
-    success: true,
-    confirmedByUser: true,
-    timestamp: now,
-    ...overrides,
-  };
-}
 
 function createMockDb(): Database {
   return {

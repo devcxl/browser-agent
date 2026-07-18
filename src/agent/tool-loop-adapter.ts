@@ -89,7 +89,6 @@ export class ToolLoopAdapter implements IAgentRuntime {
     return agent.generate(options);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async stream(options: any): Promise<any> {
     const agent = this.getOrCreateAgent();
     return agent.stream(options);
@@ -265,7 +264,6 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
   /** 创建 toolApproval 函数 */
   private createToolApproval(input?: AgentRunInput) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return async ({ toolCall }: { toolCall: { toolName: string; input: unknown } }) => {
       if (!FEATURE_FLAGS.useToolApproval) {
         return { type: 'approved' as const };
@@ -385,8 +383,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
       tools[t.name] = {
         description: t.description,
         inputSchema: jsonSchemaToZod(t.schema as unknown as Record<string, unknown>),
-        execute: async (args, opts) => {
-          return this.executeTool(t, args as Record<string, unknown>, opts?.abortSignal);
+        execute: async (args, _opts) => {
+          return this.executeTool(t, args as Record<string, unknown>);
         },
       } as AISdkTool;
     }
@@ -397,7 +395,6 @@ export class ToolLoopAdapter implements IAgentRuntime {
   private async executeTool(
     tool: ToolDefinition,
     params: Record<string, unknown>,
-    abortSignal?: AbortSignal,
   ): Promise<ToolResult> {
     // guardrail 检查
     const check = await this.guardrail.check(tool.name, params, {
@@ -519,8 +516,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
             });
           }
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return { role: 'assistant', content: parts.length > 0 ? parts as any : msg.content } as ModelMessage;
+        return { role: 'assistant', content: parts.length > 0 ? parts : msg.content } as ModelMessage;
       }
       case 'tool':
         return {
@@ -532,8 +528,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
               toolName: toolName ?? '',
               output: { type: 'text', value: msg.content },
             },
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ] as any,
+          ] as ModelMessage,
         } as ModelMessage;
       default:
         return { role: 'user', content: msg.content };

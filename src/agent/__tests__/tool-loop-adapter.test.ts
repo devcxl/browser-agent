@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ToolLoopAdapter } from '../tool-loop-adapter';
-import type { AgentRunInput, ToolCallRecord } from '@/shared/types/agent';
+import type { AgentRunInput } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types';
 import type { IGuardrail, GuardrailCheck } from '@/shared/types/guardrail';
 import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
@@ -178,9 +178,6 @@ describe('ToolLoopAdapter', () => {
   it('应该将 toolRegistry 中的所有工具转换为 AI SDK tools', async () => {
     await adapter.run(basicInput);
 
-    const agentInstance = (await vi.mocked(
-      (await import('ai')).ToolLoopAgent,
-    )).mock.results[0]?.value;
     // ToolLoopAgent 被构造了
     expect(vi.mocked((await import('ai')).ToolLoopAgent)).toHaveBeenCalledTimes(1);
   });
@@ -238,8 +235,6 @@ describe('ToolLoopAdapter', () => {
   // ── Abort ─────────────────────────────────────────
 
   it('abort() 应该触发 AbortController', async () => {
-    // spy  AbortController
-    const abortSpy = vi.spyOn(AbortController.prototype, 'abort');
 
     adapter.abort();
     // abort() 在 run() 未执行时 abortController 为 null，不会崩溃
