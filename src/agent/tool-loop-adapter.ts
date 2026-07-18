@@ -25,6 +25,11 @@ import { DEFAULT_AGENT_CONFIG } from './system-prompt';
 /** 默认最大工具循环轮数 */
 const DEFAULT_MAX_STEPS = 99;
 
+function mapReasoningEffort(effort?: AgentConfig['reasoningEffort']): 'low' | 'medium' | 'high' | 'xhigh' | undefined {
+  if (!effort) return undefined;
+  return effort === 'max' ? 'xhigh' : effort;
+}
+
 /** Agent 接口所需的工具集类型 */
 type AdapterTools = Record<string, AISdkTool>;
 
@@ -102,6 +107,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId, message: input.userMessage.slice(0, 100) });
     this.abortController = new AbortController();
     const toolCalls: ToolCallRecord[] = [];
+    const persistenceTasks: Promise<void>[] = [];
 
     try {
       await this.conversationManager.addMessage(input.conversationId, {
@@ -130,8 +136,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
             reasoningLen: stepResult.reasoningText?.length ?? 0,
             toolCount: stepResult.toolCalls?.length ?? 0,
           });
-          this.recordStepToolCalls(stepResult, toolCalls);
-          this.persistToolMessages(input.conversationId, stepResult);
+          this.recordStepToolCalls(stepResult, toolCalls, input.callbacks?.onToolCall);
+          persistenceTasks.push(this.persistStepMessages(input.conversationId, stepResult));
         },
       });
 
@@ -143,12 +149,15 @@ export class ToolLoopAdapter implements IAgentRuntime {
         } else if (part.type === 'reasoning-delta') {
           accumulatedReasoning += part.text;
           input.callbacks?.onReasoningChunk?.(part.text);
+        } else if (part.type === 'error') {
+          throw part.error instanceof Error ? part.error : new Error(String(part.error));
         }
       }
       console.debug('[ToolLoopAdapter] stream 消费完成, text:', accumulatedText.length, 'reasoning:', accumulatedReasoning.length);
 
       const finalStep = await result.finalStep;
       const usage = await result.usage;
+      await Promise.all(persistenceTasks);
       console.debug('[ToolLoopAdapter] 执行完成', {
         finalText: finalStep.text?.slice(0, 80),
         toolCalls: toolCalls.length,
@@ -170,11 +179,13 @@ export class ToolLoopAdapter implements IAgentRuntime {
           : undefined,
       };
     } catch (err) {
+      await Promise.allSettled(persistenceTasks);
+      const message = err instanceof Error ? err.message : String(err);
       console.error('[ToolLoopAdapter] run() 异常', err);
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+        content: message.startsWith('Error:') ? message : `Error: ${message}`,
       });
       throw err;
     } finally {
@@ -190,6 +201,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
       this.abortController = new AbortController();
       this._agent = new ToolLoopAgent({
         model: this.createModel(),
+        maxOutputTokens: this.getModelConfig()?.defaults?.maxOutputTokens,
+        temperature: this.getModelConfig()?.defaults?.temperature,
+        reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
         tools: this.tools,
         allowSystemInMessages: true,
         stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
@@ -221,6 +235,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
     this.abortController = new AbortController();
     this._agent = new ToolLoopAgent({
       model: this.createModel(),
+      maxOutputTokens: this.getModelConfig()?.defaults?.maxOutputTokens,
+      temperature: this.getModelConfig()?.defaults?.temperature,
+      reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
       tools: this.tools,
       allowSystemInMessages: true,
       stopWhen: [isStepCount(DEFAULT_MAX_STEPS), isLoopFinished()],
@@ -384,7 +401,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
   ): Promise<ToolResult> {
     // guardrail 检查
     const check = await this.guardrail.check(tool.name, params, {
-      isLocalTrusted: tool.confirmationRequired === false,
+      isLocalTrusted: this.providerConfig.isLocalTrusted,
       expertModeEnabled: false,
       expertSwitches: {},
       grantedPermissions: [],
@@ -405,7 +422,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
     // 过滤敏感数据
     return this.guardrail.filterResultForRemote(tool, result, {
-      isLocalTrusted: tool.confirmationRequired === false,
+      isLocalTrusted: this.providerConfig.isLocalTrusted,
       expertModeEnabled: false,
       expertSwitches: {},
       grantedPermissions: [],
@@ -431,8 +448,19 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
     // 3. Conversation history
     const recentMessages = await this.conversationManager.getRecentMessages(input.conversationId, 20);
+    const toolNames = new Map<string, string>();
+    const pendingToolCallIds = new Set<string>();
     for (const msg of recentMessages) {
-      messages.push(this.convertToModelMessage(msg));
+      if (msg.role === 'assistant') {
+        for (const toolCall of msg.toolCalls ?? []) {
+          toolNames.set(toolCall.id, toolCall.name);
+          pendingToolCallIds.add(toolCall.id);
+        }
+      }
+      if (msg.role === 'tool') {
+        if (!msg.toolCallId || !pendingToolCallIds.delete(msg.toolCallId)) continue;
+      }
+      messages.push(this.convertToModelMessage(msg, toolNames.get(msg.toolCallId ?? '')));
     }
 
     // 4. Current user message (if not already in history)
@@ -472,12 +500,12 @@ export class ToolLoopAdapter implements IAgentRuntime {
     content: string;
     toolCalls?: Array<{ id: string; name: string; params: Record<string, unknown> }>;
     toolCallId?: string;
-  }): ModelMessage {
+  }, toolName?: string): ModelMessage {
     switch (msg.role) {
       case 'user':
         return { role: 'user', content: msg.content };
       case 'assistant': {
-        const parts: Array<{ type: 'text'; text: string } | { type: 'tool-call'; toolCallId: string; toolName: string; args: unknown }> = [];
+        const parts: Array<{ type: 'text'; text: string } | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }> = [];
         if (msg.content) {
           parts.push({ type: 'text', text: msg.content });
         }
@@ -487,7 +515,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
               type: 'tool-call' as const,
               toolCallId: tc.id,
               toolName: tc.name,
-              args: tc.params,
+              input: tc.params,
             });
           }
         }
@@ -501,7 +529,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
             {
               type: 'tool-result' as const,
               toolCallId: msg.toolCallId ?? '',
-              toolName: '',
+              toolName: toolName ?? '',
               output: { type: 'text', value: msg.content },
             },
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -514,19 +542,27 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
   /** 创建 LanguageModel */
   private createModel(): LanguageModelV4 {
+    const headers = {
+      ...(this.providerConfig.apiKey ? { Authorization: `Bearer ${this.providerConfig.apiKey}` } : {}),
+      ...this.providerConfig.extraHeaders,
+    };
     const provider = createOpenAICompatible({
       name: this.providerConfig.name,
-      baseURL: this.providerConfig.endpoint,
-      apiKey: this.providerConfig.apiKey,
-      headers: this.providerConfig.extraHeaders,
+      baseURL: this.providerConfig.api ?? this.providerConfig.endpoint ?? '',
+      headers,
     });
     return provider.chatModel(this.modelId) as unknown as LanguageModelV4;
+  }
+
+  private getModelConfig() {
+    return this.providerConfig.models?.[this.modelId];
   }
 
   /** 从 StepResult 中提取并记录工具调用 */
   private recordStepToolCalls(
     stepResult: { toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>; toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>> },
     toolCalls: ToolCallRecord[],
+    onToolCall?: (record: ToolCallRecord) => void,
   ) {
     const stepToolCalls = stepResult.toolCalls ?? [];
     const stepToolResults = stepResult.toolResults ?? [];
@@ -535,7 +571,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
       const result: ToolResult = tr?.output
         ? { success: true, data: tr.output }
         : { success: true };
-      toolCalls.push({
+      const record: ToolCallRecord = {
         toolName: tc.toolName,
         params: (tc.input as Record<string, unknown>) ?? {},
         result,
@@ -543,17 +579,31 @@ export class ToolLoopAdapter implements IAgentRuntime {
         confirmed: true,
         timestamp: Date.now(),
         toolCallId: tc.toolCallId,
-      });
+      };
+      toolCalls.push(record);
+      onToolCall?.(record);
     }
   }
 
-  /** 将工具调用结果持久化到 DB */
-  private async persistToolMessages(
+  /** 按 assistant tool-call → tool-result 顺序持久化，保证下一轮历史符合协议。 */
+  private async persistStepMessages(
     conversationId: string,
     stepResult: { toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>; toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>> },
   ) {
     const stepToolCalls = stepResult.toolCalls ?? [];
     const stepToolResults = stepResult.toolResults ?? [];
+    if (stepToolCalls.length === 0) return;
+
+    await this.conversationManager.addMessage(conversationId, {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: '',
+      toolCalls: stepToolCalls.map((toolCall) => ({
+        id: toolCall.toolCallId,
+        name: toolCall.toolName,
+        params: (toolCall.input as Record<string, unknown>) ?? {},
+      })),
+    });
 
     for (const tc of stepToolCalls) {
       const tr = stepToolResults.find((r) => r.toolCallId === tc.toolCallId);

@@ -10,6 +10,7 @@ import { FEATURE_FLAGS } from '@/shared/feature-flags';
 // ==================== Mocks ====================
 
 const mockToolLoopAgentStream = vi.fn();
+const mockToolClassifierClassify = vi.hoisted(() => vi.fn());
 let capturedToolLoopAgentOptions: Record<string, unknown> | null = null;
 
 vi.mock('ai', async () => {
@@ -30,6 +31,13 @@ vi.mock('@ai-sdk/openai-compatible', () => ({
   createOpenAICompatible: vi.fn().mockReturnValue({
     chatModel: vi.fn().mockReturnValue({}),
   }),
+}));
+
+vi.mock('../tool-classifier', () => ({
+  ToolClassifier: vi.fn().mockImplementation(() => ({
+    classify: mockToolClassifierClassify,
+    reset: vi.fn(),
+  })),
 }));
 
 function createMockToolRegistry(tools: ToolDefinition[]): IToolRegistry {
@@ -137,6 +145,7 @@ describe('ToolLoopAdapter', () => {
       createMockTool('tabs_remove'),
     ]);
     mockGuardrail = createMockGuardrail();
+    mockToolClassifierClassify.mockResolvedValue(['tabs']);
     mockConversationManager = createMockConversationManager();
     providerConfig = createMockProviderConfig();
 
@@ -197,6 +206,35 @@ describe('ToolLoopAdapter', () => {
     expect(userMessage?.content).toBe('Hello');
   });
 
+  it('prepareStep 应只激活分类命中的工具', async () => {
+    const registry = createMockToolRegistry([
+      createMockTool('tabs_query'),
+      { ...createMockTool('windows_query'), category: 'windows' },
+    ]);
+    const lazyAdapter = new ToolLoopAdapter(
+      registry,
+      mockGuardrail,
+      mockConversationManager,
+      providerConfig,
+      'test-model',
+    );
+    await lazyAdapter.run(basicInput);
+
+    const prepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
+      messages: Array<{ role: string; content: string }>;
+      stepNumber: number;
+      model: unknown;
+    }) => Promise<{ activeTools?: string[] }>;
+    const result = await prepareStep({
+      messages: [{ role: 'user', content: '查询标签页' }],
+      stepNumber: 0,
+      model: {},
+    });
+
+    expect(mockToolClassifierClassify).toHaveBeenCalledWith('查询标签页', {});
+    expect(result.activeTools).toEqual(['tabs_query']);
+  });
+
   // ── Abort ─────────────────────────────────────────
 
   it('abort() 应该触发 AbortController', async () => {
@@ -239,12 +277,65 @@ describe('ToolLoopAdapter', () => {
 
   // ── ToolCalls 记录 ────────────────────────────────
 
-  it('应该在 onStepFinish 回调中记录工具调用', async () => {
-    // 模拟 ToolLoopAgent onStepFinish 被调用（通过 mock 结果验证）
-    await adapter.run(basicInput);
+  it('应该在 onStepFinish 回调中记录并实时转发工具调用', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'tool-1', toolName: 'tabs_query', input: { id: 'tab-1' } }],
+        toolResults: [{ toolCallId: 'tool-1', output: { success: true } }],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '操作完成' }),
+        usage: Promise.resolve({ inputTokens: 100, outputTokens: 50 }),
+      };
+    });
+    const onToolCall = vi.fn();
 
-    // generate 被调用了
-    expect(mockToolLoopAgentStream).toHaveBeenCalled();
+    const result = await adapter.run({ ...basicInput, callbacks: { onToolCall } });
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(onToolCall).toHaveBeenCalledWith(expect.objectContaining({
+      toolName: 'tabs_query',
+      params: { id: 'tab-1' },
+    }));
+    const persistedMessages = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    expect(persistedMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: 'assistant',
+        toolCalls: [expect.objectContaining({ id: 'tool-1', name: 'tabs_query', params: { id: 'tab-1' } })],
+      }),
+      expect.objectContaining({ role: 'tool', toolCallId: 'tool-1' }),
+    ]));
+
+    await adapter.run({ ...basicInput, userMessage: 'Continue' });
+    const secondRunMessages = mockToolLoopAgentStream.mock.calls[1]?.[0]?.messages as Array<{ role: string; content: unknown }>;
+    expect(secondRunMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: 'assistant',
+        content: expect.arrayContaining([expect.objectContaining({
+          type: 'tool-call',
+          toolCallId: 'tool-1',
+          toolName: 'tabs_query',
+          input: { id: 'tab-1' },
+        })]),
+      }),
+      expect.objectContaining({
+        role: 'tool',
+        content: expect.arrayContaining([expect.objectContaining({ type: 'tool-result', toolCallId: 'tool-1', toolName: 'tabs_query' })]),
+      }),
+    ]));
+  });
+
+  it('应忽略历史中没有匹配 assistant tool-call 的旧 tool result', async () => {
+    (mockConversationManager.getRecentMessages as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: 'user-1', role: 'user', content: 'First request' },
+      { id: 'orphan-tool', role: 'tool', content: '{"success":true}', toolCallId: 'missing-call' },
+    ]);
+
+    await adapter.run({ ...basicInput, userMessage: 'Continue' });
+
+    const messages = mockToolLoopAgentStream.mock.calls[0]?.[0]?.messages as Array<{ role: string }>;
+    expect(messages.some((message) => message.role === 'tool')).toBe(false);
   });
 
   // ── 边界条件 ──────────────────────────────────────
