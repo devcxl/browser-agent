@@ -1,22 +1,30 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ToolLoopAdapter } from '../tool-loop-adapter';
 import type { AgentRunInput } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types';
 import type { IGuardrail, GuardrailCheck } from '@/shared/types/guardrail';
-import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
+import type { Conversation, IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
 import { FEATURE_FLAGS } from '@/shared/feature-flags';
+import { estimateTokens } from '@/shared/token-estimate';
 
 // ==================== Mocks ====================
 
 const mockToolLoopAgentStream = vi.fn();
 const mockToolClassifierClassify = vi.hoisted(() => vi.fn());
+const mockGenerateText = vi.hoisted(() => vi.fn());
+const mockPruneMessages = vi.hoisted(() => vi.fn());
 let capturedToolLoopAgentOptions: Record<string, unknown> | null = null;
 
 vi.mock('ai', async () => {
-  const actual = await vi.importActual('ai');
+  const actual = await vi.importActual<typeof import('ai')>('ai');
   return {
     ...actual,
+    generateText: mockGenerateText,
+    pruneMessages: (options: unknown) => {
+      mockPruneMessages(options);
+      return actual.pruneMessages(options as Parameters<typeof actual.pruneMessages>[0]);
+    },
     ToolLoopAgent: vi.fn().mockImplementation((options) => {
       capturedToolLoopAgentOptions = options;
       return {
@@ -146,6 +154,7 @@ describe('ToolLoopAdapter', () => {
     ]);
     mockGuardrail = createMockGuardrail();
     mockToolClassifierClassify.mockResolvedValue(['tabs']);
+    mockGenerateText.mockResolvedValue({ text: '压缩后的会话摘要' });
     mockConversationManager = createMockConversationManager();
     providerConfig = createMockProviderConfig();
 
@@ -230,6 +239,181 @@ describe('ToolLoopAdapter', () => {
 
     expect(mockToolClassifierClassify).toHaveBeenCalledWith('查询标签页', {});
     expect(result.activeTools).toEqual(['tabs_query']);
+    expect(mockPruneMessages).not.toHaveBeenCalled();
+  });
+
+  it('prepareStep 达到 75% 上下文预算时使用 AI SDK pruneMessages', async () => {
+    const compactingAdapter = new ToolLoopAdapter(
+      createMockToolRegistry([]),
+      mockGuardrail,
+      mockConversationManager,
+      providerConfig,
+      'test-model',
+      {
+        maxToolRounds: 99,
+        systemPrompt: 'browser assistant',
+        maxContextMessages: 40,
+        contextWindowTokens: 1_000,
+        tokenBudgetMargin: 100,
+        microcompactKeepRecent: 10,
+        microcompactMinChars: 500,
+        microcompactExcludeTools: [],
+        summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
+      },
+    );
+    await compactingAdapter.run(basicInput);
+
+    const prepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
+      messages: Array<{ role: string; content: string }>;
+      stepNumber: number;
+      model: unknown;
+    }) => Promise<{ messages?: unknown[] }>;
+    const messages = [{ role: 'user', content: 'x'.repeat(2_000) }];
+    const result = await prepareStep({ messages, stepNumber: 2, model: {} });
+
+    expect(mockPruneMessages).toHaveBeenCalledWith({
+      messages,
+      reasoning: 'all',
+      toolCalls: 'none',
+      emptyMessages: 'remove',
+    });
+    expect(result.messages).toBeDefined();
+  });
+
+  it('仅在 75% 高水位压缩旧轮次，并保留最近原始上下文', async () => {
+    const oldTurns = Array.from({ length: 4 }, (_, index) => [
+      { id: `old-user-${index}`, role: 'user' as const, content: `old-${index}-${'x'.repeat(2_000)}` },
+      { id: `old-assistant-${index}`, role: 'assistant' as const, content: `done-${index}-${'y'.repeat(2_000)}` },
+    ]).flat();
+    const recentTurns: StoredMessage[] = [
+      { id: 'recent-user-0', role: 'user', content: 'recent-request-0' },
+      {
+        id: 'recent-tool-call',
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'recent-call-0', name: 'tabs_remove', params: { tabIds: [7] } }],
+      },
+      {
+        id: 'recent-tool-result',
+        role: 'tool',
+        toolCallId: 'recent-call-0',
+        content: JSON.stringify({ success: true, removed: ['https://recent.test'] }),
+      },
+      { id: 'recent-assistant-0', role: 'assistant', content: 'recent-response-0' },
+      ...Array.from({ length: 3 }, (_, index) => [
+        { id: `recent-user-${index + 1}`, role: 'user' as const, content: `recent-request-${index + 1}` },
+        { id: `recent-assistant-${index + 1}`, role: 'assistant' as const, content: `recent-response-${index + 1}` },
+      ]).flat(),
+    ];
+    const conversation = {
+      id: 'conv-1',
+      title: 'test',
+      titleGenerated: true,
+      createdAt: 1,
+      updatedAt: 1,
+      messages: [...oldTurns, ...recentTurns] as StoredMessage[],
+      summary: undefined as string | undefined,
+      summaryUpToIndex: 0,
+      sensitiveDataGranted: false,
+    };
+    const manager = createMockConversationManager();
+    vi.mocked(manager.get).mockImplementation(async () => ({
+      ...conversation,
+      messages: [...conversation.messages],
+    }));
+    vi.mocked(manager.update).mockImplementation(async (_id: string, patch: Partial<Conversation>) => {
+      Object.assign(conversation, patch);
+    });
+    vi.mocked(manager.addMessage).mockImplementation(async (_id: string, message: StoredMessage) => {
+      conversation.messages.push(message);
+    });
+
+    const compactingAdapter = new ToolLoopAdapter(
+      createMockToolRegistry([]),
+      mockGuardrail,
+      manager,
+      providerConfig,
+      'test-model',
+      {
+        maxToolRounds: 99,
+        systemPrompt: 'browser assistant',
+        maxContextMessages: 40,
+        contextWindowTokens: 10_000,
+        tokenBudgetMargin: 100,
+        microcompactKeepRecent: 10,
+        microcompactMinChars: 500,
+        microcompactExcludeTools: [],
+        summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
+      },
+    );
+
+    await compactingAdapter.run(basicInput);
+
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+    expect(conversation.summary).toBe('压缩后的会话摘要');
+    expect(conversation.summaryUpToIndex).toBe(8);
+    const sentMessages = mockToolLoopAgentStream.mock.calls[0]?.[0].messages as Array<{ role: string; content: unknown }>;
+    expect(sentMessages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'system', content: expect.stringContaining('压缩后的会话摘要') }),
+      expect.objectContaining({ role: 'user', content: 'recent-request-0' }),
+      expect.objectContaining({
+        role: 'assistant',
+        content: expect.arrayContaining([
+          expect.objectContaining({ type: 'tool-call', toolCallId: 'recent-call-0' }),
+        ]),
+      }),
+      expect.objectContaining({
+        role: 'tool',
+        content: expect.arrayContaining([
+          expect.objectContaining({ type: 'tool-result', toolCallId: 'recent-call-0' }),
+        ]),
+      }),
+    ]));
+    expect(JSON.stringify(sentMessages)).not.toContain('old-0-');
+    expect(estimateTokens(JSON.stringify(sentMessages))).toBeLessThanOrEqual(990);
+
+    await compactingAdapter.run({ ...basicInput, userMessage: '继续' });
+    expect(mockGenerateText).toHaveBeenCalledTimes(1);
+  });
+
+  it('已有长会话未达到 75% 时不生成摘要', async () => {
+    const conversation: Conversation = {
+      id: 'conv-1',
+      title: 'test',
+      titleGenerated: true,
+      createdAt: 1,
+      updatedAt: 1,
+      messages: Array.from({ length: 10 }, (_, index) => [
+        { id: `user-${index}`, role: 'user' as const, content: `request-${index}-${'x'.repeat(100)}` },
+        { id: `assistant-${index}`, role: 'assistant' as const, content: `response-${index}-${'y'.repeat(100)}` },
+      ]).flat(),
+      sensitiveDataGranted: false,
+    };
+    const manager = createMockConversationManager();
+    vi.mocked(manager.get).mockResolvedValue(conversation);
+    const nonCompactingAdapter = new ToolLoopAdapter(
+      createMockToolRegistry([]),
+      mockGuardrail,
+      manager,
+      providerConfig,
+      'test-model',
+      {
+        maxToolRounds: 99,
+        systemPrompt: 'browser assistant',
+        maxContextMessages: 40,
+        contextWindowTokens: 10_000,
+        tokenBudgetMargin: 100,
+        microcompactKeepRecent: 10,
+        microcompactMinChars: 500,
+        microcompactExcludeTools: [],
+        summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
+      },
+    );
+
+    await nonCompactingAdapter.run(basicInput);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    expect(manager.update).not.toHaveBeenCalled();
   });
 
   // ── Abort ─────────────────────────────────────────
