@@ -106,6 +106,64 @@
         "aac": "AAC",
         "ogg_opus": "OGG Opus",
         "wav": "WAV"
+      },
+      "wizard": {
+        "stepLabels": {
+          "template": "1. 选择模板",
+          "connection": "2. 连接配置",
+          "models": "3. 模型配置"
+        },
+        "back": "返回",
+        "template": {
+          "title": "选择模板",
+          "description": "从 models.dev 复制模型能力，或从 OpenAI 兼容端点开始配置。",
+          "useCustom": "OpenAI 兼容端点",
+          "useCustomDesc": "适用于 Ollama、vLLM、LiteLLM 及兼容网关。",
+          "searchPlaceholder": "搜索 models.dev provider...",
+          "itemCount": "{count} 个模型 · {id}"
+        },
+        "connection": {
+          "title": "连接配置",
+          "description": "凭据属于此 Provider 快照，而非单个模型。",
+          "nameLabel": "Provider 名称",
+          "namePlaceholder": "输入名称",
+          "endpointLabel": "Base URL",
+          "endpointPlaceholder": "https://api.example.com/v1",
+          "apiKeyLabel": "API Key（可选）",
+          "apiKeyPlaceholder": "输入 API Key",
+          "trustedLabel": "标记为本地可信连接",
+          "trustedDescription": "标记为本地可信后，可发送敏感数据。",
+          "back": "上一步",
+          "continue": "下一步"
+        },
+        "models": {
+          "title": "模型配置",
+          "description": "Limits 是模型能力；默认输出和温度是请求偏好。",
+          "idPlaceholder": "Model ID",
+          "namePlaceholder": "显示名称",
+          "contextPlaceholder": "Context window",
+          "maxOutputPlaceholder": "Max output",
+          "defaultOutputPlaceholder": "Default output",
+          "temperaturePlaceholder": "Temperature",
+          "supportsTools": "支持工具调用",
+          "supportsReasoning": "支持推理",
+          "discoverButton": "自动发现",
+          "discovering": "发现中...",
+          "discovered": "发现 {count} 个模型。请补全 limits 信息后保存。",
+          "discoverFailed": "模型发现失败: {message}。请手动添加模型。",
+          "addModel": "+ 添加模型",
+          "newModel": "新模型",
+          "defaultModel": "默认",
+          "deleteModel": "删除",
+          "noValidModels": "请至少添加一个模型。",
+          "duplicateId": "Model ID 不能重复。",
+          "back": "上一步",
+          "save": "保存 Provider"
+        },
+        "validation": {
+          "modelInvalid": "请完善所有模型配置后再保存。",
+          "noModels": "至少需要一个有效的模型。"
+        }
       }
     },
     "agent": {
