@@ -134,12 +134,26 @@ test.describe('浮动按钮 E2E', () => {
     // 再次点击按钮 → toggle 关闭面板
     await button.click();
 
-    // 关闭后等待动画完成（250ms transition + 缓冲）
-    await page.waitForTimeout(600);
-
-    // 验证面板关闭：sidepanel iframe 虽然 DOM 中仍存在但已隐藏
-    // 检查方式：确保没有额外的可见 frame 变化（关闭不会移除 iframe）
-    // 此处主要验证无报错，关闭操作正常完成
-    expect(true).toBe(true);
+    // 等待面板关闭动画完成（250ms transition），然后验证容器 display: none
+    // 通过 frameElement 直接引用 iframe 元素，无需穿透 closed shadow root
+    await page.waitForFunction(
+      () => {
+        for (let i = 0; i < window.frames.length; i++) {
+          try {
+            const win = window.frames[i];
+            if (win?.location?.href?.includes('sidepanel.html')) {
+              // frameElement 从 iframe 内部视角返回宿主 iframe 元素
+              const iframeEl = win.frameElement as HTMLIFrameElement | null;
+              const parent = iframeEl?.parentElement;
+              return parent != null && parent.style.display === 'none';
+            }
+          } catch {
+            // 跨域 frame 无法访问，跳过
+          }
+        }
+        return false;
+      },
+      { timeout: 5000, polling: 100 },
+    );
   });
 });
