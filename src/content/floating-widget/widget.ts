@@ -243,14 +243,19 @@ export class FloatingWidget {
     this.bindEvents();
   }
 
-  /** 响应设置变更 */
-  apply(nextSettings: FloatingButtonSettings): void {
+  /** 响应设置变更。返回 false 表示 widget 已被销毁（如 enabled 关闭或命中黑名单） */
+  apply(nextSettings: FloatingButtonSettings, lang?: SupportedLang): boolean {
     this.settings = nextSettings;
+
+    // 语言更新
+    if (lang) {
+      this.setLang(lang);
+    }
 
     // enabled 关闭 → 销毁
     if (!shouldMount(nextSettings, this.hostname)) {
       this.destroy();
-      return;
+      return false;
     }
 
     // 位置更新
@@ -261,7 +266,13 @@ export class FloatingWidget {
       this.applyButtonTransform();
     }
 
-    // 语言更新
+    return true;
+  }
+
+  /** 单独更新界面语言（不触发其他设置变更） */
+  setLang(lang: SupportedLang): void {
+    if (lang === this.lang) return;
+    this.lang = lang;
     this.strings = getStrings(this.lang);
     if (this.btn) {
       this.btn.setAttribute('aria-label', this.strings.buttonAriaLabel);
@@ -327,7 +338,12 @@ export class FloatingWidget {
     btn.setAttribute('title', this.strings.buttonAriaLabel);
 
     const img = document.createElement('img');
-    img.src = browser.runtime.getURL('logo-48.png');
+    try {
+      img.src = browser.runtime.getURL('logo-48.png');
+    } catch {
+      // 静默回退：扩展上下文失效时用占位 data URI
+      img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" rx="8" fill="%23ddd"/%3E%3C/svg%3E';
+    }
     img.alt = 'AI';
     btn.appendChild(img);
 
@@ -495,13 +511,16 @@ export class FloatingWidget {
   private async handleHide(): Promise<void> {
     this.hideMenu();
 
-    const newBlacklist = addToBlacklist(this.settings.blacklist, this.hostname);
+    // 原子读-改-写：从 store 取最新 settings 再修改，防止基于过期 this.settings 覆盖并发写入
+    const store = ConfigStore.getInstance();
+    const current = await store.get<FloatingButtonSettings>('floatingButtonSettings');
+    const newBlacklist = addToBlacklist(current.blacklist, this.hostname);
     const newSettings: FloatingButtonSettings = {
-      ...this.settings,
+      ...current,
       blacklist: newBlacklist,
     };
 
-    await ConfigStore.getInstance().set('floatingButtonSettings', newSettings);
+    await store.set('floatingButtonSettings', newSettings);
     // storage.onChanged 会触发 apply() → shouldMount 返回 false → destroy()
     // 这里直接 destroy 作为兜底
     this.destroy();
