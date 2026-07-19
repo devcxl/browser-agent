@@ -173,4 +173,28 @@ describe('ConfigStore', () => {
     const b = ConfigStore.getInstance();
     expect(a).not.toBe(b);
   });
+
+  // #12 floatingButtonSettings 默认值
+  it('should return default floatingButtonSettings when not stored', async () => {
+    const store = ConfigStore.getInstance();
+    browserMock.mock.get.mockResolvedValueOnce({});
+    const result = await store.get('floatingButtonSettings');
+    expect(result).toEqual({ enabled: true, position: null, blacklist: [] });
+  });
+
+  // #13 floatingButtonSettings 写入
+  it('should set floatingButtonSettings correctly', async () => {
+    const store = ConfigStore.getInstance();
+    const settings = { enabled: false, position: { side: 'left' as const, top: 100 }, blacklist: ['example.com'] };
+    await store.set('floatingButtonSettings', settings);
+    expect(browserMock.mock.set).toHaveBeenCalledWith({ floatingButtonSettings: settings });
+  });
+
+  // #14 getAll 包含 floatingButtonSettings 默认值
+  it('should include default floatingButtonSettings in getAll', async () => {
+    const store = ConfigStore.getInstance();
+    browserMock.mock.get.mockResolvedValueOnce({});
+    const result = await store.getAll();
+    expect(result.floatingButtonSettings).toEqual({ enabled: true, position: null, blacklist: [] });
+  });
 });

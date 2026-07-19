@@ -31,6 +31,11 @@ const DEFAULTS: StorageSchema = {
   },
   skills: [],
   skillSubscriptions: [],
+  floatingButtonSettings: {
+    enabled: true,
+    position: null,
+    blacklist: [],
+  },
 };
 
 /**

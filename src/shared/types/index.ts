@@ -106,6 +106,7 @@ export type {
   ExpertModeSettings,
   ExpertApiDomain,
   UserPreferences,
+  FloatingButtonSettings,
   DbConversation,
   DbMessage,
   DbToolCallLog,
