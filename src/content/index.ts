@@ -3,6 +3,7 @@ import { SelectionReader } from './selection-reader';
 import { MetadataReader } from './metadata-reader';
 import { convertToMarkdown } from './markdown-converter';
 import { simulateClick } from './simulate-click';
+import { startFloatingWidget } from './floating-widget/index';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -57,5 +58,10 @@ export default defineContentScript({
         }
       });
     });
+
+    // 启动浮动控件
+    startFloatingWidget().catch((err: unknown) =>
+      console.warn('[BA] Floating widget init failed:', err),
+    );
   },
 });
