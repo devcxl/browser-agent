@@ -54,8 +54,8 @@ const SHADOW_CSS = /* css */ `
   width: ${BUTTON_SIZE}px;
   height: ${BUTTON_SIZE}px;
   border-radius: 50%;
-  background: #ffffff;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  background: transparent;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06);
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
@@ -67,20 +67,23 @@ const SHADOW_CSS = /* css */ `
 }
 
 .float-btn:hover {
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  transform: scale(1.05);
 }
 
 .float-btn:active {
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
+  transform: scale(0.97);
 }
 
 .float-btn img {
-  width: 28px;
-  height: 28px;
+  width: ${BUTTON_SIZE}px;
+  height: ${BUTTON_SIZE}px;
   display: block;
   pointer-events: none;
   -webkit-user-drag: none;
   user-select: none;
+  object-fit: contain;
 }
 
 .float-btn.dragging {
