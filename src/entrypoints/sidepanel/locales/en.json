@@ -86,7 +86,8 @@
       "agent": "Agent",
       "expert": "Expert Mode",
       "skills": "Skills",
-      "appearance": "Appearance"
+      "appearance": "Appearance",
+      "floatingButton": "Floating Button"
     },
     "provider": {
       "noProviders": "No providers configured",
@@ -228,6 +229,15 @@
       "syncComplete": "Sync complete, {count} skills total",
       "syncFailed": "Sync failed: {error}",
       "subscriptionExists": "This subscription already exists"
+    },
+    "floatingButton": {
+      "enabled": "Enable Floating Button",
+      "enabledDesc": "Show a draggable circular chat button on web pages",
+      "blacklist": "Hidden Sites",
+      "blacklistEmpty": "No sites hidden",
+      "blacklistRemove": "Remove",
+      "resetPosition": "Reset Button Position",
+      "resetSuccess": "Position reset"
     }
   },
   "dialog": {

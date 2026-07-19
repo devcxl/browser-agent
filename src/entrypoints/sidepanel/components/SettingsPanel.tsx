@@ -16,6 +16,7 @@ import {
   SettingsSwitch,
   SettingsTextarea,
 } from './SettingsControls';
+import { FloatingButtonSection } from './FloatingButtonSection';
 
 interface Props {
   providers: ProviderConfig[];
@@ -39,7 +40,7 @@ export function SettingsPanel({
   onClose,
 }: Props) {
   const { t, locale, setLanguage } = useI18n();
-  const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'skills'>('appearance');
+  const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'skills' | 'floatingButton'>('appearance');
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
   const [openSelectId, setOpenSelectId] = useState<string | null>(null);
 
@@ -217,7 +218,7 @@ export function SettingsPanel({
         </div>
 
         <div className="flex border-b border-hairline px-5">
-          {(['appearance', 'provider', 'agent', 'expert', 'skills'] as const).map((tabKey) => (
+          {(['appearance', 'provider', 'agent', 'expert', 'skills', 'floatingButton'] as const).map((tabKey) => (
             <button
               key={tabKey}
               type="button"
@@ -557,6 +558,10 @@ export function SettingsPanel({
                 </div>
               )}
             </div>
+          )}
+
+          {tab === 'floatingButton' && (
+            <FloatingButtonSection />
           )}
 
           {tab === 'appearance' && (

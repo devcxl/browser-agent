@@ -86,7 +86,8 @@
       "agent": "Agent",
       "expert": "Expert Mode",
       "skills": "Skills",
-      "appearance": "外观"
+      "appearance": "外观",
+      "floatingButton": "浮动按钮"
     },
     "provider": {
       "noProviders": "暂无 Provider 配置",
@@ -228,6 +229,15 @@
       "syncComplete": "同步完成，共 {count} 个技能",
       "syncFailed": "同步失败: {error}",
       "subscriptionExists": "该订阅已存在"
+    },
+    "floatingButton": {
+      "enabled": "启用浮动按钮",
+      "enabledDesc": "在网页上显示可拖拽的圆形聊天按钮",
+      "blacklist": "已隐藏的站点",
+      "blacklistEmpty": "暂无隐藏站点",
+      "blacklistRemove": "移除",
+      "resetPosition": "重置按钮位置",
+      "resetSuccess": "位置已重置"
     }
   },
   "dialog": {
