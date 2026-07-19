@@ -4,6 +4,16 @@ import type { Skill, SkillSubscription } from './skill';
 
 // ==================== chrome.storage.local 存储 Schema ====================
 
+/** 浮窗按钮设置 */
+export interface FloatingButtonSettings {
+  /** 是否启用浮窗按钮 */
+  enabled: boolean;
+  /** 按钮位置（null 表示使用默认位置） */
+  position: { side: 'left' | 'right'; top: number } | null;
+  /** 不显示浮窗的站点 blacklist */
+  blacklist: string[];
+}
+
 /** chrome.storage.local 中存储的所有数据 */
 export interface StorageSchema {
   /** Provider 配置列表 */
@@ -20,6 +30,8 @@ export interface StorageSchema {
   skills: Skill[];
   /** Skill 订阅列表 */
   skillSubscriptions: SkillSubscription[];
+  /** 浮窗按钮设置 */
+  floatingButtonSettings: FloatingButtonSettings;
 }
 
 export interface AgentSettings {
