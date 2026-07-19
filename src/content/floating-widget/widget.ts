@@ -62,7 +62,7 @@ const SHADOW_CSS = /* css */ `
   -webkit-user-select: none;
   touch-action: none;
   transition: box-shadow 0.2s ease, transform 0.15s ease;
-  position: relative;
+  position: fixed;
   overflow: hidden;
 }
 
