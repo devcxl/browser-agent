@@ -16,6 +16,7 @@ import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 
 import { ChatContentContainer } from './components/ChatContentContainer';
+import { EmbeddedHeader } from './components/EmbeddedHeader';
 import { ProviderWizard } from './components/ProviderWizard';
 import { getProviderReadiness } from './provider-readiness';
 import type { ProviderWizardStep } from './provider-readiness';
@@ -30,6 +31,15 @@ const SUGGESTIONS: Array<{ titleKey: string; descKey: string; promptKey: string 
 ];
 
 function ChatLayout() {
+  const isEmbedded = new URLSearchParams(location.search).get('embedded') === '1';
+
+  const handleEmbeddedClose = useCallback(() => {
+    window.parent.postMessage(
+      { source: 'ba-floating-widget', type: 'close-request' },
+      '*',
+    );
+  }, []);
+
   const { t } = useI18n();
   const { conversations, agent, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm, conversationStatuses } = useChat();
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -306,6 +316,9 @@ function ChatLayout() {
 
   return (
     <div className="h-full flex flex-col bg-canvas relative overflow-hidden">
+      {/* 内嵌模式头部 */}
+      {isEmbedded && <EmbeddedHeader onClose={handleEmbeddedClose} />}
+
       {/* 顶栏 */}
       <header className="h-10 border-b border-hairline bg-canvas flex items-center justify-between px-2 shrink-0">
         <button
