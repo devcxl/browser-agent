@@ -70,7 +70,10 @@ export default defineConfig({
     // Chrome / Firefox 共用：声明 sidepanel.html 为 web 可访问资源
     // 供 content script 的 iframe 加载 sidepanel.html?embedded=1
     manifest.web_accessible_resources = [
-      { resources: ['sidepanel.html'], matches: ['<all_urls>'] },
+      {
+        resources: ['sidepanel.html', 'logo-48.png', 'logo-128.png'],
+        matches: ['<all_urls>'],
+      },
     ];
 
     if (!isFirefox) {
