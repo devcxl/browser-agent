@@ -54,8 +54,8 @@ const SHADOW_CSS = /* css */ `
   width: ${BUTTON_SIZE}px;
   height: ${BUTTON_SIZE}px;
   border-radius: 50%;
-  background: transparent;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
@@ -344,10 +344,17 @@ export class FloatingWidget {
     try {
       img.src = browser.runtime.getURL('logo-48.png');
     } catch {
-      // 静默回退：扩展上下文失效时用占位 data URI
+      // 静默回退：扩展上下文失效时用占位 SVG
       img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" rx="8" fill="%23ddd"/%3E%3C/svg%3E';
     }
-    img.alt = 'AI';
+    img.alt = 'BA';
+    // 图片加载失败时显示文字 fallback，确保按钮始终可见
+    img.addEventListener('error', () => {
+      const text = document.createElement('span');
+      text.textContent = 'BA';
+      text.style.cssText = 'font-size:18px;font-weight:700;color:#333;line-height:1;';
+      img.replaceWith(text);
+    }, { once: true });
     btn.appendChild(img);
 
     // 阻止默认拖拽行为（防止浏览器图片拖拽）
