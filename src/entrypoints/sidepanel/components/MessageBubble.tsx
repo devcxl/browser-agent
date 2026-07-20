@@ -459,7 +459,6 @@ export function RiskBadge({ level }: { level: ToolCallDisplay['riskLevel'] }) {
 
 // ─── AI SDK 工具调用气泡 ──────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function SDKToolBubble({ part, t }: { part: any; t: ReturnType<typeof useI18n>['t'] }) {
   const [expanded, setExpanded] = useState(false);
 

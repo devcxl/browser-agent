@@ -87,7 +87,6 @@ export class ToolLoopAdapter implements IAgentRuntime {
     return this._tools;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async generate(options: any): Promise<any> {
     const agent = this.getOrCreateAgent();
     return agent.generate(options);

@@ -230,7 +230,6 @@ describe('MessageBubble', () => {
       const msg: UIMessage = {
         id: 'sdk-3',
         role: 'assistant',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         parts: [
           {
             type: 'dynamic-tool',
@@ -291,7 +290,6 @@ describe('MessageBubble', () => {
       const msg: UIMessage = {
         id: 'sdk-7',
         role: 'assistant',
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         parts: [
           {
             type: 'dynamic-tool',

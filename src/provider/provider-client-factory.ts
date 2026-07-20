@@ -2,8 +2,6 @@ import type { ProviderConfig, ILlmClient, ChatCompletionRequest, StreamChunk, Ch
 import type { CatalogModel } from './provider-catalog';
 import { ProviderCatalog } from './provider-catalog';
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 const NPM_TO_MODULE: Record<string, string> = {
   '@ai-sdk/openai': '@ai-sdk/openai',
   '@ai-sdk/openai-compatible': '@ai-sdk/openai-compatible',

@@ -61,8 +61,6 @@ describe('resolveSide', () => {
 });
 
 describe('clampTop', () => {
-  const minTop = 8;
-
   it('当 pointerY 在有效范围内，返回原始值', () => {
     const result = clampTop(200, 48, 800);
     // vh - buttonSize - 8 = 800 - 48 - 8 = 744

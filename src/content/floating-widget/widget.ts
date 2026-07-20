@@ -20,8 +20,6 @@ import { ConfigStore } from '@/shared/storage/config-store';
 const BUTTON_SIZE = 48;
 /** 长按判定阈值（ms） */
 const LONG_PRESS_DURATION = 500;
-/** 菜单隐藏延迟（ms），让 click 事件有机会触发 */
-const MENU_HIDE_DELAY = 150;
 
 /** 默认吸附侧 */
 const DEFAULT_SIDE: 'left' | 'right' = 'right';
@@ -153,14 +151,6 @@ const SHADOW_CSS = /* css */ `
   to   { opacity: 1; transform: scale(1); }
 }
 `;
-
-/**
- * 生成按钮定位样式字符串。
- * 吸附时使用：{side}: 0; top: {top}px + transform: none
- */
-function makeButtonStyle(pos: ButtonPosition): string {
-  return `${pos.side}: 0; top: ${pos.top}px; transform: none;`;
-}
 
 export class FloatingWidget {
   private settings: FloatingButtonSettings;

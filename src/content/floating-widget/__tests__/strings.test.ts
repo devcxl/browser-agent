@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { getStrings } from '../strings';
-import type { FloatingWidgetStrings } from '../strings';
 
 describe('getStrings', () => {
   it('lang="zh-CN" 返回中文文案', () => {

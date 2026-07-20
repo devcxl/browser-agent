@@ -10,7 +10,6 @@ import { ToolLoopAdapter } from '@/agent/tool-loop-adapter';
  */
 export function useChatAgent(adapter: ToolLoopAdapter) {
   const transport = new DirectChatTransport({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     agent: adapter as any,
   });
 
