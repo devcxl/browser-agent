@@ -16,8 +16,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/devcxl/browser-agent" alt="License"></a>
   <a href="https://github.com/devcxl/browser-agent/releases"><img src="https://img.shields.io/github/v/release/devcxl/browser-agent" alt="Release"></a>
   <a href="https://github.com/devcxl/browser-agent/actions"><img src="https://img.shields.io/github/actions/workflow/status/devcxl/browser-agent/build.yml" alt="Build"></a>
-  <a href="https://chrome.google.com/webstore"><img src="https://img.shields.io/badge/Chrome-MV3-blue" alt="Chrome"></a>
-  <a href="https://addons.mozilla.org"><img src="https://img.shields.io/badge/Firefox-MV2-orange" alt="Firefox"></a>
+  <a href="https://chromewebstore.google.com/detail/browser-agent/ocdmppclkippfbdhephcacmpmomkmdip"><img src="https://img.shields.io/badge/Chrome-MV3-blue" alt="Chrome"></a>
+  <a href="https://addons.mozilla.org/zh-CN/firefox/addon/browser-agent/"><img src="https://img.shields.io/badge/Firefox-MV2-orange" alt="Firefox"></a>
 </p>
 
 ## Features
