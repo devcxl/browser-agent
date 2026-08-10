@@ -45,7 +45,10 @@ export function ContextUsageRing({ used, limit }: ContextUsageRingProps) {
       data-state={isWarning ? 'warning' : 'normal'}
       title={tooltip}
       aria-label={tooltip}
-      className="shrink-0 inline-flex items-center justify-center"
+      className={cn(
+        'shrink-0 inline-flex items-center justify-center rounded-full',
+        isWarning && 'bg-danger/10',
+      )}
     >
       <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} className="block" aria-hidden="true">
         {/* 背景轨 */}
@@ -56,10 +59,10 @@ export function ContextUsageRing({ used, limit }: ContextUsageRingProps) {
           fill="none"
           stroke="currentColor"
           strokeWidth={STROKE}
-          opacity="0.15"
+          opacity="0.3"
           className="text-mute"
         />
-        {/* 进度弧：rotate(-90) 使起点在 12 点方向 */}
+        {/* 进度弧：rotate(-90) 使起点在 12 点方向；≥80% 用 danger 红与主题橙形成强对比 */}
         <circle
           data-testid="context-usage-ring-progress"
           cx={SIZE / 2}
@@ -72,7 +75,7 @@ export function ContextUsageRing({ used, limit }: ContextUsageRingProps) {
           strokeDasharray={CIRCUMFERENCE}
           strokeDashoffset={dashOffset}
           transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-          className={cn(isWarning ? 'text-warning' : 'text-primary')}
+          className={cn(isWarning ? 'text-danger' : 'text-primary')}
         />
       </svg>
     </span>

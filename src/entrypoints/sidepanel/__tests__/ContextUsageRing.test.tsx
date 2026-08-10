@@ -52,13 +52,15 @@ describe('ContextUsageRing', () => {
     expect(queryByTestId('context-usage-ring')).not.toBeNull();
   });
 
-  it('占用率 ≥80% 时 wrapper data-state=warning 且进度弧 text-warning，<80% 为 normal', () => {
+  it('占用率 ≥80% 时 wrapper data-state=warning 且进度弧 text-danger，<80% 为 normal', () => {
     const { getByTestId, rerender } = wrappedRender(<ContextUsageRing used={102400} limit={128000} />);
     expect(getByTestId('context-usage-ring').getAttribute('data-state')).toBe('warning');
-    expect(getByTestId('context-usage-ring-progress').getAttribute('class')).toContain('text-warning');
+    expect(getByTestId('context-usage-ring').getAttribute('class')).toContain('bg-danger/10');
+    expect(getByTestId('context-usage-ring-progress').getAttribute('class')).toContain('text-danger');
 
     rerender(<ContextUsageRing used={101120} limit={128000} />);
     expect(getByTestId('context-usage-ring').getAttribute('data-state')).toBe('normal');
+    expect(getByTestId('context-usage-ring').getAttribute('class')).not.toContain('bg-danger/10');
     expect(getByTestId('context-usage-ring-progress').getAttribute('class')).toContain('text-primary');
 
     // 100% 仍为 warning
