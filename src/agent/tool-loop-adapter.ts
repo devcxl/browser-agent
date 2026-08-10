@@ -26,7 +26,20 @@ import {
   selectSummaryCutoff,
 } from './conversation-compaction';
 import { ToolClassifier } from './tool-classifier';
+import { TOOL_CATEGORY_DESCRIPTIONS } from '@/shared/tool-categories';
+import type { ToolCategory } from '@/shared/types/tool';
 import { DEFAULT_AGENT_CONFIG } from './system-prompt';
+
+/** 常驻类别：高频操作不参与懒加载过滤，分类失效时仍有核心能力可用 */
+const CORE_TOOL_CATEGORIES: readonly ToolCategory[] = [
+  'tabs',
+  'windows',
+  'tabGroups',
+  'page',
+];
+
+/** 单个工具结果进入上下文的长度上限，超出即截断（保护长文本类工具） */
+const MAX_TOOL_RESULT_CHARS = 8_000;
 
 const RECENT_TURNS_TO_KEEP = 4;
 const conversationCompactions = new Map<string, Promise<boolean>>();
@@ -364,12 +377,13 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
       const allTools = this.toolRegistry.getAllTools();
       const toolNames = allTools
-        .filter((t) => categories.includes(t.category))
+        .filter((t) => CORE_TOOL_CATEGORIES.includes(t.category) || categories.includes(t.category))
         .map((t) => t.name);
 
       console.debug('[ToolLoopAdapter] classify: 过滤结果', {
         totalTools: allTools.length,
         matchedCategories: categories,
+        coreCategories: CORE_TOOL_CATEGORIES,
         activeTools: toolNames,
       });
 
@@ -422,21 +436,47 @@ export class ToolLoopAdapter implements IAgentRuntime {
     const result = await tool.execute(params);
 
     // 过滤敏感数据
-    return this.guardrail.filterResultForRemote(tool, result, {
+    const filtered = this.guardrail.filterResultForRemote(tool, result, {
       isLocalTrusted: this.providerConfig.isLocalTrusted,
       expertModeEnabled: false,
       expertSwitches: {},
       grantedPermissions: [],
       sessionGrants: { sensitiveDataAllowed: false },
     });
+
+    // 截断超长结果，避免一次性挤占上下文
+    return this.truncateToolResult(filtered);
+  }
+
+  /** 截断超过上限的工具结果，保留截断标记与原始长度信息 */
+  private truncateToolResult(result: ToolResult): ToolResult {
+    if (JSON.stringify(result).length <= MAX_TOOL_RESULT_CHARS) return result;
+
+    if (typeof result.data === 'string' && result.data.length > MAX_TOOL_RESULT_CHARS) {
+      return { ...result, data: this.truncateWithMarker(result.data) };
+    }
+    if (typeof result.error === 'string' && result.error.length > MAX_TOOL_RESULT_CHARS) {
+      return { ...result, error: this.truncateWithMarker(result.error) };
+    }
+    const dataText = JSON.stringify(result.data ?? {});
+    if (dataText.length > MAX_TOOL_RESULT_CHARS) {
+      return { ...result, data: this.truncateWithMarker(dataText) };
+    }
+    return result;
+  }
+
+  private truncateWithMarker(text: string): string {
+    return `${text.slice(0, MAX_TOOL_RESULT_CHARS)}\n…[结果过长已截断，原始长度 ${text.length} 字符]`;
   }
 
   /** 构建初始 messages */
   private async buildMessages(input: AgentRunInput): Promise<ModelMessage[]> {
     const messages: ModelMessage[] = [];
 
-    // 1. System prompt
-    messages.push(this.buildSystemMessage(input.browserContext));
+    // 1. 静态 system prompt（保持前缀稳定以命中 provider prompt cache）
+    messages.push(this.buildSystemMessage());
+    // 2. 动态浏览器上下文（放在静态前缀之后，变化不影响缓存命中）
+    messages.push(this.buildBrowserContextMessage(input.browserContext));
 
     // 2. Conversation summary
     const conversation = await this.conversationManager.get(input.conversationId);
@@ -554,7 +594,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
       ? Math.min(desiredSummaryTokens, maxOutputTokens)
       : desiredSummaryTokens;
     const fixedMessages: ModelMessage[] = [
-      this.buildSystemMessage(input.browserContext),
+      this.buildSystemMessage(),
+      this.buildBrowserContextMessage(input.browserContext),
       { role: 'user', content: input.userMessage },
     ];
     const rawTargetTokens = Math.max(
@@ -593,22 +634,34 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
   }
 
-  /** 构建 System Message（含工具列表描述） */
-  private buildSystemMessage(browserContext: LowSensitivityContext): ModelMessage {
-    const tools = this.toolRegistry.getAllTools();
-    const toolsDesc = tools.map((t) => `- **${t.name}**: ${t.description}`).join('\n');
+  /**
+   * 静态 system message：仅含固定指令与工具类别索引。
+   * 内容不随会话变化，保证 provider 端 prompt caching 命中前缀。
+   */
+  private buildSystemMessage(): ModelMessage {
+    const categoryIndex = (Object.keys(TOOL_CATEGORY_DESCRIPTIONS) as ToolCategory[])
+      .map((category) => `- ${category}: ${TOOL_CATEGORY_DESCRIPTIONS[category]}`)
+      .join('\n');
 
     const content = [
       `你是浏览器助手，可以管理用户的标签页、窗口、标签组等。`,
       ``,
-      `## 当前浏览器上下文`,
-      JSON.stringify(browserContext, null, 2),
-      ``,
-      `## 可用工具`,
-      toolsDesc,
+      `## 可用工具类别`,
+      categoryIndex,
     ].join('\n');
 
     return { role: 'system', content };
+  }
+
+  /**
+   * 动态浏览器上下文：独立 system message，置于静态前缀之后。
+   * 状态变化只影响后半段，不会破坏前缀缓存。
+   */
+  private buildBrowserContextMessage(browserContext: LowSensitivityContext): ModelMessage {
+    return {
+      role: 'system',
+      content: `## 当前浏览器上下文\n${JSON.stringify(browserContext, null, 2)}`,
+    };
   }
 
   /** StoredMessage → ModelMessage 转换 */

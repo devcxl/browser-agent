@@ -1,57 +1,41 @@
 import { generateText, type LanguageModel } from 'ai';
 import type { ToolCategory } from '@/shared/types/tool';
+import {
+  LOCAL_CATEGORY_KEYWORDS,
+  TOOL_CATEGORY_DESCRIPTIONS,
+} from '@/shared/tool-categories';
 
 // ---------------------------------------------------------------------------
 // 分类 prompt
 // ---------------------------------------------------------------------------
 
+const CATEGORY_LISTING = (Object.keys(TOOL_CATEGORY_DESCRIPTIONS) as ToolCategory[])
+  .map((category) => `- ${category}: ${TOOL_CATEGORY_DESCRIPTIONS[category]}`)
+  .join('\n');
+
 const CLASSIFIER_PROMPT = `你是浏览器工具分类器。根据用户消息判断需要用到哪些工具类别，以 JSON 字符串数组格式输出。
 
 可用类别及其说明：
-- tabs: 标签页操作（打开、关闭、切换、移动、查询标签页信息）
-- windows: 窗口操作（创建、关闭、切换、调整窗口）
-- tabGroups: 标签组操作（创建、折叠、展开、管理标签组）
-- bookmarks: 书签操作（添加、删除、搜索、整理书签）
-- history: 历史记录操作（查询、删除浏览历史）
-- downloads: 下载操作（查询、管理下载文件）
-- sessions: 会话操作（保存、恢复浏览会话）
-- page: 页面操作（截图、获取页面内容、执行脚本）
-- cookies: Cookie 操作（读取、设置、删除 Cookie）
-- storage: 存储操作（localStorage/sessionStorage 读写）
-- clipboard: 剪贴板操作（读写剪贴板）
-- notifications: 通知操作（创建、管理浏览器通知）
-- contextMenus: 右键菜单操作
-- sidePanel: 侧边栏操作
-- alarms: 定时器/闹钟操作
-- system: 系统信息（内存、CPU、平台信息）
-- expert: 高级功能（需要 Expert Mode）
-- management: 扩展管理（安装、卸载、启用/禁用扩展）
-- privacy: 隐私设置（清除数据、隐私配置）
-- proxy: 代理设置
-- debugger: 调试器操作（attach/detach 调试器）
-- declarativeNetRequest: 网络请求规则
+${CATEGORY_LISTING}
 
 请精确判断用户消息涉及的类别，不要推理或解释，返回可能需要的类别数组。不要返回无关类别。若难以判断，返回空数组。` as const;
 
 // ---------------------------------------------------------------------------
-// 分类结果缓存（同一对话内复用）
+// 分类结果缓存（同一对话内复用，FIFO 上限防膨胀）
 // ---------------------------------------------------------------------------
 
-interface CacheEntry {
-  userMessage: string;
-  categories: ToolCategory[];
-  timestamp: number;
-}
+const CACHE_LIMIT = 100;
 
 // ---------------------------------------------------------------------------
 // ToolClassifier
 // ---------------------------------------------------------------------------
 
 export class ToolClassifier {
-  private cache: CacheEntry | null = null;
+  private cache = new Map<string, ToolCategory[]>();
 
   /**
-   * LLM 预分类：将用户消息映射到工具类别列表。
+   * 工具预分类：优先本地关键词规则（零 LLM 往返），未命中时再用 LLM 兜底。
+   * 将用户消息映射到工具类别列表。
    * 使用 generateText + 手动解析 JSON，避免依赖 provider 的
    * structuredOutputs/json_schema 支持（DeepSeek 等不兼容）。
    */
@@ -59,9 +43,17 @@ export class ToolClassifier {
     userMessage: string,
     model: LanguageModel,
   ): Promise<ToolCategory[]> {
-    if (this.cache?.userMessage === userMessage) {
-      console.debug('[ToolClassifier] 缓存命中:', this.cache.categories);
-      return this.cache.categories;
+    const cached = this.cache.get(userMessage);
+    if (cached) {
+      console.debug('[ToolClassifier] 缓存命中:', cached);
+      return cached;
+    }
+
+    const local = classifyByKeywords(userMessage);
+    if (local !== null) {
+      console.debug('[ToolClassifier] 本地规则命中:', local);
+      this.remember(userMessage, local);
+      return local;
     }
 
     try {
@@ -98,11 +90,7 @@ export class ToolClassifier {
         console.debug('[ToolClassifier] 过滤无效类别:', raw.filter(c => !CATEGORY_NAMES.has(c as ToolCategory)));
       }
 
-      this.cache = {
-        userMessage,
-        categories: validCategories,
-        timestamp: Date.now(),
-      };
+      this.remember(userMessage, validCategories);
 
       return validCategories;
     } catch (err) {
@@ -113,8 +101,31 @@ export class ToolClassifier {
 
   /** 清除缓存 */
   reset(): void {
-    this.cache = null;
+    this.cache.clear();
   }
+
+  /** 写入缓存并保持 FIFO 上限 */
+  private remember(userMessage: string, categories: ToolCategory[]): void {
+    if (this.cache.size >= CACHE_LIMIT) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest !== undefined) this.cache.delete(oldest);
+    }
+    this.cache.set(userMessage, categories);
+  }
+}
+
+/**
+ * 本地关键词规则分类：命中任意关键词即激活对应类别。
+ * 返回 null 表示无法判断（交由 LLM 兜底）。
+ */
+function classifyByKeywords(userMessage: string): ToolCategory[] | null {
+  const matched: ToolCategory[] = [];
+  for (const [category, keywords] of Object.entries(LOCAL_CATEGORY_KEYWORDS)) {
+    if (keywords.some((keyword) => userMessage.includes(keyword))) {
+      matched.push(category as ToolCategory);
+    }
+  }
+  return matched.length > 0 ? matched : null;
 }
 
 /**

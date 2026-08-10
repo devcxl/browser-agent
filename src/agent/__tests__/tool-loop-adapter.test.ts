@@ -242,7 +242,7 @@ describe('ToolLoopAdapter', () => {
     expect(userMessage?.content).toBe('Hello');
   });
 
-  it('prepareStep 应只激活分类命中的工具', async () => {
+  it('prepareStep 激活分类命中的工具及常驻核心类别工具', async () => {
     const registry = createMockToolRegistry([
       createMockTool('tabs_query'),
       { ...createMockTool('windows_query'), category: 'windows' },
@@ -268,7 +268,8 @@ describe('ToolLoopAdapter', () => {
     });
 
     expect(mockToolClassifierClassify).toHaveBeenCalledWith('查询标签页', {});
-    expect(result.activeTools).toEqual(['tabs_query']);
+    // tabs 由分类命中，windows 属常驻核心类别一并激活
+    expect(result.activeTools).toEqual(['tabs_query', 'windows_query']);
     expect(mockPruneMessages).not.toHaveBeenCalled();
   });
 
