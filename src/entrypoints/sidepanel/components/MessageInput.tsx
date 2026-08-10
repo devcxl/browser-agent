@@ -3,7 +3,9 @@ import { cn } from '../utils';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useI18n } from '../i18n/useI18n';
+import type { TokenUsage } from '../types';
 import { ChatSelect } from './ChatSelect';
+import { ContextUsageRing } from './ContextUsageRing';
 
 interface Props {
   onSend: (text: string) => void;
@@ -19,6 +21,10 @@ interface Props {
   onReasoningEffortChange?: (effort: ReasoningEffort | undefined) => void;
   /** home: 居中大输入框；chat: 底部紧凑输入框 */
   variant?: 'home' | 'chat';
+  /** 最近一次请求的 token 用量（未传视为 {0,0}，进度环隐藏） */
+  tokenUsage?: TokenUsage;
+  /** 上下文窗口上限（agentSettings.contextWindowTokens；默认 128000） */
+  contextWindowTokens?: number;
 }
 
 const SpinnerIcon = (
@@ -33,6 +39,7 @@ export function MessageInput({
   providers, selectedProviderId = '', onSelectProvider = () => {}, selectedModelId = '', onSelectModel = () => {},
   reasoningEffort, onReasoningEffortChange = () => {},
   variant = 'chat',
+  tokenUsage, contextWindowTokens,
 }: Props) {
   const { t } = useI18n();
   const [text, setText] = useState('');
@@ -41,6 +48,9 @@ export function MessageInput({
   const activeProvider = providers.find((provider) => provider.id === selectedProviderId) ?? providers[0] ?? null;
   const models = Object.values(activeProvider?.models ?? {});
   const activeModel = activeProvider?.models?.[selectedModelId] ?? null;
+
+  // 上下文上限解析链：模型 limit.context → agentSettings.contextWindowTokens → 默认 128000
+  const contextLimit = activeModel?.limit?.context ?? contextWindowTokens ?? 128000;
 
   const handleTranscribed = useCallback((transcribedText: string) => {
     setText((prev) => {
@@ -241,6 +251,8 @@ export function MessageInput({
               )}
             </>
           )}
+
+          {tokenUsage && <ContextUsageRing used={tokenUsage.prompt} limit={contextLimit} />}
 
           {micButton}
 

@@ -42,8 +42,44 @@ function getLatestMockReturn(): UseVoiceInputReturn & { __onTranscribed: (text: 
 
 const EMPTY_PROVIDERS: ProviderConfig[] = [];
 
+/** 模型未配置 limit.context → 上限回退 contextWindowTokens / 默认 128000 */
+const PROVIDER_NO_CONTEXT_LIMIT: ProviderConfig = {
+  id: 'local',
+  name: 'Local Gateway',
+  apiKey: '',
+  isLocalTrusted: true,
+  models: {
+    chat: { id: 'chat', name: 'Chat' },
+  },
+  defaultModelId: 'chat',
+};
+
+/** 模型配置 limit.context=32768 且支持思考等级 → reasoning-select 渲染 */
+const PROVIDER_CONTEXT_32768: ProviderConfig = {
+  id: 'local',
+  name: 'Local Gateway',
+  apiKey: '',
+  isLocalTrusted: true,
+  models: {
+    qwen: {
+      id: 'qwen',
+      name: 'Qwen',
+      limit: { context: 32768, output: 8192 },
+      reasoning: true,
+      reasoningEfforts: ['low', 'high'],
+      defaultReasoningEffort: 'high',
+    },
+  },
+  defaultModelId: 'qwen',
+};
+
 function wrappedRender(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  const utils = render(<I18nProvider>{ui}</I18nProvider>);
+  return {
+    ...utils,
+    // rerender 会替换整个渲染树，必须重新包裹 I18nProvider
+    rerender: (nextUi: React.ReactElement) => utils.rerender(<I18nProvider>{nextUi}</I18nProvider>),
+  };
 }
 
 describe('MessageInput', () => {
@@ -340,5 +376,110 @@ describe('MessageInput', () => {
     );
 
     expect(screen.getByTestId('reasoning-unsupported')).toHaveTextContent('Think: Unsupported');
+  });
+
+  // ── 上下文占用进度环集成 ──
+
+  it('传入 tokenUsage 时显示上下文占用进度环（模型无 limit.context 时回退默认上限 128000）', () => {
+    wrappedRender(
+      <MessageInput
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        disabled={false}
+        isRunning={false}
+        providers={[PROVIDER_NO_CONTEXT_LIMIT]}
+        selectedProviderId="local"
+        onSelectProvider={vi.fn()}
+        selectedModelId="chat"
+        onSelectModel={vi.fn()}
+        tokenUsage={{ prompt: 45200, completion: 0 }}
+      />,
+    );
+
+    const ring = screen.getByTestId('context-usage-ring');
+    expect(ring.getAttribute('aria-label')).toContain('45,200 / 128,000');
+  });
+
+  it('tokenUsage 未传或 prompt=0 时不渲染进度环', () => {
+    const { rerender } = wrappedRender(
+      <MessageInput
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        disabled={false}
+        isRunning={false}
+        providers={[PROVIDER_NO_CONTEXT_LIMIT]}
+        selectedProviderId="local"
+        onSelectProvider={vi.fn()}
+        selectedModelId="chat"
+        onSelectModel={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('context-usage-ring')).toBeNull();
+
+    rerender(
+      <MessageInput
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        disabled={false}
+        isRunning={false}
+        providers={[PROVIDER_NO_CONTEXT_LIMIT]}
+        selectedProviderId="local"
+        onSelectProvider={vi.fn()}
+        selectedModelId="chat"
+        onSelectModel={vi.fn()}
+        tokenUsage={{ prompt: 0, completion: 0 }}
+      />,
+    );
+    expect(screen.queryByTestId('context-usage-ring')).toBeNull();
+  });
+
+  it('activeModel.limit.context 优先于 contextWindowTokens 作为上限', () => {
+    wrappedRender(
+      <MessageInput
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        disabled={false}
+        isRunning={false}
+        providers={[PROVIDER_CONTEXT_32768]}
+        selectedProviderId="local"
+        onSelectProvider={vi.fn()}
+        selectedModelId="qwen"
+        onSelectModel={vi.fn()}
+        contextWindowTokens={50000}
+        tokenUsage={{ prompt: 45200, completion: 0 }}
+      />,
+    );
+
+    const ring = screen.getByTestId('context-usage-ring');
+    expect(ring.getAttribute('aria-label')).toContain('45,200');
+    expect(ring.getAttribute('aria-label')).toContain('32,768');
+    expect(ring.getAttribute('aria-label')).not.toContain('50,000');
+  });
+
+  it('DOM 顺序为 reasoning 下拉 → 进度环 → 麦克风按钮', () => {
+    wrappedRender(
+      <MessageInput
+        onSend={vi.fn()}
+        onAbort={vi.fn()}
+        disabled={false}
+        isRunning={false}
+        providers={[PROVIDER_CONTEXT_32768]}
+        selectedProviderId="local"
+        onSelectProvider={vi.fn()}
+        selectedModelId="qwen"
+        onSelectModel={vi.fn()}
+        tokenUsage={{ prompt: 45200, completion: 0 }}
+      />,
+    );
+
+    const reasoning = screen.getByRole('combobox', { name: '思考' });
+    const ring = screen.getByTestId('context-usage-ring');
+    const mic = screen.getByTestId('mic-button');
+
+    const follows = (a: Element, b: Element) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+    expect(follows(reasoning, ring)).toBe(true);
+    expect(follows(ring, mic)).toBe(true);
   });
 });

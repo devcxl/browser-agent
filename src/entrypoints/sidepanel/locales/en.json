@@ -50,6 +50,9 @@
       "transcribing": "Transcribing...",
       "voiceError": "Voice recognition error"
     },
+    "contextUsage": {
+      "tooltip": "Context usage: {used} / {limit}"
+    },
     "message": {
       "showReasoning": "Show reasoning",
       "hideReasoning": "Hide reasoning",

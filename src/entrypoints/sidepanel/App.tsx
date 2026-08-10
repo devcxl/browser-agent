@@ -312,6 +312,8 @@ function ChatLayout() {
     onSelectModel: handleSelectModel,
     reasoningEffort,
     onReasoningEffortChange: handleReasoningEffortChange,
+    tokenUsage,
+    contextWindowTokens: agentSettings.contextWindowTokens,
   };
 
   return (

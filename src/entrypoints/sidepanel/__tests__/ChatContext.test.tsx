@@ -38,6 +38,33 @@ vi.mock('@/conversation', () => ({
   ConversationManager: vi.fn(() => mockConversationManager),
 }));
 
+// ── useAgent mock：捕获 ChatProvider 注册的回调（onTokenUsage 等），供回归测试驱动 ──
+
+const mockAgent = vi.hoisted(() => {
+  const callbacks: {
+    onMessage?: (msg: unknown) => void;
+    onConfirm?: (req: unknown) => void;
+    onTokenUsage?: (usage: { prompt: number; completion: number }) => void;
+    onConversationTitle?: (conversationId: string, title: string) => void;
+  } = {};
+  return {
+    status: 'idle',
+    error: null,
+    runningConversationId: null,
+    callbacks,
+    setCallbacks: (cb: typeof callbacks) => {
+      Object.assign(callbacks, cb);
+    },
+    run: vi.fn(),
+    abort: vi.fn(),
+    resolveConfirm: vi.fn(),
+  };
+});
+
+vi.mock('../hooks/useAgent', () => ({
+  useAgent: () => mockAgent,
+}));
+
 import { ChatProvider, useChat } from '../ChatContext';
 
 function ContextInspector() {
@@ -319,5 +346,53 @@ describe('ChatContext message loading', () => {
     // Messages must NOT have been overwritten by conv-A's stale data
     expect(screen.getByTestId('messages-count').textContent).toBe('1');
     expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
+  });
+
+  it('切换 activeId 后 tokenUsage 重置为 {0,0}（会话切换无残留旧值）', async () => {
+    const now = Date.now();
+    mockConversationManager.list.mockResolvedValue([
+      { id: 'conv-A', title: 'Conv A', titleGenerated: true, updatedAt: now, createdAt: now, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-B', title: 'Conv B', titleGenerated: true, updatedAt: now, createdAt: now, messages: [], sensitiveDataGranted: false },
+    ]);
+    mockConversationManager.get.mockResolvedValue({
+      id: 'conv-A', title: 'Conv A', titleGenerated: true, createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
+    });
+
+    function TokenUsageInspector() {
+      const chat = useChat();
+      return (
+        <div>
+          <div data-testid="token-usage-prompt">{chat.tokenUsage.prompt}</div>
+          <div data-testid="active-id">{chat.conversations.activeId ?? '(none)'}</div>
+          <button
+            type="button"
+            data-testid="fire-usage"
+            onClick={() => mockAgent.callbacks.onTokenUsage?.({ prompt: 5000, completion: 100 })}
+          >
+            Fire usage
+          </button>
+          <button type="button" data-testid="select-conv-b" onClick={() => chat.conversations.select('conv-B')}>
+            Select B
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <TokenUsageInspector />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-id').textContent).toBe('conv-A'));
+
+    // 模拟一次请求返回 usage → tokenUsage 变为非零
+    await userEvent.click(screen.getByTestId('fire-usage'));
+    await waitFor(() => expect(screen.getByTestId('token-usage-prompt').textContent).toBe('5000'));
+
+    // 切换会话 → 重置为 {0,0}
+    await userEvent.click(screen.getByTestId('select-conv-b'));
+    await waitFor(() => expect(screen.getByTestId('active-id').textContent).toBe('conv-B'));
+    expect(screen.getByTestId('token-usage-prompt').textContent).toBe('0');
   });
 });
