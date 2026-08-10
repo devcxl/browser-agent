@@ -164,10 +164,11 @@ describe('ToolLoopAdapter', () => {
     providerConfig = createMockProviderConfig();
 
     // 默认：stream 返回成功（空 stream 事件 + 最终结果）
+    // finalStep.usage = 最后一步单步 usage（上下文占用）；usage = 多步累计值
     mockToolLoopAgentStream.mockResolvedValue({
       stream: (async function* () {})(),
-      finalStep: Promise.resolve({ text: '操作完成' }),
-      usage: Promise.resolve({ inputTokens: 100, outputTokens: 50 }),
+      finalStep: Promise.resolve({ text: '操作完成', usage: { inputTokens: 100, outputTokens: 50 } }),
+      usage: Promise.resolve({ inputTokens: 3000000, outputTokens: 600000 }),
     });
 
     adapter = new ToolLoopAdapter(
@@ -198,6 +199,22 @@ describe('ToolLoopAdapter', () => {
     expect(createOpenAICompatible).toHaveBeenCalledWith(
       expect.objectContaining({ includeUsage: true }),
     );
+  });
+
+  it('tokenUsage 取最后一步单步 usage 而非多步累计值（上下文占用语义）', async () => {
+    // result.usage 为所有 step 累计（多步工具调用反复发送完整上下文，可达百万级）；
+    // finalStep.usage 才是最近一次请求的真实上下文占用
+    mockToolLoopAgentStream.mockResolvedValueOnce({
+      stream: (async function* () {})(),
+      finalStep: Promise.resolve({ text: '操作完成', usage: { inputTokens: 45200, outputTokens: 800 } }),
+      usage: Promise.resolve({ inputTokens: 3000000, outputTokens: 600000 }),
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.tokenUsage).toEqual({ prompt: 45200, completion: 800 });
+    // 累计值 300 万不应泄漏到 tokenUsage（进度环据此计算占比会恒为 100%）
+    expect(result.tokenUsage?.prompt).not.toBe(3000000);
   });
 
   it('使用配置的单次任务最大执行步数', async () => {

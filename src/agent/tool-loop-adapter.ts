@@ -175,7 +175,11 @@ export class ToolLoopAdapter implements IAgentRuntime {
       console.debug('[ToolLoopAdapter] stream 消费完成, text:', accumulatedText.length, 'reasoning:', accumulatedReasoning.length);
 
       const finalStep = await result.finalStep;
-      const usage = await result.usage;
+      // 注意：result.usage 是所有 step 的累计值（多步工具调用会把完整上下文
+      // 反复发送，累计可达百万级），不能用于表示"当前上下文占用"。
+      // 取最后一步的单步 usage —— 最后一步的 inputTokens 即最近一次请求
+      // 发送给 LLM 的完整上下文（系统提示+历史+工具结果）。
+      const usage = finalStep.usage ?? (await result.usage);
       await Promise.all(persistenceTasks);
       console.debug('[ToolLoopAdapter] 执行完成', {
         finalText: finalStep.text?.slice(0, 80),
