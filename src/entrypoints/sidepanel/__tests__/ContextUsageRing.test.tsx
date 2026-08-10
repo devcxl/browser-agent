@@ -15,7 +15,12 @@ beforeEach(() => {
 });
 
 function wrappedRender(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  const utils = render(<I18nProvider>{ui}</I18nProvider>);
+  return {
+    ...utils,
+    // rerender 会替换整个渲染树，必须重新包裹 I18nProvider
+    rerender: (nextUi: React.ReactElement) => utils.rerender(<I18nProvider>{nextUi}</I18nProvider>),
+  };
 }
 
 describe('contextUsagePercent', () => {
@@ -50,11 +55,11 @@ describe('ContextUsageRing', () => {
   it('占用率 ≥80% 时 wrapper data-state=warning 且进度弧 text-warning，<80% 为 normal', () => {
     const { getByTestId, rerender } = wrappedRender(<ContextUsageRing used={102400} limit={128000} />);
     expect(getByTestId('context-usage-ring').getAttribute('data-state')).toBe('warning');
-    expect(getByTestId('context-usage-ring-progress').className).toContain('text-warning');
+    expect(getByTestId('context-usage-ring-progress').getAttribute('class')).toContain('text-warning');
 
     rerender(<ContextUsageRing used={101120} limit={128000} />);
     expect(getByTestId('context-usage-ring').getAttribute('data-state')).toBe('normal');
-    expect(getByTestId('context-usage-ring-progress').className).toContain('text-primary');
+    expect(getByTestId('context-usage-ring-progress').getAttribute('class')).toContain('text-primary');
 
     // 100% 仍为 warning
     rerender(<ContextUsageRing used={128000} limit={128000} />);

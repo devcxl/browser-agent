@@ -74,7 +74,12 @@ const PROVIDER_CONTEXT_32768: ProviderConfig = {
 };
 
 function wrappedRender(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  const utils = render(<I18nProvider>{ui}</I18nProvider>);
+  return {
+    ...utils,
+    // rerender 会替换整个渲染树，必须重新包裹 I18nProvider
+    rerender: (nextUi: React.ReactElement) => utils.rerender(<I18nProvider>{nextUi}</I18nProvider>),
+  };
 }
 
 describe('MessageInput', () => {
