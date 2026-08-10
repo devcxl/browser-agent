@@ -313,6 +313,8 @@ export class ProviderClientFactory {
           name: config.name,
           baseURL: baseUrl || 'https://api.openai.com/v1',
           headers,
+          // 请求流式 usage：否则 OpenAI-compatible 服务端默认不返回 usage
+          includeUsage: true,
         });
         return (provider as any).chatModel(modelId);
       }

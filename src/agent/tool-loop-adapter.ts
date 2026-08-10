@@ -719,6 +719,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
       name: this.providerConfig.name,
       baseURL: this.providerConfig.api ?? this.providerConfig.endpoint ?? '',
       headers,
+      // 必须请求流式 usage：否则 OpenAI-compatible 服务端默认不返回 usage，
+      // tokenUsage 恒为 undefined，上下文占用进度环永不显示
+      includeUsage: true,
     });
     return provider.chatModel(this.modelId) as unknown as LanguageModelV4;
   }

@@ -189,6 +189,17 @@ describe('ToolLoopAdapter', () => {
     expect(result.tokenUsage).toEqual({ prompt: 100, completion: 50 });
   });
 
+  it('createOpenAICompatible 必须请求流式 usage（进度环数据来源）', async () => {
+    await adapter.run(basicInput);
+
+    // 回归：未传 includeUsage:true 时 OpenAI-compatible 服务端默认不返回 usage，
+    // 导致 result.usage 恒 undefined，上下文占用进度环永不显示
+    const createOpenAICompatible = vi.mocked((await import('@ai-sdk/openai-compatible')).createOpenAICompatible);
+    expect(createOpenAICompatible).toHaveBeenCalledWith(
+      expect.objectContaining({ includeUsage: true }),
+    );
+  });
+
   it('使用配置的单次任务最大执行步数', async () => {
     const config: AgentConfig = {
       maxToolRounds: 7,
