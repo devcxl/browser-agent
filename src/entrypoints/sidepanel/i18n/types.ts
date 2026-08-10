@@ -54,6 +54,9 @@ export interface MessageSchema {
       transcribing: string;
       voiceError: string;
     };
+    contextUsage: {
+      tooltip: string;
+    };
     message: {
       showReasoning: string;
       hideReasoning: string;

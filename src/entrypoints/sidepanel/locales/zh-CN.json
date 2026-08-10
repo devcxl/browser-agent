@@ -50,6 +50,9 @@
       "transcribing": "正在识别语音...",
       "voiceError": "语音识别出错"
     },
+    "contextUsage": {
+      "tooltip": "上下文占用：{used} / {limit}"
+    },
     "message": {
       "showReasoning": "查看思考过程",
       "hideReasoning": "收起思考过程",
