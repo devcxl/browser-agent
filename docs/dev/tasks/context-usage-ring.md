@@ -2,7 +2,7 @@
 slug: context-usage-ring
 type: feature
 task: context-usage-ring
-issue: null
+issue: 196
 test_commands:
   - npx vitest run src/entrypoints/sidepanel/__tests__/ContextUsageRing.test.tsx src/entrypoints/sidepanel/__tests__/MessageInput.test.tsx
 verify_commands:
