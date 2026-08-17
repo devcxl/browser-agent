@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
 import type { ProviderConfig, ProviderModelConfig } from '@/shared/types';
-import type { AgentLoopHooks } from '@/agent/agent-loop';
 import type { ToolCallRecord } from '@/shared/types/agent';
 import type { IAgentRuntime, AgentConfig } from '@/shared/types/agent';
 import type { IToolRegistry } from '@/registry/types';
@@ -10,7 +9,6 @@ import type { IConversationManager } from '@/shared/types/conversation';
 import type { IJsonRpcClient } from '@/shared/types';
 import { uid } from '../utils';
 import { ConfigStore } from '@/shared/storage';
-import { FEATURE_FLAGS } from '@/shared/feature-flags';
 
 import type { ISkillStore } from '@/shared/types/skill';
 
@@ -22,7 +20,6 @@ interface AgentCallbacks {
 }
 
 interface AgentDeps {
-  AgentLoop: typeof import('@/agent/agent-loop').AgentLoop;
   ToolLoopAdapter: typeof import('@/agent/tool-loop-adapter').ToolLoopAdapter;
   ToolRegistry: typeof import('@/registry').ToolRegistry;
   Guardrail: typeof import('@/guardrail').Guardrail;
@@ -42,7 +39,6 @@ async function getDeps(): Promise<AgentDeps> {
   if (_deps) return _deps;
   _deps = (async () => {
     const [
-      { AgentLoop },
       { ToolLoopAdapter },
       { ToolRegistry },
       { Guardrail },
@@ -58,7 +54,6 @@ async function getDeps(): Promise<AgentDeps> {
       { createSkillTool },
       { SkillStore },
     ] = await Promise.all([
-      import('@/agent/agent-loop'),
       import('@/agent/tool-loop-adapter'),
       import('@/registry'),
       import('@/guardrail'),
@@ -100,7 +95,7 @@ async function getDeps(): Promise<AgentDeps> {
     const guardrail = new Guardrail(registry);
     const skillStore = SkillStore.getInstance();
 
-    return { AgentLoop, ToolLoopAdapter, ToolRegistry, Guardrail, ConversationManager, JsonRpcClient, LlmClient, registry, guardrail, convManager, rpc, skillStore };
+    return { ToolLoopAdapter, ToolRegistry, Guardrail, ConversationManager, JsonRpcClient, LlmClient, registry, guardrail, convManager, rpc, skillStore };
   })();
   return _deps;
 }
@@ -163,7 +158,7 @@ export function useAgent() {
       try {
         setStatus('streaming');
 
-        const { AgentLoop, ToolLoopAdapter, registry, guardrail, convManager, LlmClient, skillStore } = await getDeps();
+        const { ToolLoopAdapter, registry, guardrail, convManager, LlmClient } = await getDeps();
         const savedAgentSettings = await ConfigStore.getInstance().get('agentSettings');
         const agentConfig: AgentConfig = {
           maxToolRounds: savedAgentSettings?.maxToolRounds ?? 99,
@@ -191,256 +186,116 @@ export function useAgent() {
             .catch((titleError) => console.warn('[Conversation] Failed to generate title', titleError));
         };
 
-        // ── Feature Flag：useToolLoopAgent=true 时使用 AI SDK ToolLoopAgent ──
-        if (FEATURE_FLAGS.useToolLoopAgent) {
-          const adapter = new ToolLoopAdapter(
-            registry,
-            guardrail,
-            convManager,
-            providerConfig,
-            model,
-            agentConfig,
-            async (request) => {
-              return new Promise<'approve' | 'deny'>((resolve) => {
-                setStatus('waitingConfirmation');
-                confirmResolveRef.current = (allowed: boolean) => {
-                  resolve(allowed ? 'approve' : 'deny');
-                };
-                cbRef.current.onConfirm?.({
-                  toolName: request.toolName,
-                  params: request.params,
-                  affectedObjects: [],
-                  warnings: [request.reason],
-                });
+        // ── AI SDK ToolLoopAgent 路径 ──
+        const adapter = new ToolLoopAdapter(
+          registry,
+          guardrail,
+          convManager,
+          providerConfig,
+          model,
+          agentConfig,
+          async (request) => {
+            return new Promise<'approve' | 'deny'>((resolve) => {
+              setStatus('waitingConfirmation');
+              confirmResolveRef.current = (allowed: boolean) => {
+                resolve(allowed ? 'approve' : 'deny');
+              };
+              cbRef.current.onConfirm?.({
+                toolName: request.toolName,
+                params: request.params,
+                affectedObjects: request.affectedObjects ?? [],
+                warnings: request.warnings ? [request.warnings] : [],
               });
-            },
-          );
-          loopRef.current = adapter;
-          const displayedToolCallIds = new Set<string>();
+            });
+          },
+        );
+        loopRef.current = adapter;
+        const displayedToolCallIds = new Set<string>();
 
-          const output = await adapter.run({
-            conversationId,
-            userMessage,
-            providerConfig,
-            model,
-            modelConfig,
-            reasoningEffort,
-            browserContext: {
-              currentWindow: { tabs: [] },
-              allWindows: [],
-              tabGroups: [],
-            },
-            callbacks: {
-              onStreamChunk: (chunk: string) => {
-                // 工具调用后开启新的文本气泡
-                if (assistantMsg.status === 'complete') {
-                  cbRef.current.onMessage?.({ ...assistantMsg });
-                  assistantMsg.id = uid();
-                  assistantMsg.content = '';
-                  assistantMsg.reasoningContent = undefined;
-                  assistantMsg.toolCallDisplay = undefined;
-                  assistantMsg.status = 'streaming';
-                  assistantMsg.timestamp = Date.now();
-                }
-                assistantMsg.content += chunk;
+        const output = await adapter.run({
+          conversationId,
+          userMessage,
+          providerConfig,
+          model,
+          modelConfig,
+          reasoningEffort,
+          browserContext: {
+            currentWindow: { tabs: [] },
+            allWindows: [],
+            tabGroups: [],
+          },
+          callbacks: {
+            onStreamChunk: (chunk: string) => {
+              // 工具调用后开启新的文本气泡
+              if (assistantMsg.status === 'complete') {
                 cbRef.current.onMessage?.({ ...assistantMsg });
-              },
-              onReasoningChunk: (chunk: string) => {
-                const existing = assistantMsg.reasoningContent ?? '';
-                assistantMsg.reasoningContent = existing + chunk;
-                cbRef.current.onMessage?.({ ...assistantMsg });
-              },
-              onToolCall: (record: ToolCallRecord) => {
-                // 当前 assistant 消息如有内容则先终结，保证思考/文本/工具按时间顺序分格
-                if (assistantMsg.content || assistantMsg.reasoningContent) {
-                  cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined });
-                }
-                const display = recordToDisplay(record);
-                displayedToolCallIds.add(record.toolCallId);
-                cbRef.current.onMessage?.({
-                  id: uid(),
-                  role: 'tool',
-                  content: record.toolName,
-                  toolCallDisplay: display,
-                  timestamp: Date.now(),
-                  status: display.status,
-                });
-                // 重置 assistant 消息准备接收下一轮文本
                 assistantMsg.id = uid();
                 assistantMsg.content = '';
                 assistantMsg.reasoningContent = undefined;
                 assistantMsg.toolCallDisplay = undefined;
                 assistantMsg.status = 'streaming';
                 assistantMsg.timestamp = Date.now();
-              },
+              }
+              assistantMsg.content += chunk;
+              cbRef.current.onMessage?.({ ...assistantMsg });
             },
-          });
-
-          // 正常路径会在 onStepFinish 中实时展示；兼容不触发回调的 runtime/test adapter。
-          for (const record of output.toolCalls) {
-            if (displayedToolCallIds.has(record.toolCallId)) continue;
-            const display = recordToDisplay(record);
-            cbRef.current.onMessage?.({
-              id: uid(),
-              role: 'tool',
-              content: record.toolName,
-              toolCallDisplay: display,
-              timestamp: Date.now(),
-              status: display.status,
-            });
-          }
-
-          // 仅终结最后的文本气泡
-          if (assistantMsg.content || assistantMsg.reasoningContent || !output.toolCalls.length) {
-            assistantMsg.content = assistantMsg.content || output.finalMessage;
-            assistantMsg.status = 'complete';
-            cbRef.current.onMessage?.({ ...assistantMsg });
-          }
-          if (output.tokenUsage) {
-            cbRef.current.onTokenUsage?.(output.tokenUsage);
-          }
-          setRunningConversationId(null);
-          setStatus('idle');
-          generateTitle();
-        } else {
-          // ── 旧 AgentLoop 路径 ──
-        const hooks: AgentLoopHooks = {
-          onStreamChunk: (chunk: string) => {
-            // 如果上次助理消息已结束（被 tool call 拆分），新建一个
-            if (assistantMsg.status === 'complete') {
+            onReasoningChunk: (chunk: string) => {
+              const existing = assistantMsg.reasoningContent ?? '';
+              assistantMsg.reasoningContent = existing + chunk;
+              cbRef.current.onMessage?.({ ...assistantMsg });
+            },
+            onToolCall: (record: ToolCallRecord) => {
+              // 当前 assistant 消息如有内容则先终结，保证思考/文本/工具按时间顺序分格
+              if (assistantMsg.content || assistantMsg.reasoningContent) {
+                cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined });
+              }
+              const display = recordToDisplay(record);
+              displayedToolCallIds.add(record.toolCallId);
               cbRef.current.onMessage?.({
-                ...assistantMsg,
-                status: 'complete',
-                toolCallDisplay: undefined,
+                id: uid(),
+                role: 'tool',
+                content: record.toolName,
+                toolCallDisplay: display,
+                timestamp: Date.now(),
+                status: display.status,
               });
+              // 重置 assistant 消息准备接收下一轮文本
               assistantMsg.id = uid();
               assistantMsg.content = '';
               assistantMsg.reasoningContent = undefined;
               assistantMsg.toolCallDisplay = undefined;
               assistantMsg.status = 'streaming';
               assistantMsg.timestamp = Date.now();
-            }
-            // 兼容两种流式模式：部分 provider 返回增量 delta，部分返回完整累积文本
-            const existing = assistantMsg.content;
-            if (chunk.length >= existing.length && chunk.startsWith(existing)) {
-              assistantMsg.content = chunk;
-            } else {
-              assistantMsg.content = existing + chunk;
-            }
-            cbRef.current.onMessage?.({ ...assistantMsg });
+            },
           },
-          onReasoningChunk: (chunk: string) => {
-            const existing = assistantMsg.reasoningContent ?? '';
-            if (chunk.length >= existing.length && chunk.startsWith(existing)) {
-              assistantMsg.reasoningContent = chunk;
-            } else {
-              assistantMsg.reasoningContent = existing + chunk;
-            }
-            cbRef.current.onMessage?.({ ...assistantMsg });
-          },
-          onToolCall: (record: ToolCallRecord) => {
-            // 当前 assistant 消息如有文本则先终结
-            if (assistantMsg.content) {
-              cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined });
-            }
-            // 输出 tool 消息气泡
-            const tc = recordToDisplay(record);
-            cbRef.current.onMessage?.({
-              id: uid(),
-              role: 'tool',
-              content: record.toolName,
-              toolCallDisplay: tc,
-              timestamp: Date.now(),
-              status: tc.status,
-            });
-            // 重置 assistant 消息准备接收下一轮文本
-            assistantMsg.id = uid();
-            assistantMsg.content = '';
-            assistantMsg.reasoningContent = undefined;
-            assistantMsg.toolCallDisplay = undefined;
-            assistantMsg.status = 'streaming';
-            assistantMsg.timestamp = Date.now();
-          },
-          onConfirm: async (request) => {
-            return new Promise<boolean>((resolve) => {
-              setStatus('waitingConfirmation');
-              confirmResolveRef.current = resolve;
-              cbRef.current.onConfirm?.({
-                toolName: request.toolName,
-                params: request.params,
-                affectedObjects: request.affectedObjects.map((obj) => ({
-                  type: obj.type,
-                  title: obj.title,
-                  url: obj.url,
-                  reason: obj.reason,
-                })),
-                warnings: request.warnings,
-              });
-            });
-          },
-        };
-
-        const llmClientFactory = (config: ProviderConfig, model: string) => new LlmClient(config, model);
-
-        const loop = new AgentLoop(
-          agentConfig,
-          registry,
-          guardrail,
-          convManager,
-          llmClientFactory,
-          hooks,
-        );
-
-        loopRef.current = loop;
-
-        // 从 SkillStore 获取已启用的 skills，加载完整内容后传入 AgentLoop
-        const enabledSkills = await skillStore.getEnabled();
-        const readySkills = await skillStore.loadReady(enabledSkills);
-
-        // 从 ConfigStore 读取 Expert Mode 设置
-        const expertModeSettings = await ConfigStore.getInstance().get('expertModeSettings');
-
-        // 检测已授予的可选权限
-        let grantedPermissions: string[] = [];
-        try {
-          const result = await chrome.permissions.contains({
-            permissions: ['management', 'debugger', 'clipboardRead', 'clipboardWrite'],
-          });
-          if (result) grantedPermissions = ['management', 'debugger', 'clipboardRead', 'clipboardWrite'];
-        } catch {
-          grantedPermissions = [];
-        }
-
-        const output = await loop.run({
-          conversationId,
-          userMessage,
-          providerConfig,
-            model,
-            modelConfig,
-            reasoningEffort,
-          browserContext: {
-            currentWindow: { tabs: [] },
-            allWindows: [],
-            tabGroups: [],
-          },
-          skills: readySkills,
-          expertModeSettings,
-          grantedPermissions,
         });
 
-        // 兜底：hooks 未覆盖的场景（如 maxToolRounds 终止、无效工具等）
-        if (!assistantMsg.content && output.finalMessage) {
-          assistantMsg.content = output.finalMessage;
+        // 正常路径会在 onStepFinish 中实时展示；兼容不触发回调的 runtime/test adapter。
+        for (const record of output.toolCalls) {
+          if (displayedToolCallIds.has(record.toolCallId)) continue;
+          const display = recordToDisplay(record);
+          cbRef.current.onMessage?.({
+            id: uid(),
+            role: 'tool',
+            content: record.toolName,
+            toolCallDisplay: display,
+            timestamp: Date.now(),
+            status: display.status,
+          });
+        }
+
+        // 仅终结最后的文本气泡
+        if (assistantMsg.content || assistantMsg.reasoningContent || !output.toolCalls.length) {
+          assistantMsg.content = assistantMsg.content || output.finalMessage;
+          assistantMsg.status = 'complete';
+          cbRef.current.onMessage?.({ ...assistantMsg });
         }
         if (output.tokenUsage) {
           cbRef.current.onTokenUsage?.(output.tokenUsage);
         }
-        assistantMsg.status = 'complete';
-        cbRef.current.onMessage?.({ ...assistantMsg });
         setRunningConversationId(null);
         setStatus('idle');
         generateTitle();
-        } // ── 结束旧 AgentLoop 路径 ──
       } catch (err) {
         if ((err as Error).name === 'AbortError') {
           assistantMsg.content += '\n\n*操作已中止*';
