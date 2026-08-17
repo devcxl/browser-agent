@@ -1,4 +1,5 @@
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 type MarkdownMessages = {
   invalidLink: string;
@@ -183,7 +184,17 @@ async function main() {
   styleEl.textContent = STYLE;
   document.head.appendChild(styleEl);
 
-  const html = await marked(content as string);
+  const rawHtml = await marked(content as string);
+  const html = DOMPurify.sanitize(rawHtml, {
+    ALLOWED_TAGS: [
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'p', 'a', 'img', 'ul', 'ol', 'li',
+      'code', 'pre', 'blockquote',
+      'table', 'thead', 'tbody', 'tr', 'td', 'th',
+      'span', 'div', 'strong', 'em', 'hr', 'br',
+    ],
+    ALLOWED_ATTR: ['href', 'src', 'alt', 'class', 'title'],
+  });
   const root = document.getElementById('root')!;
   root.insertAdjacentHTML('afterbegin', `<div class="container">${html}</div>`);
 
