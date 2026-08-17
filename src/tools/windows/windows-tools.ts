@@ -100,8 +100,8 @@ function createWindowsCreateTool(rpc: IJsonRpcClient): ToolDefinition {
       },
     },
     category: 'windows',
-    riskLevel: 'medium',
-    confirmationRequired: false,
+    riskLevel: 'high',
+    confirmationRequired: true,
     resultSensitivity: 'low',
     execute: async (params): Promise<ToolResult> => {
       try {

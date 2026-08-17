@@ -42,8 +42,8 @@ export function createDownloadsDownloadTool(rpc: IJsonRpcClient): ToolDefinition
     name: 'downloads_download',
     description: '下载文件到默认下载目录',
     category: 'downloads',
-    riskLevel: 'medium',
-    confirmationRequired: false,
+    riskLevel: 'high',
+    confirmationRequired: true,
     resultSensitivity: 'low',
     schema: {
       type: 'object',
