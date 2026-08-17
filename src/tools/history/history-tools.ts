@@ -7,7 +7,7 @@ export function createHistorySearchTool(rpc: IJsonRpcClient): ToolDefinition {
     category: 'history',
     riskLevel: 'medium',
     confirmationRequired: false,
-    resultSensitivity: 'low',
+    resultSensitivity: 'sensitive',
     schema: {
       type: 'object',
       properties: {

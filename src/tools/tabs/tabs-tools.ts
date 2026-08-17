@@ -8,7 +8,7 @@ export function createTabsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
     category: "tabs",
     riskLevel: "low",
     confirmationRequired: false,
-    resultSensitivity: "low",
+    resultSensitivity: "sensitive",
     schema: {
       type: "object",
       properties: {

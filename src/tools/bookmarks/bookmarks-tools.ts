@@ -141,7 +141,7 @@ export function createBookmarksGetTreeTool(rpc: IJsonRpcClient): ToolDefinition 
     category: 'bookmarks',
     riskLevel: 'low',
     confirmationRequired: false,
-    resultSensitivity: 'low',
+    resultSensitivity: 'sensitive',
     schema: {
       type: 'object',
       properties: {},
