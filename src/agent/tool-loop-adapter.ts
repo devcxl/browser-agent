@@ -1,6 +1,6 @@
 import type { IAgentRuntime, AgentRunInput, AgentRunOutput, AgentConfig, ToolCallRecord } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition } from '@/registry/types';
-import type { IGuardrail } from '@/shared/types/guardrail';
+import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
 import type { LowSensitivityContext } from '@/shared/types/browser';
@@ -58,6 +58,7 @@ export interface ToolApprovalRequest {
   params: Record<string, unknown>;
   reason: string;
   riskLevel: 'high' | 'critical';
+  affectedObjects?: Array<{ type: string; id?: string; title?: string; url?: string; reason?: string }>;
 }
 
 /** toolApproval 用户确认回调签名 */
@@ -69,6 +70,14 @@ export class ToolLoopAdapter implements IAgentRuntime {
   private _tools: AdapterTools | null = null;
   private toolClassifier: ToolClassifier;
   private onRequestApproval?: OnRequestApproval;
+  /** 缓存的 guardrail 上下文，由 run() 入口构建，executeTool/filterResult 复用 */
+  private guardrailContext: GuardrailContext = {
+    isLocalTrusted: false,
+    expertModeEnabled: false,
+    expertSwitches: {},
+    grantedPermissions: [],
+    sessionGrants: { sensitiveDataAllowed: false },
+  };
 
   constructor(
     private toolRegistry: IToolRegistry,
@@ -250,6 +259,14 @@ export class ToolLoopAdapter implements IAgentRuntime {
     if (this._agent) {
       this._agent = null;
     }
+    // 构建并缓存 guardrail 上下文，供 createToolApproval / executeTool / filterResult 共用
+    this.guardrailContext = {
+      isLocalTrusted: this.providerConfig.isLocalTrusted,
+      expertModeEnabled: input.expertModeSettings?.enabled ?? false,
+      expertSwitches: input.expertModeSettings?.switches ?? ({} as Record<string, boolean>),
+      grantedPermissions: input.grantedPermissions ?? ([] as string[]),
+      sessionGrants: { sensitiveDataAllowed: false },
+    };
     const toolCalls: ToolCallRecord[] = [];
     this.abortController = new AbortController();
     this._agent = new ToolLoopAgent({
@@ -284,19 +301,13 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
 
   /** 创建 toolApproval 函数 */
-  private createToolApproval(input?: AgentRunInput) {
+  private createToolApproval(_input?: AgentRunInput) {
     return async ({ toolCall }: { toolCall: { toolName: string; input: unknown } }) => {
       if (!FEATURE_FLAGS.useToolApproval) {
         return { type: 'approved' as const };
       }
 
-      const guardrailCtx = {
-        isLocalTrusted: this.providerConfig.isLocalTrusted,
-        expertModeEnabled: input?.expertModeSettings?.enabled ?? false,
-        expertSwitches: input?.expertModeSettings?.switches ?? ({} as Record<string, boolean>),
-        grantedPermissions: input?.grantedPermissions ?? ([] as string[]),
-        sessionGrants: { sensitiveDataAllowed: false },
-      };
+      const guardrailCtx = this.guardrailContext;
 
       const check = await this.guardrail.check(
         toolCall.toolName,
@@ -312,34 +323,59 @@ export class ToolLoopAdapter implements IAgentRuntime {
         case 'low':
         case 'medium':
           return { type: 'approved' as const };
-        case 'high':
+        case 'high': {
           if (guardrailCtx.isLocalTrusted) return { type: 'approved' as const };
           if (this.onRequestApproval) {
+            // 在确认前执行 preflight，获取受影响对象清单
+            let affectedObjects: ToolApprovalRequest['affectedObjects'];
+            const tool = this.toolRegistry.getTool(toolCall.toolName);
+            if (check.requiresPreflight && tool?.preflight) {
+              try {
+                const preflightResult = await tool.preflight(toolCall.input as Record<string, unknown>);
+                affectedObjects = preflightResult.affectedObjects;
+              } catch {
+                // preflight 失败不阻止确认流程
+              }
+            }
             const decision = await this.onRequestApproval({
               toolName: toolCall.toolName,
               params: toolCall.input as Record<string, unknown>,
               reason: check.reason,
               riskLevel: 'high',
+              affectedObjects,
             });
             return decision === 'approve'
               ? { type: 'approved' as const }
               : { type: 'denied' as const, reason: check.reason };
           }
           return { type: 'user-approval' as const };
-        case 'critical':
+        }
+        case 'critical': {
           if (!guardrailCtx.expertModeEnabled) return { type: 'denied' as const, reason: '需要 Expert Mode' };
           if (this.onRequestApproval) {
+            let affectedObjects: ToolApprovalRequest['affectedObjects'];
+            const tool = this.toolRegistry.getTool(toolCall.toolName);
+            if (check.requiresPreflight && tool?.preflight) {
+              try {
+                const preflightResult = await tool.preflight(toolCall.input as Record<string, unknown>);
+                affectedObjects = preflightResult.affectedObjects;
+              } catch {
+                // preflight 失败不阻止确认流程
+              }
+            }
             const decision = await this.onRequestApproval({
               toolName: toolCall.toolName,
               params: toolCall.input as Record<string, unknown>,
               reason: check.reason,
               riskLevel: 'critical',
+              affectedObjects,
             });
             return decision === 'approve'
               ? { type: 'approved' as const }
               : { type: 'denied' as const, reason: check.reason };
           }
           return { type: 'user-approval' as const };
+        }
         default:
           return { type: 'approved' as const };
       }
@@ -418,14 +454,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
     tool: ToolDefinition,
     params: Record<string, unknown>,
   ): Promise<ToolResult> {
-    // guardrail 检查
-    const check = await this.guardrail.check(tool.name, params, {
-      isLocalTrusted: this.providerConfig.isLocalTrusted,
-      expertModeEnabled: false,
-      expertSwitches: {},
-      grantedPermissions: [],
-      sessionGrants: { sensitiveDataAllowed: false },
-    });
+    // guardrail 检查 —— 复用 run() 入口构建的上下文，与 toolApproval 审批阶段一致
+    const check = await this.guardrail.check(tool.name, params, this.guardrailContext);
 
     if (!check.allowed) {
       return { success: false, error: check.reason };
@@ -439,14 +469,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
     // 执行
     const result = await tool.execute(params);
 
-    // 过滤敏感数据
-    const filtered = this.guardrail.filterResultForRemote(tool, result, {
-      isLocalTrusted: this.providerConfig.isLocalTrusted,
-      expertModeEnabled: false,
-      expertSwitches: {},
-      grantedPermissions: [],
-      sessionGrants: { sensitiveDataAllowed: false },
-    });
+    // 过滤敏感数据 —— 复用同一上下文
+    const filtered = this.guardrail.filterResultForRemote(tool, result, this.guardrailContext);
 
     // 截断超长结果，避免一次性挤占上下文
     return this.truncateToolResult(filtered);
