@@ -6,35 +6,62 @@ import type { ProviderConfig } from '@/shared/types';
 
 // ==================== Mock data holders (hoisted) ====================
 
-const { mockBrowserHolder, mockStoreHolder } = vi.hoisted(() => ({
-  mockBrowserHolder: {
-    local: {
-      get: vi.fn(),
-      set: vi.fn(),
-      remove: vi.fn(),
-      clear: vi.fn(),
-    },
-    onChanged: {
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-    },
-    storage: {} as Record<string, unknown>,
-  },
-  mockStoreHolder: {
+const { mockBrowserHolder, mockStoreHolder, mockSkillStoreHolder, mockSubStoreHolder, mockConfigStoreHolder } = vi.hoisted(() => {
+  const storeHolder = {
     get: vi.fn(),
     set: vi.fn(),
-  },
-}));
+  };
+  return {
+    mockBrowserHolder: {
+      local: {
+        get: vi.fn(),
+        set: vi.fn(),
+        remove: vi.fn(),
+        clear: vi.fn(),
+      },
+      onChanged: {
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      },
+      storage: {} as Record<string, unknown>,
+    },
+    mockStoreHolder: storeHolder,
+    mockConfigStoreHolder: {
+      get: storeHolder.get,
+      set: storeHolder.set,
+      onChange: vi.fn(() => () => {}),
+    },
+    mockSkillStoreHolder: {
+      getAll: vi.fn().mockResolvedValue([]),
+      getEnabled: vi.fn().mockResolvedValue([]),
+      loadReady: vi.fn().mockResolvedValue([]),
+      getSubscriptions: vi.fn().mockResolvedValue([]),
+      onChange: vi.fn(() => () => {}),
+    },
+    mockSubStoreHolder: {
+      getAll: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue(undefined),
+      add: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+      delete: vi.fn().mockResolvedValue(undefined),
+      onChange: vi.fn(() => () => {}),
+    },
+  };
+});
 
 // ==================== Apply vi.mock before imports (hoisted) ====================
 
 vi.mock('@/shared/storage', () => ({
   ConfigStore: {
-    getInstance: vi.fn(() => ({
-      get: mockStoreHolder.get,
-      set: mockStoreHolder.set,
-      onChange: vi.fn(() => () => {}),
-    })),
+    getInstance: vi.fn(() => mockConfigStoreHolder),
+    resetInstance: vi.fn(),
+  },
+  SkillStore: {
+    getInstance: vi.fn(() => mockSkillStoreHolder),
+    resetInstance: vi.fn(),
+  },
+  SkillSubscriptionStore: {
+    getInstance: vi.fn(() => mockSubStoreHolder),
     resetInstance: vi.fn(),
   },
 }));
@@ -95,6 +122,7 @@ vi.mock('../ChatContext', async () => {
 
 // Need to import App after mocks are set up
 import App from '../App';
+import { createI18nMock } from '@/test/i18n-mock';
 
 // ==================== Helpers ====================
 
@@ -172,6 +200,8 @@ describe('ChatOnboarding', () => {
         local: mockBrowserHolder.local,
         onChanged: mockBrowserHolder.onChanged,
       },
+      // 该套件断言英文文案：标准 i18n 跟随浏览器 UI 语言，用 en-US 模拟英文环境
+      i18n: createI18nMock('en-US'),
     });
   });
 

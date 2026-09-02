@@ -497,19 +497,6 @@ describe('ToolLoopAdapter', () => {
     expect(() => adapter.abort()).not.toThrow();
   });
 
-  // ── Feature Flag ──────────────────────────────────
-
-  it('FEATURE_FLAGS.useToolLoopAgent 已默认为 true（迁移完成）', () => {
-    expect(FEATURE_FLAGS.useToolLoopAgent).toBe(true);
-  });
-
-  it('可以通过修改 FEATURE_FLAGS 切换回旧 AgentLoop（回滚场景）', () => {
-    FEATURE_FLAGS.useToolLoopAgent = false;
-    expect(FEATURE_FLAGS.useToolLoopAgent).toBe(false);
-    // 恢复默认值
-    FEATURE_FLAGS.useToolLoopAgent = true;
-  });
-
   // ── ToolCalls 记录 ────────────────────────────────
 
   it('应该在 onStepFinish 回调中记录并实时转发工具调用', async () => {

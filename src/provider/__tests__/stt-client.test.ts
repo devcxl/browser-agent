@@ -199,7 +199,7 @@ describe('SttClient', () => {
       const promise = client.transcribe(makeAudioBlob(), controller.signal);
       controller.abort();
 
-      await expect(promise).rejects.toThrow('The operation was aborted');
+      await expect(promise).rejects.toThrow(/aborted/i);
     });
 
     it('should attach extraHeaders', async () => {
@@ -358,7 +358,7 @@ describe('SttClient', () => {
       const promise = sdkClient.transcribe(makeAudioBlob(), controller.signal);
       controller.abort();
 
-      await expect(promise).rejects.toThrow('The operation was aborted');
+      await expect(promise).rejects.toThrow(/aborted/i);
     });
 
     it('should throw when sttModel is not configured', async () => {

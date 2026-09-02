@@ -46,12 +46,12 @@ describe('Misc tools', () => {
       expect(tool.resultSensitivity).toBe('sensitive');
     });
 
-    it('clipboard_write: riskLevel low, confirmationRequired false', () => {
+    it('clipboard_write: riskLevel medium, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createMiscTools(rpc);
       const tool = tools.find((t) => t.name === 'clipboard_write')!;
       expect(tool).toBeDefined();
-      expect(tool.riskLevel).toBe('low');
+      expect(tool.riskLevel).toBe('medium');
       expect(tool.confirmationRequired).toBe(false);
     });
 
@@ -64,31 +64,31 @@ describe('Misc tools', () => {
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('storage_local_get: riskLevel medium, confirmationRequired false', () => {
+    it('storage_local_get: riskLevel high, confirmationRequired true', () => {
       const rpc = createMockRpc();
       const tools = createMiscTools(rpc);
       const tool = tools.find((t) => t.name === 'storage_local_get')!;
       expect(tool).toBeDefined();
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
+      expect(tool.riskLevel).toBe('high');
+      expect(tool.confirmationRequired).toBe(true);
     });
 
-    it('storage_local_set: riskLevel medium, confirmationRequired false', () => {
+    it('storage_local_set: riskLevel high, confirmationRequired true', () => {
       const rpc = createMockRpc();
       const tools = createMiscTools(rpc);
       const tool = tools.find((t) => t.name === 'storage_local_set')!;
       expect(tool).toBeDefined();
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
+      expect(tool.riskLevel).toBe('high');
+      expect(tool.confirmationRequired).toBe(true);
     });
 
-    it('storage_local_remove: riskLevel medium, confirmationRequired false, 有 preflight', () => {
+    it('storage_local_remove: riskLevel high, confirmationRequired true, 有 preflight', () => {
       const rpc = createMockRpc();
       const tools = createMiscTools(rpc);
       const tool = tools.find((t) => t.name === 'storage_local_remove')!;
       expect(tool).toBeDefined();
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
+      expect(tool.riskLevel).toBe('high');
+      expect(tool.confirmationRequired).toBe(true);
       expect(tool.preflight).toBeDefined();
     });
 

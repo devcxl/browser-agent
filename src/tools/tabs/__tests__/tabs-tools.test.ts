@@ -61,7 +61,7 @@ describe('Tabs tools', () => {
       expect(tool.category).toBe('tabs');
       expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
-      expect(tool.resultSensitivity).toBe('low');
+      expect(tool.resultSensitivity).toBe('sensitive');
       expect(tool.requireBackground).toBe(true);
     });
   });

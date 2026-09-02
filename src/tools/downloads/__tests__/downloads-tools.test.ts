@@ -40,13 +40,13 @@ describe('Downloads tools', () => {
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('downloads_download: riskLevel medium, confirmationRequired false', () => {
+    it('downloads_download: riskLevel high, confirmationRequired true', () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
       const tool = tools.find((t) => t.name === 'downloads_download')!;
       expect(tool).toBeDefined();
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
+      expect(tool.riskLevel).toBe('high');
+      expect(tool.confirmationRequired).toBe(true);
     });
 
     it('downloads_erase: riskLevel high, confirmationRequired true, 有 preflight', () => {

@@ -123,8 +123,8 @@ describe('createWindowsTools', () => {
 
     it('should have correct metadata', () => {
       expect(tool.category).toBe('windows');
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
+      expect(tool.riskLevel).toBe('high');
+      expect(tool.confirmationRequired).toBe(true);
       expect(tool.name).toBe('windows_create');
     });
 
