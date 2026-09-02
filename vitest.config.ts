@@ -9,19 +9,8 @@ export default defineConfig({
   },
   test: {
     globals: true,
-    environment: 'node',
-    environmentMatchGlobs: [
-      ['src/entrypoints/**/*.test.{ts,tsx}', 'jsdom'],
-      ['src/content/**/*.test.{ts,tsx}', 'jsdom'],
-    ],
+    environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        maxForks: 4,
-        minForks: 1,
-      },
-    },
     include: ['src/**/*.test.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'e2e'],
     coverage: {
