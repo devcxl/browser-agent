@@ -36,6 +36,8 @@ test.describe('浮动按钮 E2E', () => {
       args: [
         `--disable-extensions-except=${EXTENSION_PATH}`,
         `--load-extension=${EXTENSION_PATH}`,
+        // 扩展 UI 语言跟随浏览器 UI 语言（标准 i18n），e2e 文案断言依赖中文
+        '--lang=zh-CN',
       ],
       viewport: { width: 1280, height: 720 },
     });

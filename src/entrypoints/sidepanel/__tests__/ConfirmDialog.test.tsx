@@ -3,8 +3,8 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { I18nProvider } from '../i18n/I18nProvider';
 import { ConfigStore } from '@/shared/storage';
+import { createI18nMock } from '@/test/i18n-mock';
 
 // ── browser.storage mock ────────────────────────────
 
@@ -51,6 +51,7 @@ beforeEach(() => {
       local: mockBrowser.local,
       onChanged: mockBrowser.onChanged,
     },
+    i18n: createI18nMock(),
   });
   ConfigStore.resetInstance();
 });
@@ -60,7 +61,7 @@ afterEach(() => {
 });
 
 function TestWrapper({ children }: { children: React.ReactNode }) {
-  return <I18nProvider>{children}</I18nProvider>;
+  return children;
 }
 
 describe('ConfirmDialog', () => {

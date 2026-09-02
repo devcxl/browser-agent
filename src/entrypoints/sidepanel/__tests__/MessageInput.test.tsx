@@ -3,7 +3,6 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageInput } from '../components/MessageInput';
-import { I18nProvider } from '../i18n/I18nProvider';
 import { mockBrowserStorage } from './test-utils';
 import type { UseVoiceInputReturn } from '../hooks/useVoiceInput';
 import type { ProviderConfig } from '@/shared/types';
@@ -74,11 +73,11 @@ const PROVIDER_CONTEXT_32768: ProviderConfig = {
 };
 
 function wrappedRender(ui: React.ReactElement) {
-  const utils = render(<I18nProvider>{ui}</I18nProvider>);
+  const utils = render(ui);
   return {
     ...utils,
-    // rerender 会替换整个渲染树，必须重新包裹 I18nProvider
-    rerender: (nextUi: React.ReactElement) => utils.rerender(<I18nProvider>{nextUi}</I18nProvider>),
+    // rerender 会替换整个渲染树，需手动指定
+    rerender: (nextUi: React.ReactElement) => utils.rerender(nextUi),
   };
 }
 

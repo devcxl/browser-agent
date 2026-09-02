@@ -3,12 +3,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ToolCallCard, ToolCallCardSDK } from '../components/ToolCallCard';
-import { I18nProvider } from '../i18n/I18nProvider';
 import { mockBrowserStorage } from './test-utils';
 import type { ToolCallDisplay } from '../types';
 
 function wrappedRender(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  return render(ui);
 }
 
 beforeEach(() => { mockBrowserStorage(); });

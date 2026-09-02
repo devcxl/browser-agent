@@ -1,206 +1,106 @@
 import React from 'react';
-import { render, screen, act, waitFor } from '@testing-library/react';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { I18nProvider } from '../i18n/I18nProvider';
+import { render, screen } from '@testing-library/react';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useI18n } from '../i18n/useI18n';
-import { ConfigStore } from '@/shared/storage';
-
-// ── browser.storage mock ────────────────────────────
-
-function createMockBrowser() {
-  const storage: Record<string, unknown> = {};
-  const listeners: Array<(changes: Record<string, browser.storage.StorageChange>) => void> = [];
-
-  const local = {
-    get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {
-      if (keys === null) return { ...storage };
-      const keysArr = Array.isArray(keys) ? (keys as string[]) : [keys as string];
-      const result: Record<string, unknown> = {};
-      for (const key of keysArr) {
-        if (key in storage) result[key] = storage[key];
-      }
-      return result;
-    }),
-    set: vi.fn(async (items: Record<string, unknown>) => {
-      Object.assign(storage, items);
-    }),
-    remove: vi.fn(),
-    clear: vi.fn(),
-  };
-
-  const onChanged = {
-    addListener: vi.fn((listener: typeof listeners[0]) => {
-      listeners.push(listener);
-    }),
-    removeListener: vi.fn((listener: typeof listeners[0]) => {
-      const idx = listeners.indexOf(listener);
-      if (idx >= 0) listeners.splice(idx, 1);
-    }),
-  };
-
-  return { local, onChanged, storage, listeners };
-}
-
-let mockBrowser: ReturnType<typeof createMockBrowser>;
+import { translate, getLocale, toMessageName } from '@/shared/i18n';
+import { createI18nMock, zhMessages, enMessages } from '@/test/i18n-mock';
 
 beforeEach(() => {
-  mockBrowser = createMockBrowser();
-  vi.stubGlobal('browser', {
-    storage: {
-      local: mockBrowser.local,
-      onChanged: mockBrowser.onChanged,
-    },
-  });
-  ConfigStore.resetInstance();
+  vi.stubGlobal('browser', { i18n: createI18nMock() });
 });
 
-// 不清理 browser global（beforeEach 会覆盖），只重置单例
-afterEach(() => {
-  ConfigStore.resetInstance();
-});
+// ── 双语言包完整性 ────────────────────────────────────
 
-// ── 测试组件 ────────────────────────────────────────
-
-function TestComponent() {
-  const { t, locale } = useI18n();
-  return (
-    <div>
-      <span data-testid="locale">{locale}</span>
-      <span data-testid="common-send">{t('common.send')}</span>
-      <span data-testid="skills-count">{t('settings.skills.skillsCount', { count: 5 })}</span>
-      <span data-testid="missing">{t('nonexistent.key')}</span>
-    </div>
-  );
-}
-
-function LocaleDisplay() {
-  const { locale } = useI18n();
-  return <span data-testid="locale-display">{locale}</span>;
-}
-
-// ── 测试用例 ────────────────────────────────────────
-
-describe('I18nProvider + useI18n', () => {
-  it('renders with zh-CN locale and messages', async () => {
-    await mockBrowser.local.set({ preferences: { language: 'zh-CN' } });
-
-    render(
-      <I18nProvider>
-        <TestComponent />
-      </I18nProvider>,
-    );
-
-    expect(await screen.findByTestId('locale')).toHaveTextContent('zh-CN');
-    expect(await screen.findByTestId('common-send')).toHaveTextContent('发送');
+describe('_locales messages.json', () => {
+  it('zh_CN 与 en 的 message key 完全一致', () => {
+    expect(Object.keys(zhMessages).sort()).toEqual(Object.keys(enMessages).sort());
   });
 
-  it('renders with en locale when preferences.language is en', async () => {
-    await mockBrowser.local.set({ preferences: { language: 'en' } });
-
-    render(
-      <I18nProvider>
-        <TestComponent />
-      </I18nProvider>,
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId('locale')).toHaveTextContent('en');
-    });
-    expect(screen.getByTestId('common-send')).toHaveTextContent('Send');
-  });
-
-  it('replaces template variables in locale strings', async () => {
-    await mockBrowser.local.set({ preferences: { language: 'zh-CN' } });
-
-    render(
-      <I18nProvider>
-        <TestComponent />
-      </I18nProvider>,
-    );
-
-    // settings.skills.skillsCount = "{count} 个技能" with { count: 5 } → "5 个技能"
-    expect(await screen.findByTestId('skills-count')).toHaveTextContent('5 个技能');
-  });
-
-  it('returns key itself for missing keys', async () => {
-    await mockBrowser.local.set({ preferences: { language: 'zh-CN' } });
-
-    render(
-      <I18nProvider>
-        <TestComponent />
-      </I18nProvider>,
-    );
-
-    expect(await screen.findByTestId('missing')).toHaveTextContent('nonexistent.key');
-  });
-
-  it('setLanguage updates locale and messages', async () => {
-    await mockBrowser.local.set({ preferences: { language: 'zh-CN' } });
-
-    let setLang: (lang: 'zh-CN' | 'en') => Promise<void>;
-
-    function SetterComponent() {
-      const { t, locale, setLanguage } = useI18n();
-      setLang = setLanguage;
-      return (
-        <div>
-          <span data-testid="locale-value">{locale}</span>
-          <span data-testid="msg-value">{t('common.send')}</span>
-        </div>
-      );
+  it('key 仅含 Chrome 允许的字符（字母/数字/下划线）', () => {
+    for (const key of Object.keys(zhMessages)) {
+      expect(key).toMatch(/^[a-zA-Z0-9_]+$/);
     }
-
-    render(
-      <I18nProvider>
-        <SetterComponent />
-      </I18nProvider>,
-    );
-
-    expect(await screen.findByTestId('locale-value')).toHaveTextContent('zh-CN');
-    expect(await screen.findByTestId('msg-value')).toHaveTextContent('发送');
-
-    await act(async () => {
-      await setLang!('en');
-    });
-
-    expect(await screen.findByTestId('locale-value')).toHaveTextContent('en');
-    expect(await screen.findByTestId('msg-value')).toHaveTextContent('Send');
   });
 
-  it('updates language when ConfigStore changes externally (cross-tab sync)', async () => {
-    await mockBrowser.local.set({ preferences: { language: 'zh-CN' } });
-
-    render(
-      <I18nProvider>
-        <LocaleDisplay />
-      </I18nProvider>,
-    );
-
-    expect(await screen.findByTestId('locale-display')).toHaveTextContent('zh-CN');
-
-    // Simulate external storage change (trigger onChange listener)
-    await act(async () => {
-      const change: Record<string, browser.storage.StorageChange> = {
-        preferences: { newValue: { language: 'en' } },
-      };
-      for (const listener of mockBrowser.listeners) {
-        listener(change);
-      }
-    });
-
-    expect(await screen.findByTestId('locale-display')).toHaveTextContent('en');
+  it('所有文案均为非空字符串', () => {
+    for (const msg of Object.values(zhMessages)) {
+      expect(typeof msg).toBe('string');
+      expect(msg.trim().length).toBeGreaterThan(0);
+    }
   });
 });
 
-describe('useI18n outside provider', () => {
-  it('throws error when used outside I18nProvider', () => {
-    function BadComponent() {
-      useI18n();
-      return null;
-    }
+// ── translate ────────────────────────────────────────
 
-    expect(() => render(<BadComponent />)).toThrow(
-      'useI18n must be used within an <I18nProvider>',
+describe('translate', () => {
+  it('将点号 key 映射为下划线 message name 并返回文案', () => {
+    expect(translate('common.send')).toBe('发送');
+    expect(translate('settings.skills.syncComplete', { count: 3 })).toBe('同步完成，共 3 个技能');
+  });
+
+  it('toMessageName 只替换点号', () => {
+    expect(toMessageName('settings.tabs.appearance')).toBe('settings_tabs_appearance');
+  });
+
+  it('插值替换 {var} 占位符', () => {
+    expect(translate('voice.startFailed', { message: 'boom' })).toBe('无法启动录音: boom');
+  });
+
+  it('缺失 key 时返回 key 本身并告警', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(translate('no.such.key')).toBe('no.such.key');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('缺失插值变量时保留占位符并告警', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(translate('voice.startFailed', {})).toBe('无法启动录音: {message}');
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('browser.i18n 不可用时降级返回 key', () => {
+    vi.stubGlobal('browser', {});
+    expect(translate('common.send')).toBe('common.send');
+  });
+});
+
+// ── getLocale ────────────────────────────────────────
+
+describe('getLocale', () => {
+  it('zh 系 UI 语言归一化为 zh-CN', () => {
+    vi.stubGlobal('browser', { i18n: createI18nMock('zh-CN') });
+    expect(getLocale()).toBe('zh-CN');
+  });
+
+  it('en 系 UI 语言归一化为 en', () => {
+    vi.stubGlobal('browser', { i18n: createI18nMock('en-US') });
+    expect(getLocale()).toBe('en');
+  });
+
+  it('getUILanguage 异常时回退 en', () => {
+    vi.stubGlobal('browser', {});
+    expect(getLocale()).toBe('en');
+  });
+});
+
+// ── useI18n（React 接入点） ───────────────────────────
+
+describe('useI18n', () => {
+  function Probe() {
+    const { t, locale } = useI18n();
+    return (
+      <div>
+        <span data-testid="locale">{locale}</span>
+        <span data-testid="msg">{t('common.confirm')}</span>
+      </div>
     );
+  }
+
+  it('提供 t 与 locale，无需 Provider 包裹', () => {
+    render(<Probe />);
+    expect(screen.getByTestId('locale')).toHaveTextContent('zh-CN');
+    expect(screen.getByTestId('msg')).toHaveTextContent('确认');
   });
 });

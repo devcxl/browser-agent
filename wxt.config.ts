@@ -12,7 +12,6 @@ export default defineConfig({
 
     const permissions: string[] = [
       'tabs',
-      'tabGroups',
       'storage',
       'sessions',
       'bookmarks',
@@ -22,7 +21,7 @@ export default defineConfig({
     ];
 
     if (!isFirefox) {
-      permissions.push('windows');
+      permissions.push('tabGroups', 'windows');
     }
 
     permissions.push('privacy', 'proxy');
@@ -42,8 +41,9 @@ export default defineConfig({
     }
 
     const manifest: Record<string, unknown> = {
-      name: 'Browser Agent',
-      description: 'AI-powered browser agent extension - manage tabs, bookmarks, history, and more with natural language',
+      name: '__MSG_extName__',
+      description: '__MSG_extDesc__',
+      default_locale: 'en',
       permissions,
       optional_permissions,
       host_permissions: ['<all_urls>'],
@@ -51,12 +51,12 @@ export default defineConfig({
 
     if (isFirefox) {
       manifest.action = {
-        default_title: 'Browser Agent',
+        default_title: '__MSG_extName__',
       };
     } else {
       manifest.side_panel = { default_path: 'sidepanel.html' };
       manifest.action = {
-        default_title: 'Browser Agent',
+        default_title: '__MSG_extName__',
       };
     }
 

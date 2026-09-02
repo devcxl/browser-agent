@@ -1,5 +1,6 @@
 import { vi } from 'vitest';
 import { ConfigStore } from '@/shared/storage';
+import { createI18nMock } from '@/test/i18n-mock';
 
 export function mockBrowserStorage() {
   const storage: Record<string, unknown> = {};
@@ -34,6 +35,7 @@ export function mockBrowserStorage() {
       onMessage: { addListener: vi.fn(), removeListener: vi.fn() },
       onConnect: { addListener: vi.fn(), removeListener: vi.fn() },
     },
+    i18n: createI18nMock(),
   });
 
   ConfigStore.resetInstance();

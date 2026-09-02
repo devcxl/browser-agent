@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ConfigStore } from '../config-store';
+import { createI18nMock } from '@/test/i18n-mock';
 
 /**
  * 创建 mock browser.storage.local
@@ -59,6 +60,7 @@ describe('ConfigStore', () => {
         local: browserMock.mock,
         onChanged: browserMock.mock.onChanged,
       },
+      i18n: createI18nMock(),
     });
     ConfigStore.resetInstance();
   });
@@ -107,9 +109,9 @@ describe('ConfigStore', () => {
   // #6 patch
   it('should call chrome.storage.local.set with partial', async () => {
     const store = ConfigStore.getInstance();
-    await store.patch({ preferences: { theme: 'dark', language: 'zh-CN', sidebarExpanded: false } });
+    await store.patch({ preferences: { theme: 'dark', sidebarExpanded: false } });
     expect(browserMock.mock.set).toHaveBeenCalledWith({
-      preferences: { theme: 'dark', language: 'zh-CN', sidebarExpanded: false },
+      preferences: { theme: 'dark', sidebarExpanded: false },
     });
   });
 

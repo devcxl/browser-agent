@@ -139,7 +139,7 @@ export function SkillPanel({ onClose }: SkillPanelProps) {
       data-testid="skill-panel"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
     >
-      <div className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] max-h-[85vh] flex flex-col">
+      <div className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] h-[85vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-3 border-b border-hairline shrink-0">
           <h2 className="text-base font-semibold text-ink">{t('settings.skills.panelTitle')}</h2>
           <button

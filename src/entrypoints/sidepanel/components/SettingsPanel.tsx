@@ -39,7 +39,7 @@ export function SettingsPanel({
   onTestConnection,
   onClose,
 }: Props) {
-  const { t, locale, setLanguage } = useI18n();
+  const { t, locale } = useI18n();
   const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'skills' | 'floatingButton'>('appearance');
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
   const [openSelectId, setOpenSelectId] = useState<string | null>(null);
@@ -205,8 +205,8 @@ export function SettingsPanel({
       data-testid="settings-panel"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
     >
-      <div className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] max-h-[85vh] flex flex-col">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-hairline">
+      <div className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] h-[85vh] flex flex-col">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-hairline shrink-0">
           <h2 className="text-base font-semibold text-ink">{t('settings.title')}</h2>
           <button
             type="button"
@@ -217,7 +217,7 @@ export function SettingsPanel({
           </button>
         </div>
 
-        <div className="flex border-b border-hairline px-5">
+        <div className="flex border-b border-hairline px-5 shrink-0">
           {(['appearance', 'provider', 'agent', 'expert', 'skills', 'floatingButton'] as const).map((tabKey) => (
             <button
               key={tabKey}
@@ -466,7 +466,7 @@ export function SettingsPanel({
                         <span className="text-sm font-medium text-ink">{sub.source}</span>
                         {sub.lastSyncedAt && (
                           <span className="text-[10px] text-mute ml-2">
-                            {new Date(sub.lastSyncedAt).toLocaleString('zh-CN')}
+                            {new Date(sub.lastSyncedAt).toLocaleString(locale)}
                           </span>
                         )}
                         <span className="text-xs text-mute ml-2">{t('settings.skills.skillsCount', { count: subSkills.length })}</span>
@@ -578,22 +578,6 @@ export function SettingsPanel({
                     { value: 'dark', label: t('settings.theme.dark') },
                   ]}
                   onChange={(value) => handleThemeChange(value as UserPreferences['theme'])}
-                  openSelectId={openSelectId}
-                  onOpenChange={setOpenSelectId}
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <span className="text-sm font-medium text-ink">{t('settings.language')}</span>
-                <SettingsSelect
-                  id="settings-language-select"
-                  label={t('settings.language')}
-                  value={locale}
-                  options={[
-                    { value: 'zh-CN', label: '中文' },
-                    { value: 'en', label: 'English' },
-                  ]}
-                  onChange={(value) => setLanguage(value as 'zh-CN' | 'en')}
                   openSelectId={openSelectId}
                   onOpenChange={setOpenSelectId}
                   className="mt-1"

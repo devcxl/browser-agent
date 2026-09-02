@@ -2,7 +2,6 @@ import React from 'react';
 import { render } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ContextUsageRing, contextUsagePercent } from '../components/ContextUsageRing';
-import { I18nProvider } from '../i18n/I18nProvider';
 import { mockBrowserStorage } from './test-utils';
 
 // 与组件实现同一几何公式的独立期望值（CIRC = 2π·((20-2.5)/2)）
@@ -15,11 +14,11 @@ beforeEach(() => {
 });
 
 function wrappedRender(ui: React.ReactElement) {
-  const utils = render(<I18nProvider>{ui}</I18nProvider>);
+  const utils = render(ui);
   return {
     ...utils,
-    // rerender 会替换整个渲染树，必须重新包裹 I18nProvider
-    rerender: (nextUi: React.ReactElement) => utils.rerender(<I18nProvider>{nextUi}</I18nProvider>),
+    // rerender 会替换整个渲染树，需手动指定
+    rerender: (nextUi: React.ReactElement) => utils.rerender(nextUi),
   };
 }
 

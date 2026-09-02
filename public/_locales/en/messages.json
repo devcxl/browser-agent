@@ -1,0 +1,719 @@
+{
+  "extName": {
+    "message": "Browser Agent"
+  },
+  "extDesc": {
+    "message": "AI-powered browser agent extension - manage tabs, bookmarks, history, and more with natural language"
+  },
+  "widget_buttonAriaLabel": {
+    "message": "Open chat"
+  },
+  "widget_hideOnThisSite": {
+    "message": "Hide on this site"
+  },
+  "widget_loadError": {
+    "message": "Failed to load, please try again later"
+  },
+  "widget_panelTitle": {
+    "message": "AI Assistant"
+  },
+  "common_send": {
+    "message": "Send"
+  },
+  "common_cancel": {
+    "message": "Cancel"
+  },
+  "common_confirm": {
+    "message": "Confirm"
+  },
+  "common_delete": {
+    "message": "Delete"
+  },
+  "common_save": {
+    "message": "Save"
+  },
+  "common_edit": {
+    "message": "Edit"
+  },
+  "common_add": {
+    "message": "Add"
+  },
+  "common_close": {
+    "message": "Close"
+  },
+  "common_loading": {
+    "message": "Loading..."
+  },
+  "common_error": {
+    "message": "Error"
+  },
+  "common_noData": {
+    "message": "No Data"
+  },
+  "common_enabled": {
+    "message": "Enabled"
+  },
+  "app_title": {
+    "message": "BrowserAgent"
+  },
+  "app_loadingMessages": {
+    "message": "Loading messages..."
+  },
+  "app_loadFailed": {
+    "message": "Failed to load"
+  },
+  "sidebar_title": {
+    "message": "Conversations"
+  },
+  "sidebar_newChat": {
+    "message": "+ New Chat"
+  },
+  "sidebar_collapse": {
+    "message": "Collapse sidebar"
+  },
+  "sidebar_expand": {
+    "message": "Expand sidebar"
+  },
+  "sidebar_settings": {
+    "message": "Settings"
+  },
+  "sidebar_noConversations": {
+    "message": "No conversations"
+  },
+  "sidebar_rename": {
+    "message": "Rename"
+  },
+  "sidebar_delete": {
+    "message": "Delete"
+  },
+  "sidebar_input": {
+    "message": "Input"
+  },
+  "sidebar_output": {
+    "message": "Output"
+  },
+  "sidebar_total": {
+    "message": "Total"
+  },
+  "sidebar_status_idle": {
+    "message": "Idle"
+  },
+  "sidebar_status_running": {
+    "message": "Running..."
+  },
+  "sidebar_status_streaming": {
+    "message": "Streaming..."
+  },
+  "sidebar_status_waitingConfirmation": {
+    "message": "Awaiting confirmation"
+  },
+  "chat_emptyState": {
+    "message": "Start a conversation, send a message to Browser Agent"
+  },
+  "chat_input_placeholder": {
+    "message": "Type a message... (Enter to send, Shift+Enter for new line)"
+  },
+  "chat_input_disabledPlaceholder": {
+    "message": "Agent is running..."
+  },
+  "chat_input_abort": {
+    "message": "Abort"
+  },
+  "chat_input_send": {
+    "message": "Send"
+  },
+  "chat_input_voiceInput": {
+    "message": "Voice input"
+  },
+  "chat_input_requestingMic": {
+    "message": "Requesting microphone access..."
+  },
+  "chat_input_stopRecording": {
+    "message": "Click to stop recording"
+  },
+  "chat_input_transcribing": {
+    "message": "Transcribing..."
+  },
+  "chat_input_voiceError": {
+    "message": "Voice recognition error"
+  },
+  "chat_contextUsage_tooltip": {
+    "message": "Context usage: {used} / {limit}"
+  },
+  "chat_message_showReasoning": {
+    "message": "Show reasoning"
+  },
+  "chat_message_hideReasoning": {
+    "message": "Hide reasoning"
+  },
+  "chat_message_thinking": {
+    "message": "Thinking..."
+  },
+  "chat_message_params": {
+    "message": "Parameters"
+  },
+  "chat_message_result": {
+    "message": "Result"
+  },
+  "chat_message_copy": {
+    "message": "Copy"
+  },
+  "chat_message_copied": {
+    "message": "Copied"
+  },
+  "chat_configuration_provider": {
+    "message": "Provider"
+  },
+  "chat_configuration_model": {
+    "message": "Model"
+  },
+  "chat_configuration_reasoning": {
+    "message": "Reasoning"
+  },
+  "chat_configuration_reasoningOff": {
+    "message": "Off"
+  },
+  "chat_onboarding_noProviderTitle": {
+    "message": "Configure a Provider to start chatting"
+  },
+  "chat_onboarding_noProviderDescription": {
+    "message": "At least one complete Provider configuration is required to use the chat."
+  },
+  "chat_onboarding_configureCta": {
+    "message": "Configure Provider"
+  },
+  "chat_onboarding_dialogTitle": {
+    "message": "Configure Chat Provider"
+  },
+  "settings_title": {
+    "message": "Settings"
+  },
+  "settings_theme_label": {
+    "message": "Theme"
+  },
+  "settings_theme_system": {
+    "message": "System"
+  },
+  "settings_theme_light": {
+    "message": "Light"
+  },
+  "settings_theme_dark": {
+    "message": "Dark"
+  },
+  "settings_tabs_provider": {
+    "message": "Provider"
+  },
+  "settings_tabs_agent": {
+    "message": "Agent"
+  },
+  "settings_tabs_expert": {
+    "message": "Expert Mode"
+  },
+  "settings_tabs_skills": {
+    "message": "Skills"
+  },
+  "settings_tabs_appearance": {
+    "message": "Appearance"
+  },
+  "settings_tabs_floatingButton": {
+    "message": "Floating Button"
+  },
+  "settings_provider_noProviders": {
+    "message": "No providers configured"
+  },
+  "settings_provider_add": {
+    "message": "+ Add Provider"
+  },
+  "settings_provider_test": {
+    "message": "Test"
+  },
+  "settings_provider_testing": {
+    "message": "Testing..."
+  },
+  "settings_provider_trusted": {
+    "message": "Trusted"
+  },
+  "settings_provider_voiceModel": {
+    "message": "STT Model"
+  },
+  "settings_provider_audioFormat": {
+    "message": "Output Format"
+  },
+  "settings_provider_audioFormatHint": {
+    "message": "Convert recordings to the specified format before sending. Leave empty to auto-convert to WAV."
+  },
+  "settings_provider_trustedLabel": {
+    "message": "Local Trusted Provider (mark as trusted to send sensitive data)"
+  },
+  "settings_provider_save": {
+    "message": "Save"
+  },
+  "settings_provider_cancel": {
+    "message": "Cancel"
+  },
+  "settings_provider_edit": {
+    "message": "Edit"
+  },
+  "settings_provider_delete": {
+    "message": "Delete"
+  },
+  "settings_provider_placeholder_name": {
+    "message": "Name"
+  },
+  "settings_provider_placeholder_endpoint": {
+    "message": "Endpoint (e.g. https://api.openai.com/v1)"
+  },
+  "settings_provider_placeholder_apiKey": {
+    "message": "API Key"
+  },
+  "settings_provider_placeholder_model": {
+    "message": "Model (e.g. gpt-4o)"
+  },
+  "settings_provider_placeholder_sttModel": {
+    "message": "STT Model (e.g. whisper-1)"
+  },
+  "settings_provider_audioFormats_auto": {
+    "message": "Auto (Recommended) — Convert to WAV"
+  },
+  "settings_provider_audioFormats_webm_opus": {
+    "message": "WebM Opus"
+  },
+  "settings_provider_audioFormats_webm": {
+    "message": "WebM"
+  },
+  "settings_provider_audioFormats_mp4aac": {
+    "message": "MP4 AAC"
+  },
+  "settings_provider_audioFormats_mp4": {
+    "message": "MP4"
+  },
+  "settings_provider_audioFormats_aac": {
+    "message": "AAC"
+  },
+  "settings_provider_audioFormats_ogg_opus": {
+    "message": "OGG Opus"
+  },
+  "settings_provider_audioFormats_wav": {
+    "message": "WAV"
+  },
+  "settings_provider_wizard_stepLabels_template": {
+    "message": "1. Template"
+  },
+  "settings_provider_wizard_stepLabels_connection": {
+    "message": "2. Connection"
+  },
+  "settings_provider_wizard_stepLabels_models": {
+    "message": "3. Models"
+  },
+  "settings_provider_wizard_back": {
+    "message": "Back"
+  },
+  "settings_provider_wizard_template_title": {
+    "message": "Choose a template"
+  },
+  "settings_provider_wizard_template_description": {
+    "message": "Copy model capabilities from models.dev or start with an OpenAI-compatible endpoint."
+  },
+  "settings_provider_wizard_template_useCustom": {
+    "message": "OpenAI-compatible endpoint"
+  },
+  "settings_provider_wizard_template_useCustomDesc": {
+    "message": "For Ollama, vLLM, LiteLLM, and compatible gateways."
+  },
+  "settings_provider_wizard_template_searchPlaceholder": {
+    "message": "Search models.dev providers..."
+  },
+  "settings_provider_wizard_template_itemCount": {
+    "message": "{count} models · {id}"
+  },
+  "settings_provider_wizard_connection_title": {
+    "message": "Connection"
+  },
+  "settings_provider_wizard_connection_description": {
+    "message": "Credentials belong to this Provider snapshot, not an individual model."
+  },
+  "settings_provider_wizard_connection_nameLabel": {
+    "message": "Provider name"
+  },
+  "settings_provider_wizard_connection_namePlaceholder": {
+    "message": "Enter name"
+  },
+  "settings_provider_wizard_connection_endpointLabel": {
+    "message": "Base URL"
+  },
+  "settings_provider_wizard_connection_endpointPlaceholder": {
+    "message": "https://api.example.com/v1"
+  },
+  "settings_provider_wizard_connection_apiKeyLabel": {
+    "message": "API Key (optional)"
+  },
+  "settings_provider_wizard_connection_apiKeyPlaceholder": {
+    "message": "Enter API Key"
+  },
+  "settings_provider_wizard_connection_trustedLabel": {
+    "message": "Local trusted connection"
+  },
+  "settings_provider_wizard_connection_trustedDescription": {
+    "message": "Mark as locally trusted to allow sending sensitive data."
+  },
+  "settings_provider_wizard_connection_back": {
+    "message": "Back"
+  },
+  "settings_provider_wizard_connection_continue": {
+    "message": "Continue"
+  },
+  "settings_provider_wizard_models_title": {
+    "message": "Models"
+  },
+  "settings_provider_wizard_models_description": {
+    "message": "Limits are model capabilities; default output and temperature are request preferences."
+  },
+  "settings_provider_wizard_models_idPlaceholder": {
+    "message": "Model ID"
+  },
+  "settings_provider_wizard_models_namePlaceholder": {
+    "message": "Display name"
+  },
+  "settings_provider_wizard_models_contextPlaceholder": {
+    "message": "Context window"
+  },
+  "settings_provider_wizard_models_maxOutputPlaceholder": {
+    "message": "Max output"
+  },
+  "settings_provider_wizard_models_defaultOutputPlaceholder": {
+    "message": "Default output"
+  },
+  "settings_provider_wizard_models_temperaturePlaceholder": {
+    "message": "Temperature"
+  },
+  "settings_provider_wizard_models_supportsTools": {
+    "message": "Tool calling"
+  },
+  "settings_provider_wizard_models_supportsReasoning": {
+    "message": "Reasoning"
+  },
+  "settings_provider_wizard_models_discoverButton": {
+    "message": "Discover"
+  },
+  "settings_provider_wizard_models_discovering": {
+    "message": "Discovering..."
+  },
+  "settings_provider_wizard_models_discovered": {
+    "message": "Discovered {count} model(s). Complete their limits before saving."
+  },
+  "settings_provider_wizard_models_discoverFailed": {
+    "message": "Model discovery failed: {message}. Add models manually instead."
+  },
+  "settings_provider_wizard_models_addModel": {
+    "message": "+ Add model"
+  },
+  "settings_provider_wizard_models_newModel": {
+    "message": "New model"
+  },
+  "settings_provider_wizard_models_defaultModel": {
+    "message": "Default"
+  },
+  "settings_provider_wizard_models_deleteModel": {
+    "message": "Delete"
+  },
+  "settings_provider_wizard_models_noValidModels": {
+    "message": "Add at least one model."
+  },
+  "settings_provider_wizard_models_duplicateId": {
+    "message": "Model IDs must be unique."
+  },
+  "settings_provider_wizard_models_back": {
+    "message": "Back"
+  },
+  "settings_provider_wizard_models_save": {
+    "message": "Save provider"
+  },
+  "settings_provider_wizard_validation_modelInvalid": {
+    "message": "Complete every model configuration before saving."
+  },
+  "settings_provider_wizard_validation_noModels": {
+    "message": "At least one valid model is required."
+  },
+  "settings_agent_maxToolRounds": {
+    "message": "Max Steps per Task"
+  },
+  "settings_agent_contextWindowTokens": {
+    "message": "Context Window Tokens"
+  },
+  "settings_agent_tokenBudgetMargin": {
+    "message": "Token Budget Margin"
+  },
+  "settings_agent_microcompactKeepRecent": {
+    "message": "Microcompact: Keep Recent Count"
+  },
+  "settings_agent_microcompactMinChars": {
+    "message": "Microcompact: Min Char Threshold"
+  },
+  "settings_agent_microcompactExcludeTools": {
+    "message": "Microcompact: Excluded Tools"
+  },
+  "settings_agent_microcompactExcludeToolsPlaceholder": {
+    "message": "Tool names, comma-separated, e.g. page_getScreenshot"
+  },
+  "settings_agent_reasoningEffort": {
+    "message": "Reasoning Effort"
+  },
+  "settings_agent_reasoningEffortHint": {
+    "message": "Controls LLM reasoning depth. Higher values are slower but more thorough. Only supported by reasoning models like DeepSeek, OpenAI o1/o3, etc."
+  },
+  "settings_agent_systemPrompt": {
+    "message": "System Prompt"
+  },
+  "settings_agent_reasoningOptions_low": {
+    "message": "Low"
+  },
+  "settings_agent_reasoningOptions_medium": {
+    "message": "Medium"
+  },
+  "settings_agent_reasoningOptions_high": {
+    "message": "High"
+  },
+  "settings_agent_reasoningOptions_max": {
+    "message": "Maximum"
+  },
+  "settings_expert_title": {
+    "message": "Expert Mode"
+  },
+  "settings_expert_subSwitchHint": {
+    "message": "Enable specific API domains after turning on Expert Mode"
+  },
+  "settings_expert_domains_proxy": {
+    "message": "Control browser proxy settings"
+  },
+  "settings_expert_domains_debugger": {
+    "message": "Attach DevTools debugger to inspect page JavaScript execution"
+  },
+  "settings_expert_domains_management": {
+    "message": "Manage extension installation, uninstallation, enable/disable"
+  },
+  "settings_expert_domains_privacy": {
+    "message": "Read and modify browser privacy settings"
+  },
+  "settings_expert_domains_webRequest": {
+    "message": "Intercept and modify network requests"
+  },
+  "settings_expert_domains_declarativeNetRequest": {
+    "message": "Declarative network request rules, block or redirect requests"
+  },
+  "settings_expert_domains_nativeMessaging": {
+    "message": "Communicate with native applications"
+  },
+  "settings_skills_panelTitle": {
+    "message": "Skill Management"
+  },
+  "settings_skills_subscriptions": {
+    "message": "Subscriptions"
+  },
+  "settings_skills_localSkills": {
+    "message": "Local Skills"
+  },
+  "settings_skills_placeholder": {
+    "message": "Enter GitHub repo, e.g. owner/repo"
+  },
+  "settings_skills_add": {
+    "message": "Add"
+  },
+  "settings_skills_configToken": {
+    "message": "Configure GitHub Token (optional, increases API rate limit)"
+  },
+  "settings_skills_hideToken": {
+    "message": "Hide Token"
+  },
+  "settings_skills_tokenPlaceholder": {
+    "message": "ghp_xxx or github_pat_xxx"
+  },
+  "settings_skills_noSubscriptions": {
+    "message": "No subscriptions, enter a GitHub repo URL to add"
+  },
+  "settings_skills_noSubscriptionsAndSkills": {
+    "message": "No subscriptions or skills, enter a GitHub repo URL to add"
+  },
+  "settings_skills_sync": {
+    "message": "Sync"
+  },
+  "settings_skills_syncing": {
+    "message": "Syncing..."
+  },
+  "settings_skills_delete": {
+    "message": "Delete"
+  },
+  "settings_skills_skillsCount": {
+    "message": "{count} skills"
+  },
+  "settings_skills_enabled": {
+    "message": "Enabled"
+  },
+  "settings_skills_syncComplete": {
+    "message": "Sync complete, {count} skills total"
+  },
+  "settings_skills_syncFailed": {
+    "message": "Sync failed: {error}"
+  },
+  "settings_skills_subscriptionExists": {
+    "message": "This subscription already exists"
+  },
+  "settings_floatingButton_enabled": {
+    "message": "Enable Floating Button"
+  },
+  "settings_floatingButton_enabledDesc": {
+    "message": "Show a draggable circular chat button on web pages"
+  },
+  "settings_floatingButton_blacklist": {
+    "message": "Hidden Sites"
+  },
+  "settings_floatingButton_blacklistEmpty": {
+    "message": "No sites hidden"
+  },
+  "settings_floatingButton_blacklistRemove": {
+    "message": "Remove"
+  },
+  "settings_floatingButton_resetPosition": {
+    "message": "Reset Button Position"
+  },
+  "settings_floatingButton_resetSuccess": {
+    "message": "Position reset"
+  },
+  "dialog_confirmTitle": {
+    "message": "Confirm Action"
+  },
+  "dialog_tool": {
+    "message": "Tool"
+  },
+  "dialog_affectedObjects": {
+    "message": "Affected Objects"
+  },
+  "dialog_type": {
+    "message": "Type"
+  },
+  "dialog_title": {
+    "message": "Title"
+  },
+  "dialog_reason": {
+    "message": "Reason"
+  },
+  "dialog_warnings": {
+    "message": "Warnings"
+  },
+  "dialog_confirm": {
+    "message": "Confirm"
+  },
+  "dialog_cancel": {
+    "message": "Cancel"
+  },
+  "browser_title": {
+    "message": "Browser State"
+  },
+  "browser_loading": {
+    "message": "Loading..."
+  },
+  "browser_error": {
+    "message": "Error"
+  },
+  "browser_noData": {
+    "message": "No Data"
+  },
+  "browser_windows": {
+    "message": "Windows"
+  },
+  "browser_tabs": {
+    "message": "Tabs"
+  },
+  "browser_active": {
+    "message": "Active"
+  },
+  "browser_windowLabel": {
+    "message": "Window"
+  },
+  "token_title": {
+    "message": "Token Usage"
+  },
+  "token_input": {
+    "message": "Input"
+  },
+  "token_output": {
+    "message": "Output"
+  },
+  "token_total": {
+    "message": "Total"
+  },
+  "token_noData": {
+    "message": "--"
+  },
+  "error_renderError": {
+    "message": "Render Error"
+  },
+  "markdown_invalidLink": {
+    "message": "Invalid link"
+  },
+  "markdown_contentExpired": {
+    "message": "Content has expired or does not exist"
+  },
+  "markdown_previewTitle": {
+    "message": "Preview"
+  },
+  "voice_noSttModel": {
+    "message": "No STT model configured. Please add sttModel to a Provider in settings."
+  },
+  "voice_micDenied": {
+    "message": "Microphone permission denied. Please allow microphone access in browser settings."
+  },
+  "voice_noMic": {
+    "message": "No microphone device detected"
+  },
+  "voice_startFailed": {
+    "message": "Failed to start recording: {message}"
+  },
+  "voice_providerLost": {
+    "message": "Provider configuration lost"
+  },
+  "voice_transcribeFailed": {
+    "message": "Speech recognition failed: {message}"
+  },
+  "home_title": {
+    "message": "How can I help?"
+  },
+  "home_subtitle": {
+    "message": "Manage tabs, windows and bookmarks in one sentence"
+  },
+  "home_sug1_title": {
+    "message": "Organize tabs intelligently"
+  },
+  "home_sug1_desc": {
+    "message": "Suggest groups based on purpose, task, and content relevance"
+  },
+  "home_sug1_prompt": {
+    "message": "Analyze all tabs in the current window and propose sensible groups based on page purpose, task, and content relevance. Do not group solely by domain: different sites used for the same task may belong together, while pages from the same site may belong in different groups when their purposes differ. First list each suggested group, its tabs, and the reasoning. Wait for my confirmation before moving or grouping anything."
+  },
+  "home_sug2_title": {
+    "message": "Find duplicate tabs"
+  },
+  "home_sug2_desc": {
+    "message": "List tabs with duplicate URLs without closing them"
+  },
+  "home_sug2_prompt": {
+    "message": "Find tabs with duplicate URLs in the current window and list their titles, URLs, and groups. Do not close any tabs yet."
+  },
+  "home_sug3_title": {
+    "message": "Find sound sources"
+  },
+  "home_sug3_desc": {
+    "message": "Find audible tabs without muting them"
+  },
+  "home_sug3_prompt": {
+    "message": "Find tabs that are currently playing sound and list their titles, URLs, and windows. Do not mute, close, or switch tabs."
+  },
+  "home_sug4_title": {
+    "message": "Recently closed"
+  },
+  "home_sug4_desc": {
+    "message": "Review recently closed tabs and windows"
+  },
+  "home_sug4_prompt": {
+    "message": "Review recently closed tabs and windows, ordered from most recently closed, and list their titles and URLs. Do not restore anything automatically."
+  }
+}

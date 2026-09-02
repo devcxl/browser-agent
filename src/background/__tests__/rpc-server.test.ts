@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BackgroundRpcServer } from '../rpc-server';
+import { createI18nMock } from '@/test/i18n-mock';
 
 interface MockPort {
   onMessage: { addListener: vi.Mock; removeListener: vi.Mock };
@@ -51,6 +52,7 @@ beforeEach(() => {
         removeListener: vi.fn(),
       },
     },
+    i18n: createI18nMock(),
   });
 });
 

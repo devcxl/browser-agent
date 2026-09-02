@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { JsonRpcClient } from '../client';
+import { createI18nMock } from '@/test/i18n-mock';
 
 // ── Mock 工具 ──────────────────────────────────────────
 
@@ -60,7 +61,7 @@ let connectSpy: ReturnType<typeof vi.fn>;
 beforeEach(() => {
   mockPort = createMockPort();
   connectSpy = vi.fn(() => mockPort);
-  vi.stubGlobal('browser', { runtime: { connect: connectSpy } });
+  vi.stubGlobal('browser', { runtime: { connect: connectSpy }, i18n: createI18nMock() });
   vi.useFakeTimers();
 });
 

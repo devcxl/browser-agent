@@ -3,9 +3,9 @@ import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FloatingButtonSection } from '../components/FloatingButtonSection';
-import { I18nProvider } from '../i18n/I18nProvider';
 import { ConfigStore } from '@/shared/storage';
 import type { FloatingButtonSettings } from '@/shared/types';
+import { createI18nMock } from '@/test/i18n-mock';
 
 // ── Mock browser.storage ────────────────────────────────────────
 
@@ -62,6 +62,7 @@ beforeEach(() => {
       local: mockBrowser.local,
       onChanged: mockBrowser.onChanged,
     },
+    i18n: createI18nMock(),
   });
   ConfigStore.resetInstance();
 });
@@ -73,7 +74,7 @@ afterEach(() => {
 // ── 辅助函数 ─────────────────────────────────────────────────────
 
 function renderWithI18n(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  return render(ui);
 }
 
 async function seedSettings(settings: Partial<FloatingButtonSettings> = {}) {

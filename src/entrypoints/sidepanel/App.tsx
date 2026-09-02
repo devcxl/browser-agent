@@ -6,7 +6,6 @@ import { ConversationSidebar } from './components/ConversationSidebar';
 import { SettingsPanel } from './components/SettingsPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
-import { I18nProvider } from './i18n/I18nProvider';
 import { useI18n } from './i18n/useI18n';
 import { ConfigStore } from '@/shared/storage';
 import { getProviderClientFactory } from '@/provider/provider-client-factory';
@@ -485,12 +484,10 @@ function ChatLayout() {
 
 export default function App() {
   return (
-    <I18nProvider>
-      <ErrorBoundary>
-        <ChatProvider>
-          <ChatLayout />
-        </ChatProvider>
-      </ErrorBoundary>
-    </I18nProvider>
+    <ErrorBoundary>
+      <ChatProvider>
+        <ChatLayout />
+      </ChatProvider>
+    </ErrorBoundary>
   );
 }

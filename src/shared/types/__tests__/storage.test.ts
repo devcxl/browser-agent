@@ -24,7 +24,7 @@ describe('Storage types', () => {
           summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
         },
         expertModeSettings: { enabled: false, switches: {} },
-        preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },
+        preferences: { theme: 'system', sidebarExpanded: true },
         skills: [],
         skillSubscriptions: [],
       };
@@ -52,7 +52,7 @@ describe('Storage types', () => {
 
   describe('UserPreferences', () => {
     it('should accept user preferences', () => {
-      const p: UserPreferences = { theme: 'dark', language: 'en', sidebarExpanded: false };
+      const p: UserPreferences = { theme: 'dark', sidebarExpanded: false };
       expect(p.theme).toBe('dark');
     });
   });
@@ -136,7 +136,7 @@ describe('Storage types', () => {
             summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
           },
           expertModeSettings: { enabled: false, switches: {} },
-          preferences: { theme: 'system', language: 'zh-CN', sidebarExpanded: true },
+          preferences: { theme: 'system', sidebarExpanded: true },
           skills: [],
           skillSubscriptions: [],
         }),

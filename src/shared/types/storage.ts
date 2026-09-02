@@ -79,8 +79,6 @@ export type ExpertApiDomain = typeof EXPERT_API_DOMAINS[number];
 export interface UserPreferences {
   /** UI 主题 */
   theme: 'light' | 'dark' | 'system';
-  /** 语言 */
-  language: 'zh-CN' | 'en';
   /** 侧边栏默认展开 */
   sidebarExpanded: boolean;
   /** 推理内容自动展开（流式输出时），默认 false */

@@ -3,11 +3,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsPanel } from '../components/SettingsPanel';
-import { I18nProvider } from '../i18n/I18nProvider';
 import type { ProviderConfig } from '@/shared/types';
 import { ConfigStore } from '@/shared/storage';
+import { createI18nMock } from '@/test/i18n-mock';
 
-// Mock browser.storage for I18nProvider
+// Mock browser.storage（ConfigStore 依赖）
 function createMockBrowser() {
   const storage: Record<string, unknown> = {};
   const listeners: Array<(changes: Record<string, browser.storage.StorageChange>) => void> = [];
@@ -51,6 +51,7 @@ beforeEach(() => {
       local: mockBrowser.local,
       onChanged: mockBrowser.onChanged,
     },
+    i18n: createI18nMock(),
   });
   ConfigStore.resetInstance();
 });
@@ -126,7 +127,7 @@ function makeProvider(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
 }
 
 function renderWithI18n(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  return render(ui);
 }
 
 async function openProviderSettings() {
@@ -148,16 +149,12 @@ describe('SettingsPanel', () => {
     const appearanceTab = screen.getByTestId('settings-appearance-tab');
     expect(appearanceTab.parentElement?.firstElementChild).toBe(appearanceTab);
     const themeSelect = screen.getByRole('combobox', { name: '主题' });
-    const languageSelect = screen.getByRole('combobox', { name: '界面语言' });
     expect(themeSelect).toBeTruthy();
-    expect(languageSelect).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: '界面语言' })).toBeNull();
     expect(screen.queryByTestId('add-provider-button')).toBeNull();
 
     await userEvent.click(themeSelect);
     expect(screen.getByRole('listbox', { name: '主题' })).toBeTruthy();
-    await userEvent.click(languageSelect);
-    expect(screen.queryByRole('listbox', { name: '主题' })).toBeNull();
-    expect(screen.getByRole('listbox', { name: '界面语言' })).toBeTruthy();
   });
 
   it('Agent 设置使用执行步数并移除消息数上限', async () => {

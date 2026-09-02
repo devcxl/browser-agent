@@ -2,12 +2,11 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ChatView } from '../components/ChatView';
-import { I18nProvider } from '../i18n/I18nProvider';
 import { mockBrowserStorage } from './test-utils';
 import type { UIMessage } from '../types';
 
 function wrappedRender(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  return render(ui);
 }
 
 beforeEach(() => {
@@ -44,7 +43,7 @@ describe('ChatView', () => {
 
   it('renders empty state when no messages', () => {
     wrappedRender(<ChatView messages={[]} />);
-    // I18nProvider renders translated text for chat.emptyState
+    // 标准 i18n（browser.i18n mock）渲染 chat.emptyState 的翻译文本
     expect(screen.getByText('开始对话，发送消息给 Browser Agent')).toBeDefined();
   });
 

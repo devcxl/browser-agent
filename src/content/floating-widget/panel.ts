@@ -8,8 +8,7 @@
  * - iframe load 超时降级处理
  */
 
-import { getStrings } from './strings';
-import type { SupportedLang } from './strings';
+import { translate } from '@/shared/i18n';
 
 /** iframe 加载超时时间（ms） */
 const LOAD_TIMEOUT = 5000;
@@ -24,20 +23,13 @@ export class ChatPanel {
   private _isOpen = false;
   private loaded = false;
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
-  private strings = getStrings('en');
 
   /** 清理函数引用 */
   private cleanupFns: Array<() => void> = [];
 
-  constructor(containerEl: HTMLElement, side: 'left' | 'right' = 'right', lang?: string) {
+  constructor(containerEl: HTMLElement, side: 'left' | 'right' = 'right') {
     this.containerEl = containerEl;
     this.side = side;
-    if (lang) {
-      const supported = lang as SupportedLang;
-      if (supported === 'zh-CN' || supported === 'en') {
-        this.strings = getStrings(supported);
-      }
-    }
   }
 
   get isOpen(): boolean {
@@ -116,7 +108,7 @@ export class ChatPanel {
   private createIframe(): void {
     const iframe = document.createElement('iframe');
     iframe.src = browser.runtime.getURL('sidepanel.html') + '?embedded=1';
-    iframe.setAttribute('title', this.strings.panelTitle);
+    iframe.setAttribute('title', translate('widget.panelTitle'));
     iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
     // 沙箱：允许脚本、表单，不允许顶层导航和弹窗
     iframe.setAttribute('sandbox', 'allow-scripts allow-forms allow-same-origin allow-popups');
@@ -159,7 +151,7 @@ export class ChatPanel {
           padding: 24px;
           background: #fafafa;
         `;
-        errorDiv.textContent = this.strings.loadError;
+        errorDiv.textContent = translate('widget.loadError');
         this.containerEl.appendChild(errorDiv);
 
         // 标记为已加载（避免重复插入）

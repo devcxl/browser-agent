@@ -3,10 +3,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ProviderWizard } from '../components/ProviderWizard';
-import { I18nProvider } from '../i18n/I18nProvider';
 import { useI18n } from '../i18n/useI18n';
 import { ConfigStore } from '@/shared/storage';
 import type { ProviderConfig, ProviderModelConfig } from '@/shared/types';
+import { createI18nMock } from '@/test/i18n-mock';
 
 // ── browser.storage mock ────────────────────────────
 
@@ -53,6 +53,7 @@ beforeEach(() => {
       local: mockBrowser.local,
       onChanged: mockBrowser.onChanged,
     },
+    i18n: createI18nMock(),
   });
   ConfigStore.resetInstance();
 });
@@ -106,11 +107,19 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof ProviderWizard
 }
 
 function renderWithI18n(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  return render(ui);
 }
 
-async function setLanguage(locale: 'zh-CN' | 'en') {
-  await mockBrowser.local.set({ preferences: { language: locale } });
+/** 标准扩展 i18n 跟随浏览器 UI 语言：用 getUILanguage mock 模拟语言环境 */
+function setLanguage(locale: 'zh-CN' | 'en') {
+  vi.stubGlobal('browser', {
+    storage: {
+      local: mockBrowser.local,
+      onChanged: mockBrowser.onChanged,
+    },
+    i18n: createI18nMock(locale === 'en' ? 'en-US' : 'zh-CN'),
+  });
+  ConfigStore.resetInstance();
 }
 
 // ── tests ───────────────────────────────────────────

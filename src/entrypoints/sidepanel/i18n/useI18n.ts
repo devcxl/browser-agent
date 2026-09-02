@@ -1,11 +1,13 @@
-import { useContext } from 'react';
-import { I18nContext } from './I18nProvider';
-import type { I18nContextValue } from './types';
+import { translate, getLocale, type Locale } from '@/shared/i18n';
 
-export function useI18n(): I18nContextValue {
-  const ctx = useContext(I18nContext);
-  if (!ctx) {
-    throw new Error('useI18n must be used within an <I18nProvider>');
-  }
-  return ctx;
+export type { Locale };
+
+/**
+ * 标准 i18n（_locales + browser.i18n）的 React 接入点。
+ *
+ * 语言跟随浏览器 UI 语言，浏览器标准行为，无 Provider、无运行时切换。
+ * 保留与旧实现一致的 `{ t, locale }` 返回结构，组件调用方式不变。
+ */
+export function useI18n(): { locale: Locale; t: (key: string, vars?: Record<string, string | number>) => string } {
+  return { locale: getLocale(), t: translate };
 }

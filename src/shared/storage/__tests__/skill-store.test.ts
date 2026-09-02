@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SkillStore } from '../skill-store';
 import type { Skill } from '@/shared/types';
+import { createI18nMock } from '@/test/i18n-mock';
 
 // ==================== Mock 工具 ====================
 
@@ -91,6 +92,7 @@ describe('SkillStore', () => {
         local: browserMock.mock,
         onChanged: browserMock.mock.onChanged,
       },
+      i18n: createI18nMock(),
     });
     SkillStore.resetInstance();
   });

@@ -3,7 +3,6 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SkillPanel } from '../components/SkillPanel';
-import { I18nProvider } from '../i18n/I18nProvider';
 import { mockBrowserStorage } from './test-utils';
 import { SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import type { Skill, SkillSubscription } from '@/shared/types';
@@ -18,7 +17,7 @@ vi.mock('@/shared/github-skill-fetcher', () => ({
 // ==================== 测试辅助 ====================
 
 function wrappedRender(ui: React.ReactElement) {
-  return render(<I18nProvider>{ui}</I18nProvider>);
+  return render(ui);
 }
 
 function makeSkill(overrides: Partial<Skill> = {}): Skill {

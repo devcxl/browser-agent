@@ -9,8 +9,7 @@
 import { FloatingWidget } from './widget';
 import { shouldMount } from './blacklist';
 import { ConfigStore } from '@/shared/storage/config-store';
-import type { FloatingButtonSettings, UserPreferences } from '@/shared/types/storage';
-import type { SupportedLang } from './strings';
+import type { FloatingButtonSettings } from '@/shared/types/storage';
 
 /** 全局唯一实例引用 */
 let activeWidget: FloatingWidget | null = null;
@@ -28,57 +27,44 @@ let positionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 export async function startFloatingWidget(): Promise<void> {
   const store = ConfigStore.getInstance();
   const settings = await store.get<FloatingButtonSettings>('floatingButtonSettings');
-  const prefs = await store.get<UserPreferences>('preferences');
   const hostname = window.location.hostname;
-  const lang: SupportedLang = prefs.language === 'en' ? 'en' : 'zh-CN';
 
   // 首次判定
   if (!shouldMount(settings, hostname)) return;
 
-  mountWidget(settings, hostname, lang);
+  mountWidget(settings, hostname);
 
   // 订阅 storage 变更
   unsubscribe = store.onChange((changes) => {
     const newSettings = changes.floatingButtonSettings;
-    const newPrefs = changes.preferences;
-
-    // 语言变更：更新已挂载 widget（仅 prefs 变化时）
-    if (newPrefs && !newSettings && activeWidget) {
-      const newLang: SupportedLang = newPrefs.language === 'en' ? 'en' : 'zh-CN';
-      activeWidget.setLang(newLang);
-      return;
-    }
-
     if (newSettings === undefined) return;
 
     if (activeWidget) {
-      const newLang: SupportedLang = newPrefs?.language === 'en' ? 'en' : 'zh-CN';
-      const stillAlive = activeWidget.apply(newSettings, newLang);
+      const stillAlive = activeWidget.apply(newSettings);
       if (!stillAlive) {
         // apply 内部已 destroy，置空引用后重新判断挂载
         activeWidget = null;
         if (shouldMount(newSettings, hostname)) {
-          mountWidget(newSettings, hostname, newLang);
+          mountWidget(newSettings, hostname);
         }
       }
     } else {
       // 当前无实例但配置变更后应挂载
       if (shouldMount(newSettings, hostname)) {
-        const newLang: SupportedLang = newPrefs?.language === 'en' ? 'en' : 'zh-CN';
-        mountWidget(newSettings, hostname, newLang);
+        mountWidget(newSettings, hostname);
       }
     }
   });
 }
 
 /** 创建并挂载 FloatingWidget 实例 */
-function mountWidget(settings: FloatingButtonSettings, hostname: string, lang: SupportedLang): void {
+function mountWidget(settings: FloatingButtonSettings, hostname: string): void {
   if (activeWidget) {
     activeWidget.destroy();
     activeWidget = null;
   }
 
-  activeWidget = new FloatingWidget(settings, hostname, lang);
+  activeWidget = new FloatingWidget(settings, hostname);
 
   // 位置变更回调：防抖写入 storage
   activeWidget.setOnPositionChange((pos) => {

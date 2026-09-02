@@ -25,7 +25,6 @@ const DEFAULTS: StorageSchema = {
   },
   preferences: {
     theme: 'system',
-    language: 'zh-CN',
     sidebarExpanded: true,
     reasoningAutoExpand: false,
   },

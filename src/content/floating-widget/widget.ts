@@ -11,8 +11,7 @@
 
 import { isClick, resolveSide, clampTop } from './drag';
 import { addToBlacklist, shouldMount } from './blacklist';
-import { getStrings } from './strings';
-import type { SupportedLang } from './strings';
+import { translate } from '@/shared/i18n';
 import type { FloatingButtonSettings } from '@/shared/types/storage';
 import { ConfigStore } from '@/shared/storage/config-store';
 
@@ -155,8 +154,6 @@ const SHADOW_CSS = /* css */ `
 export class FloatingWidget {
   private settings: FloatingButtonSettings;
   private hostname: string;
-  private lang: SupportedLang;
-  private strings = getStrings('en');
 
   private host: HTMLDivElement | null = null;
   private shadowRoot: ShadowRoot | null = null;
@@ -188,16 +185,9 @@ export class FloatingWidget {
   constructor(
     settings: FloatingButtonSettings,
     hostname: string,
-    lang?: string,
   ) {
     this.settings = settings;
     this.hostname = hostname;
-    if (lang === 'zh-CN' || lang === 'en') {
-      this.lang = lang;
-    } else {
-      this.lang = 'en';
-    }
-    this.strings = getStrings(this.lang);
 
     // 从 settings 读取初始位置或使用默认值
     const savedPos = settings.position;
@@ -237,13 +227,8 @@ export class FloatingWidget {
   }
 
   /** 响应设置变更。返回 false 表示 widget 已被销毁（如 enabled 关闭或命中黑名单） */
-  apply(nextSettings: FloatingButtonSettings, lang?: SupportedLang): boolean {
+  apply(nextSettings: FloatingButtonSettings): boolean {
     this.settings = nextSettings;
-
-    // 语言更新
-    if (lang) {
-      this.setLang(lang);
-    }
 
     // enabled 关闭 → 销毁
     if (!shouldMount(nextSettings, this.hostname)) {
@@ -260,16 +245,6 @@ export class FloatingWidget {
     }
 
     return true;
-  }
-
-  /** 单独更新界面语言（不触发其他设置变更） */
-  setLang(lang: SupportedLang): void {
-    if (lang === this.lang) return;
-    this.lang = lang;
-    this.strings = getStrings(this.lang);
-    if (this.btn) {
-      this.btn.setAttribute('aria-label', this.strings.buttonAriaLabel);
-    }
   }
 
   /** 销毁：移除 host，清理事件 */
@@ -327,8 +302,8 @@ export class FloatingWidget {
   private buildButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.className = 'float-btn';
-    btn.setAttribute('aria-label', this.strings.buttonAriaLabel);
-    btn.setAttribute('title', this.strings.buttonAriaLabel);
+    btn.setAttribute('aria-label', translate('widget.buttonAriaLabel'));
+    btn.setAttribute('title', translate('widget.buttonAriaLabel'));
 
     const img = document.createElement('img');
     try {
@@ -359,7 +334,7 @@ export class FloatingWidget {
 
     const hideItem = document.createElement('button');
     hideItem.className = 'context-menu-item';
-    hideItem.textContent = this.strings.hideOnThisSite;
+    hideItem.textContent = translate('widget.hideOnThisSite');
     hideItem.addEventListener('click', (e) => {
       e.stopPropagation();
       this.handleHide();

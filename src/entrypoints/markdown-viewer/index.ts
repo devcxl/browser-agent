@@ -1,28 +1,12 @@
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import { translate } from '@/shared/i18n';
 
-type MarkdownMessages = {
-  invalidLink: string;
-  contentExpired: string;
-  previewTitle: string;
-};
-
-async function getMarkdownMessages(): Promise<MarkdownMessages> {
-  const { preferences } = await browser.storage.local.get('preferences');
-  const lang = preferences?.language === 'en' ? 'en' : 'zh-CN';
-  if (lang === 'en') {
-    const mod = await import('../sidepanel/locales/en.json');
-    return {
-      invalidLink: mod.markdown.invalidLink,
-      contentExpired: mod.markdown.contentExpired,
-      previewTitle: mod.markdown.previewTitle,
-    };
-  }
-  const mod = await import('../sidepanel/locales/zh-CN.json');
+function getMarkdownMessages() {
   return {
-    invalidLink: mod.markdown.invalidLink,
-    contentExpired: mod.markdown.contentExpired,
-    previewTitle: mod.markdown.previewTitle,
+    invalidLink: translate('markdown.invalidLink'),
+    contentExpired: translate('markdown.contentExpired'),
+    previewTitle: translate('markdown.previewTitle'),
   };
 }
 
@@ -162,7 +146,7 @@ const STYLE = `
 `;
 
 async function main() {
-  const messages = await getMarkdownMessages();
+  const messages = getMarkdownMessages();
 
   const params = new URLSearchParams(location.search);
   const viewId = params.get('viewId');

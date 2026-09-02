@@ -72,4 +72,15 @@ declare namespace browser {
   const runtime: typeof browser.runtime;
   const tabs: typeof browser.tabs;
   const storage: typeof browser.storage;
+  const i18n: typeof browser.i18n;
+}
+
+declare namespace browser.i18n {
+  /**
+   * 获取 _locales 中定义的本地化文案，未命中返回空串。
+   * substitutions 仅用于 $N/$NAME$ 占位；本项目文案使用 {var} 由 translate() 处理。
+   */
+  function getMessage(messageName: string, substitutions?: string | string[]): string;
+  /** 浏览器 UI 语言代码，如 "zh-CN"、"en-US" */
+  function getUILanguage(): string;
 }
