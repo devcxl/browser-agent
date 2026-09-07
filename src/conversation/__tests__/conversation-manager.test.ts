@@ -94,6 +94,9 @@ describe('ConversationManager', () => {
     expect(conv.messages).toEqual([]);
     expect(conv.sensitiveDataGranted).toBe(false);
     expect(db.putConversation).toHaveBeenCalledOnce();
+    expect(db.putConversation).toHaveBeenCalledWith(expect.objectContaining({
+      titleGenerated: false,
+    }));
   });
 
   // #2
@@ -102,6 +105,11 @@ describe('ConversationManager', () => {
     expect(conv.title).toBe('我的会话');
     expect(conv.titleGenerated).toBe(true);
     expect(db.putConversation).toHaveBeenCalledOnce();
+    expect(db.putConversation).toHaveBeenCalledWith(expect.objectContaining({
+      title: '我的会话',
+      titleGenerated: true,
+      sensitiveDataGranted: false,
+    }));
   });
 
   // #3
@@ -266,6 +274,31 @@ describe('ConversationManager', () => {
     expect(result!.messages[0]!.toolCallId).toBeUndefined();
   });
 
+  // #10d
+  it('get() 将存储的 toolCalls JSON 反序列化为对象', async () => {
+    const conv = mockConv({ id: 'c1' });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([
+      {
+        id: 'tool-msg',
+        conversationId: 'c1',
+        role: 'assistant',
+        content: '',
+        toolCalls: JSON.stringify([
+          { id: 'call_9', name: 'getWeather', params: { city: 'SF' }, result: 'Foggy' },
+        ]),
+        toolCallId: null,
+        timestamp: 200,
+      },
+    ]);
+
+    const result = await mgr.get('c1');
+    expect(result!.messages[0]!.toolCalls).toEqual([
+      { id: 'call_9', name: 'getWeather', params: { city: 'SF' }, result: 'Foggy' },
+    ]);
+    expect(result!.messages[0]!.toolCallId).toBeUndefined();
+  });
+
   // #11
   it('getRecentMessages() 取 N 条', async () => {
     const msgs = [mockMsg('c1', { content: 'a' }), mockMsg('c1', { content: 'b' })];
@@ -322,6 +355,43 @@ describe('ConversationManager', () => {
       'c1',
       '本周会议纪要整理',
     );
+  });
+
+  it.each([
+    ['标题：整理周报', '整理周报'],
+    ['标题: - 整理周报', '整理周报'],
+    ['- 整理周报', '整理周报'],
+    ['  “整理周报”', '整理周报'],
+    ["'整理周报'", '整理周报'],
+    ['`整理周报`', '整理周报'],
+    ['“整理周报”\n追加说明不应进入标题', '整理周报'],
+    ['', undefined],
+    ['   \n   ', undefined],
+    ['\n标题内容', '标题内容'],
+    ['\n\n  - 第二行有效', '第二行有效'],
+    ['标题：\n - 第二行', undefined],
+  ])('normalizeTitle 规范化“%s”', async (raw, expected) => {
+    const conv = mockConv({ id: 'c1', titleGenerated: false });
+    const msgs = [
+      mockMsg('c1', { role: 'user', content: '帮我整理周报' }),
+      mockMsg('c1', { role: 'assistant', content: '好的。' }),
+    ];
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue(msgs);
+    const llm = createMockLlm();
+    vi.mocked(llm.chat).mockResolvedValue({
+      id: 'r',
+      choices: [{ message: { role: 'assistant', content: raw as string }, finish_reason: 'stop' }],
+      usage: undefined,
+    });
+
+    const result = await mgr.generateTitle('c1', llm, 'gpt-4o');
+
+    if (expected === undefined) {
+      expect(result).toBeUndefined();
+    } else {
+      expect(result).toBe(expected);
+    }
   });
 
   it('generateTitle() 已生成标题时直接跳过', async () => {
@@ -455,6 +525,29 @@ describe('ConversationManager', () => {
     expect(db.putConversation).not.toHaveBeenCalled();
   });
 
+  it('generateTitle() 不满足首轮问答条件（无 assistant 文本）时跳过', async () => {
+    const conv = mockConv({ id: 'c1', title: '待生成', titleGenerated: false });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    // 首条 user 带文本，后续无有效 assistant 消息（首个 assistant 仅 toolCalls）
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([
+      mockMsg('c1', { role: 'user', content: '问题', timestamp: 1 }),
+      {
+        id: 'tool-asst',
+        conversationId: 'c1',
+        role: 'assistant',
+        content: '',
+        toolCalls: JSON.stringify([
+          { id: 'call_1', name: 'getWeather', params: {}, result: 'Sunny' },
+        ]),
+        timestamp: 2,
+      },
+    ]);
+    const llm = createMockLlm();
+
+    await expect(mgr.generateTitle('c1', llm, 'gpt-4o')).resolves.toBeUndefined();
+    expect(llm.chat).not.toHaveBeenCalled();
+  });
+
   it('generateTitle() 截断标题时保留完整 Unicode 字符', async () => {
     const conv = mockConv({
       id: 'c1',
@@ -507,6 +600,49 @@ describe('ConversationManager', () => {
 
     const result = await mgr.needsSummary('c1');
     expect(result).toBe(false);
+  });
+
+  it('needsSummary() 恰好等于消息数阈值时不触发', async () => {
+    vi.mocked(db.countMessagesByConversation).mockResolvedValue(30); // 30 不 > 30
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([]);
+    vi.mocked(db.getToolCallLogsByConversation).mockResolvedValue([]);
+
+    const result = await mgr.needsSummary('c1');
+    expect(result).toBe(false);
+  });
+
+  it('needsSummary() 恰好等于 token 阈值时不触发', async () => {
+    vi.mocked(db.countMessagesByConversation).mockResolvedValue(5);
+    // 24000 字符 ≈ 12000 token，恰好等于阈值 → false
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([
+      mockMsg('c1', { content: 'x'.repeat(24000) }),
+    ]);
+    vi.mocked(db.getToolCallLogsByConversation).mockResolvedValue([]);
+
+    const result = await mgr.needsSummary('c1');
+    expect(result).toBe(false);
+  });
+
+  it('generateTitle() 首个 user 后只有 toolCalls assistant 时跳过', async () => {
+    const conv = mockConv({ id: 'c1', titleGenerated: false });
+    const msgs = [
+      mockMsg('c1', { role: 'user', content: '帮我订餐' }),
+      mockMsg('c1', {
+        role: 'assistant',
+        content: '正在为您查询附近餐厅…',
+        toolCalls:
+          '[{"id":"call_1","name":"tabs_create","params":{},"result":""}]',
+      }),
+      mockMsg('c1', { role: 'tool', content: '{"ok":true}' }),
+    ];
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue(msgs);
+    const llm = createMockLlm();
+
+    // assistant 只调了工具（toolCalls 非空）不应视为已回答 → 不生成标题
+    const result = await mgr.generateTitle('c1', llm, 'gpt-4o');
+    expect(result).toBeUndefined();
+    expect(llm.chat).not.toHaveBeenCalled();
   });
 
   // #17
@@ -588,5 +724,45 @@ describe('ConversationManager', () => {
         summaryUpToIndex: 4,
       }),
     );
+  });
+
+  // #18b
+  it('generateSummary() 会话不存在时抛错', async () => {
+    vi.mocked(db.getConversation).mockResolvedValue(undefined);
+    const llm = createMockLlm();
+
+    await expect(mgr.generateSummary('missing', llm)).rejects.toThrow('不存在');
+    expect(llm.chat).not.toHaveBeenCalled();
+  });
+
+  // #18c
+  it('generateSummary() 无新消息时返回已有摘要', async () => {
+    const conv = mockConv({
+      id: 'c1',
+      summary: '已有摘要内容',
+      summaryUpToIndex: 5,
+    });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([]);
+    const llm = createMockLlm();
+
+    const summary = await mgr.generateSummary('c1', llm);
+
+    expect(summary).toBe('已有摘要内容');
+    expect(llm.chat).not.toHaveBeenCalled();
+    expect(db.putConversation).not.toHaveBeenCalled();
+  });
+
+  // #18d
+  it('generateSummary() 无消息且无已有摘要时返回空串', async () => {
+    const conv = mockConv({ id: 'c1', summary: null, summaryUpToIndex: 0 });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+    vi.mocked(db.getMessagesByConversation).mockResolvedValue([]);
+    const llm = createMockLlm();
+
+    const summary = await mgr.generateSummary('c1', llm);
+
+    expect(summary).toBe('');
+    expect(llm.chat).not.toHaveBeenCalled();
   });
 });

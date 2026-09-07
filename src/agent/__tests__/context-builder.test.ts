@@ -453,6 +453,109 @@ describe('ContextBuilder — Token 预算截断', () => {
   });
 });
 
+describe('ContextBuilder — 系统预算 / 序列修复', () => {
+  const toolRegistry = createMockToolRegistry([]);
+
+  it('system 消息占用超过整个预算时丢弃全部对话历史（remainingBudget<=0）', async () => {
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue([
+      { id: 'u1', role: 'user', content: 'any history', timestamp: 1 },
+      { id: 'a1', role: 'assistant', content: 'reply', timestamp: 2 },
+    ]);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      // system prompt 已远超整个 contextWindowTokens 预算
+      systemPrompt: 's'.repeat(5_000),
+      contextWindowTokens: 2_000,
+      tokenBudgetMargin: 100,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    // 全部为 system 消息，对话历史被整体丢弃
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages.every((message) => message.role === 'system')).toBe(true);
+    expect(messages.some((message) => message.content?.includes('any history'))).toBe(false);
+  });
+
+  it('截断后只剩无 user 开头的片段时全部丢弃', async () => {
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+    // 全为 assistant 消息（无任何 user 边界）：预算内保留的片段无 user 开头 → 丢弃
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue([
+      { id: 'a1', role: 'assistant', content: 'a'.repeat(2_000), timestamp: 1 },
+      { id: 'a2', role: 'assistant', content: 'a'.repeat(2_000), timestamp: 2 },
+      { id: 'a3', role: 'assistant', content: 'a'.repeat(2_000), timestamp: 3 },
+    ]);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      contextWindowTokens: 2_500,
+      tokenBudgetMargin: 100,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    const nonSystem = messages.filter((message) => message.role !== 'system');
+    expect(nonSystem).toHaveLength(0);
+    expect(messages.every((message) => message.role === 'system')).toBe(true);
+  });
+
+  it('截断后保留的 assistant(tool_calls)+tool 配对可被完整保留', async () => {
+    const conversationManager = createMockConversationManager();
+    vi.mocked(conversationManager.get).mockResolvedValue(undefined);
+    const historyMessages: StoredMessage[] = [
+      { id: 'u0', role: 'user', content: 'x'.repeat(5_000), timestamp: 1 },
+      { id: 'a0', role: 'assistant', content: 'y'.repeat(5_000), timestamp: 2 },
+      { id: 'u1', role: 'user', content: '最近的请求', timestamp: 3 },
+      {
+        id: 'a-call',
+        role: 'assistant',
+        content: '调用工具',
+        timestamp: 4,
+        toolCalls: [{ id: 'tc-1', name: 'tabs_query', params: { tabIds: [1] } }],
+      },
+      {
+        id: 't1',
+        role: 'tool',
+        content: 'r'.repeat(2_000),
+        toolCallId: 'tc-1',
+        timestamp: 5,
+      },
+      { id: 'a2', role: 'assistant', content: '查询完成', timestamp: 6 },
+    ];
+    vi.mocked(conversationManager.getRecentMessages).mockResolvedValue(historyMessages);
+
+    const config: AgentConfig = {
+      ...defaultConfig,
+      contextWindowTokens: 4_000,
+      tokenBudgetMargin: 100,
+    };
+
+    const builder = new ContextBuilder(config, toolRegistry, conversationManager);
+    const messages = await builder.build('conv-1', defaultBrowserContext);
+
+    // 最旧的两条被丢弃，保留从 u1 起的完整序列（含 assistant tool_call 与配对 tool 结果）
+    const nonSystem = messages.filter((message) => message.role !== 'system');
+    expect(nonSystem[0]).toEqual(expect.objectContaining({ role: 'user', content: '最近的请求' }));
+    const toolCallMsg = nonSystem.find((message) => message.tool_calls?.length);
+    expect(toolCallMsg).toBeDefined();
+    expect(toolCallMsg!.tool_calls).toEqual([
+      expect.objectContaining({
+        id: 'tc-1',
+        function: expect.objectContaining({ name: 'tabs_query' }),
+      }),
+    ]);
+    const toolMsg = nonSystem.find((message) => message.role === 'tool' && message.tool_call_id === 'tc-1');
+    expect(toolMsg).toBeDefined();
+    expect(nonSystem.some((message) => message.content?.includes('查询完成'))).toBe(true);
+  });
+});
+
 describe('ContextBuilder — 工具结果微压缩', () => {
   it('短工具结果不触发压缩', async () => {
     const toolRegistry = createMockToolRegistry([]);

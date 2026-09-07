@@ -166,4 +166,18 @@ describe("ToolRegistry", () => {
       expect(registry.getAllTools()).toHaveLength(1);
     });
   });
+
+  describe("size", () => {
+    it("should reflect the number of registered tools", () => {
+      const registry = new ToolRegistry();
+      expect(registry.size).toBe(0);
+
+      registry.register(createMockTool({ name: "a" }));
+      registry.register(createMockTool({ name: "b" }));
+      expect(registry.size).toBe(2);
+
+      registry.unregisterCategory("tabs");
+      expect(registry.size).toBe(0);
+    });
+  });
 });

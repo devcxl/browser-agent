@@ -117,6 +117,34 @@ describe('Guardrail', () => {
       expect(result.requiresPreflight).toBe(false);
     });
 
+    it('场景6b: critical + expertSwitch 未开启 → allowed false', async () => {
+      const tool = makeTool({ riskLevel: 'critical', expertSwitch: 'debugger' });
+      const registry = createMockRegistry(() => tool);
+      const guardrail = new Guardrail(registry);
+
+      const result = await guardrail.check(
+        'test_tool',
+        {},
+        makeContext({ expertModeEnabled: true, expertSwitches: { debugger: false } }),
+      );
+
+      expect(result.allowed).toBe(false);
+      expect(result.requiresPreflight).toBe(false);
+      expect(result.reason).toContain('Critical 操作需要开启 Expert API: debugger');
+    });
+
+    it('场景6c: 未识别 riskLevel 走 default 分支 → 原样放行', async () => {
+      const tool = makeTool({ riskLevel: 'unknown-level' as ToolDefinition['riskLevel'] });
+      const registry = createMockRegistry(() => tool);
+      const guardrail = new Guardrail(registry);
+
+      const result = await guardrail.check('test_tool', {}, makeContext());
+
+      expect(result.allowed).toBe(true);
+      expect(result.riskLevel).toBe('unknown-level');
+      expect(result.requiresPreflight).toBe(false);
+    });
+
     it('场景7: expertOnly + !Expert Mode → allowed false', async () => {
       const tool = makeTool({ riskLevel: 'low', expertOnly: true });
       const registry = createMockRegistry(() => tool);
@@ -140,6 +168,54 @@ describe('Guardrail', () => {
 
       expect(result.allowed).toBe(false);
       expect(result.reason).toContain('未知工具');
+    });
+
+    it('场景8b: expertOnly + expertSwitch 未开启 → allowed false', async () => {
+      const tool = makeTool({ riskLevel: 'low', expertOnly: true, expertSwitch: 'debugger' });
+      const registry = createMockRegistry(() => tool);
+      const guardrail = new Guardrail(registry);
+
+      const result = await guardrail.check(
+        'test_tool',
+        {},
+        makeContext({ expertModeEnabled: true, expertSwitches: { debugger: false } }),
+      );
+
+      expect(result.allowed).toBe(false);
+      expect(result.riskLevel).toBe('critical');
+      expect(result.reason).toContain('需要开启 Expert API: debugger');
+    });
+
+    it('场景8c: 缺少可选权限 → allowed false', async () => {
+      const tool = makeTool({ category: 'management', riskLevel: 'medium' });
+      const registry = createMockRegistry(() => tool);
+      const guardrail = new Guardrail(registry);
+
+      const result = await guardrail.check(
+        'test_tool',
+        {},
+        makeContext({ grantedPermissions: ['tabs'] }),
+      );
+
+      expect(result.allowed).toBe(false);
+      expect(result.riskLevel).toBe('medium');
+      expect(result.reason).toContain('需要额外权限');
+      expect(result.reason).toContain('management');
+    });
+
+    it('场景8d: 无缺省权限需求的分类（debugger）在无授权时放行', async () => {
+      const tool = makeTool({ category: 'debugger', riskLevel: 'high' });
+      const registry = createMockRegistry(() => tool);
+      const guardrail = new Guardrail(registry);
+
+      const result = await guardrail.check(
+        'test_tool',
+        {},
+        makeContext({ grantedPermissions: ['debugger'] }),
+      );
+
+      expect(result.allowed).toBe(true);
+      expect(result.requiresPreflight).toBe(true);
     });
   });
 
@@ -233,6 +309,57 @@ describe('Guardrail', () => {
       const result: ToolResult = { success: true };
 
       const filtered = guardrail.filterResultForRemote(tool, result, makeContext());
+
+      expect(filtered).toEqual(result);
+    });
+
+    it('sensitive + 有授权 + 无 sensitivityMap → 原样返回', () => {
+      const tool = makeTool({ resultSensitivity: 'sensitive' });
+      const registry = createMockRegistry(() => tool);
+      const guardrail = new Guardrail(registry);
+      const result: ToolResult = { success: true, data: { url: 'https://example.com' } };
+
+      const filtered = guardrail.filterResultForRemote(
+        tool,
+        result,
+        makeContext({ sessionGrants: { sensitiveDataAllowed: true } }),
+      );
+
+      expect(filtered).toEqual(result);
+    });
+
+    it('sensitivityMap 未列出的字段默认按 sensitive 过滤', () => {
+      const tool = makeTool({ resultSensitivity: 'sensitive' });
+      const registry = createMockRegistry(() => tool);
+      const guardrail = new Guardrail(registry);
+      const result: ToolResult = {
+        success: true,
+        data: { visible: 'kept', hidden: 'value' },
+        sensitivityMap: { visible: 'low' },
+      };
+
+      const filtered = guardrail.filterResultForRemote(
+        tool,
+        result,
+        makeContext({ sessionGrants: { sensitiveDataAllowed: true } }),
+      );
+
+      const data = filtered.data as Record<string, unknown>;
+      expect(data.visible).toBe('kept');
+      expect(data.hidden).toBe('[sensitive data filtered]');
+    });
+
+    it('未知 resultSensitivity（非 low/sensitive/critical）原样返回', () => {
+      const tool = makeTool({ resultSensitivity: 'weird' as ToolDefinition['resultSensitivity'] });
+      const registry = createMockRegistry(() => tool);
+      const guardrail = new Guardrail(registry);
+      const result: ToolResult = { success: true, data: { url: 'https://example.com' } };
+
+      const filtered = guardrail.filterResultForRemote(
+        tool,
+        result,
+        makeContext({ sessionGrants: { sensitiveDataAllowed: true } }),
+      );
 
       expect(filtered).toEqual(result);
     });
