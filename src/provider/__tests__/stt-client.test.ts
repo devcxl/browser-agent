@@ -157,6 +157,30 @@ describe('SttClient', () => {
       expect(init.headers).toMatchObject({ Authorization: 'Bearer sk-test-key' });
     });
 
+    it('should strip trailing slash and prefer api over endpoint for transcription url', async () => {
+      const slashClient = new SttClient(
+        makeConfig({ api: 'https://api.test.com//', endpoint: 'https://ignored.example.com' }),
+      );
+      const fetchSpy = mockFetchOk({ text: 'ok' });
+
+      await slashClient.transcribe(makeAudioBlob());
+
+      expect(fetchSpy.mock.calls[0]![0]).toBe(
+        'https://api.test.com/v1/audio/transcriptions',
+      );
+    });
+
+    it('should fall back to endpoint and use relative transcription path when no api', async () => {
+      const noApiClient = new SttClient(makeConfig({ api: undefined }));
+      const fetchSpy = mockFetchOk({ text: 'ok' });
+
+      await noApiClient.transcribe(makeAudioBlob());
+
+      expect(fetchSpy.mock.calls[0]![0]).toBe(
+        'https://api.test.com/v1/audio/transcriptions',
+      );
+    });
+
     it('should not set Content-Type header', async () => {
       const fetchSpy = mockFetchOk({ text: 'ok' });
 
@@ -171,6 +195,40 @@ describe('SttClient', () => {
       mockFetchError(400);
 
       await expect(client.transcribe(makeAudioBlob())).rejects.toThrow('STT API 错误 400');
+    });
+
+    it('should include the server error body in the thrown message', async () => {
+      const res = new Response(JSON.stringify({ error: 'invalid_model' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(res);
+
+      await expect(client.transcribe(makeAudioBlob())).rejects.toThrow(
+        'STT API 错误 400: {"error":"invalid_model"}',
+      );
+    });
+
+    it('should fall back to empty error text when response body read fails', async () => {
+      const res = new Response(null, { status: 400 });
+      vi.spyOn(res, 'text').mockRejectedValue(new Error('body stream broken'));
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(res);
+
+      // 读 body 失败必须回退为空串：整条消息精确等于 "STT API 错误 400: "
+      // （若 errorText 被变异为 undefined / 其它字符串，则此处严格相等断言失败）
+      const err = await client.transcribe(makeAudioBlob()).catch((e: Error) => e);
+      expect(err.message).toBe('STT API 错误 400: ');
+    });
+
+    it('should include the error body text verbatim in the thrown message', async () => {
+      const res = new Response(JSON.stringify({ error: 'boom' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue(res);
+
+      const promise = client.transcribe(makeAudioBlob());
+      await expect(promise).rejects.toThrow('STT API 错误 500: {"error":"boom"}');
     });
 
     it('should throw on HTTP 500 error', async () => {
@@ -253,6 +311,69 @@ describe('SttClient', () => {
       const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
       const headers = init.headers as Record<string, string>;
       expect(headers['Authorization']).toBeUndefined();
+    });
+
+    it('should send blob as-is when audioFormat matches blob type', async () => {
+      // audioFormat 与 blob.type 相同 → shouldConvertToWav 返回 false → 不转 WAV
+      const wavConfig = makeConfig({ audioFormat: 'audio/webm' });
+      const wavClient = new SttClient(wavConfig);
+      const fetchSpy = mockFetchOk({ text: 'ok' });
+
+      await wavClient.transcribe(makeAudioBlob());
+
+      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      const formData = init.body as FormData;
+      const file = formData.get('file') as File;
+      expect(file.type).toBe('audio/webm');
+      expect(file.name).toBe('audio.webm');
+    });
+
+    it('should throw when sttModel is not configured (fetch path)', async () => {
+      const noModelConfig = makeConfig({ sttModel: undefined });
+      const noModelClient = new SttClient(noModelConfig);
+
+      await expect(noModelClient.transcribe(makeAudioBlob())).rejects.toThrow(
+        '未配置 STT 语音识别模型',
+      );
+    });
+
+    it('should use relative transcription path when neither api nor endpoint is set', async () => {
+      const bareClient = new SttClient(makeConfig({ api: undefined, endpoint: undefined }));
+      const fetchSpy = mockFetchOk({ text: 'ok' });
+
+      await bareClient.transcribe(makeAudioBlob());
+
+      expect(fetchSpy.mock.calls[0]![0]).toBe('/v1/audio/transcriptions');
+    });
+
+    it('should honor an already-aborted external signal immediately', async () => {
+      mockFetchPending();
+      const controller = new AbortController();
+      controller.abort(new Error('already cancelled'));
+
+      await expect(
+        client.transcribe(makeAudioBlob(), controller.signal),
+      ).rejects.toThrow('already cancelled');
+    });
+
+    it('should not abort when the external signal is still active', async () => {
+      // 外部 signal 未 abort 时，传给 fetch 的 signal 不能是已中止状态
+      // （createTimeoutSignal 的 if(externalSignal.aborted) 分支不应误触发）
+      const controller = new AbortController();
+      const fetchSpy = mockFetchPending();
+
+      const promise = client.transcribe(makeAudioBlob(), controller.signal);
+      // 等待 convertToWav 的 async 转换链完成、fetch 真正发出
+      for (let i = 0; i < 50 && fetchSpy.mock.calls.length === 0; i++) {
+        await Promise.resolve();
+      }
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+      const signal = (fetchSpy.mock.calls[0]![1] as RequestInit).signal as AbortSignal;
+      expect(signal.aborted).toBe(false);
+
+      controller.abort(new Error('user cancelled'));
+      await expect(promise).rejects.toThrow('user cancelled');
     });
   });
 
@@ -406,6 +527,44 @@ describe('SttClient', () => {
 
       expect(result).toBe(true);
       expect(fetchSpy.mock.calls[0]![0]).toBe('https://api.test.com/v1/models');
+      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect(init.method).toBe('GET');
+      expect(init.headers).toMatchObject({ Authorization: 'Bearer sk-test-key' });
+    });
+
+    it('should strip trailing slash from api base url', async () => {
+      const slashClient = new SttClient(makeConfig({ api: 'https://api.test.com///' }));
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      await slashClient.checkHealth();
+
+      expect(fetchSpy.mock.calls[0]![0]).toBe('https://api.test.com/v1/models');
+    });
+
+    it('should prefer api over endpoint', async () => {
+      const apiClient = new SttClient(
+        makeConfig({ api: 'https://custom.example.com', endpoint: 'https://api.test.com' }),
+      );
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      await apiClient.checkHealth();
+
+      expect(fetchSpy.mock.calls[0]![0]).toBe('https://custom.example.com/v1/models');
+    });
+
+    it('should use relative path when neither api nor endpoint is set', async () => {
+      const bareClient = new SttClient(makeConfig({ api: undefined, endpoint: undefined }));
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      await bareClient.checkHealth();
+
+      expect(fetchSpy.mock.calls[0]![0]).toBe('/v1/models');
     });
 
     it('should return false on 401', async () => {
@@ -414,6 +573,19 @@ describe('SttClient', () => {
       const result = await client.checkHealth();
 
       expect(result).toBe(false);
+    });
+
+    it('should omit Authorization header when apiKey is empty', async () => {
+      const noKeyClient = new SttClient(makeConfig({ apiKey: '' }));
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response(null, { status: 200 }));
+
+      const result = await noKeyClient.checkHealth();
+
+      expect(result).toBe(true);
+      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+      expect((init.headers as Record<string, string>)['Authorization']).toBeUndefined();
     });
 
     it('should return false on timeout', async () => {
