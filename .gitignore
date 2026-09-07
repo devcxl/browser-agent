@@ -5,3 +5,7 @@ dist/
 coverage
 .codegraph
 design-demo.html
+# stryker mutation testing
+.stryker-tmp/
+stryker.log
+reports/
