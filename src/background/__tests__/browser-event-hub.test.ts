@@ -167,4 +167,62 @@ describe('BrowserEventHub', () => {
       expect(cleanup).toHaveBeenCalled();
     }
   });
+
+  it('should clear a pending debounce timer on stop', () => {
+    const adapter = createMockAdapter();
+    const hub = new BrowserEventHub(adapter);
+
+    const cleanupFns: Array<() => void> = [];
+    (adapter.addListener as any).mockImplementation((_event: BrowserEvent, _cb: () => void) => {
+      const cleanup = vi.fn();
+      cleanupFns.push(cleanup);
+      return cleanup;
+    });
+
+    hub.start();
+
+    // 触发一次事件产生挂起的防抖定时器
+    const registered = (adapter.addListener as any).mock.calls[0]![1] as () => void;
+    registered();
+    expect(adapter.tabs.query).not.toHaveBeenCalled();
+
+    hub.stop();
+
+    // 定时器已被 stop() 清除，时间推进后不应再触发 syncState
+    vi.advanceTimersByTime(1000);
+    expect(adapter.tabs.query).not.toHaveBeenCalled();
+    for (const cleanup of cleanupFns) {
+      expect(cleanup).toHaveBeenCalled();
+    }
+  });
+
+  it('should swallow query errors and log via console.error', async () => {
+    const adapter = createMockAdapter();
+    (adapter.tabs.query as any).mockRejectedValue(new Error('tabs.query failed'));
+    const hub = new BrowserEventHub(adapter);
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const listeners: Array<() => void> = [];
+      (adapter.addListener as any).mockImplementation((_event: BrowserEvent, cb: () => void) => {
+        listeners.push(cb);
+        return () => {};
+      });
+      hub.start();
+
+      const onStateChanged = vi.fn();
+      hub.onStateChanged(onStateChanged);
+
+      listeners[0]!();
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(onStateChanged).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledWith(
+        '[BrowserEventHub] syncState failed:',
+        expect.any(Error),
+      );
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
 });

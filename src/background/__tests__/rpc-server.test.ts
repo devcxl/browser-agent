@@ -143,6 +143,25 @@ describe('BackgroundRpcServer', () => {
         error: { code: -32603, message: 'boom' },
       });
     });
+
+    it('should fall back to generic message when handler throws a non-Error value', async () => {
+      const handler = vi.fn().mockRejectedValue('boom string');
+      const server = new BackgroundRpcServer();
+      server.onRequest('fragile', handler);
+
+      mockPort._receiveMessage({
+        jsonrpc: '2.0',
+        id: 8,
+        method: 'fragile',
+      });
+
+      await flushMicrotasks();
+      expect(mockPort.postMessage).toHaveBeenCalledWith({
+        jsonrpc: '2.0',
+        id: 8,
+        error: { code: -32603, message: 'Internal error' },
+      });
+    });
   });
 
   describe('onNotification', () => {
@@ -237,6 +256,43 @@ describe('BackgroundRpcServer', () => {
       const server = new BackgroundRpcServer();
 
       expect(() => server.disconnect()).not.toThrow();
+    });
+
+    it('should ignore port postMessage errors when sending a response', async () => {
+      const handler = vi.fn().mockResolvedValue('pong');
+      mockPort.postMessage.mockImplementation(() => { throw new Error('port closed'); });
+      const server = new BackgroundRpcServer();
+      server.onRequest('ping', handler);
+
+      mockPort._receiveMessage({ jsonrpc: '2.0', id: 1, method: 'ping' });
+      await flushMicrotasks();
+
+      expect(handler).toHaveBeenCalledWith(undefined);
+      expect(mockPort.postMessage).toHaveBeenCalled();
+      // 异常被吞掉，不向上传播
+    });
+
+    it('should ignore port postMessage errors when replying METHOD_NOT_FOUND', async () => {
+      mockPort.postMessage.mockImplementation(() => { throw new Error('port closed'); });
+      new BackgroundRpcServer();
+
+      expect(() => {
+        mockPort._receiveMessage({ jsonrpc: '2.0', id: 2, method: 'missing' });
+      }).not.toThrow();
+    });
+
+    it('should forget the port when its onDisconnect fires', async () => {
+      const server = new BackgroundRpcServer();
+      // 一个端口已连接
+      server.notify('ping');
+      expect(mockPort.postMessage).toHaveBeenCalledTimes(1);
+
+      // 触发端口 onDisconnect → ports 移除
+      mockPort._disconnect();
+      server.notify('ping');
+
+      // postMessage 不再被调用（端口已从集合移除）
+      expect(mockPort.postMessage).toHaveBeenCalledTimes(1);
     });
   });
 

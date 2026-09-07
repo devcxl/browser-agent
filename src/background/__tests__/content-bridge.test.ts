@@ -128,4 +128,113 @@ describe('ContentBridge (Port mode)', () => {
 
     expect(mockPort.disconnect).toHaveBeenCalled();
   });
+
+  it('should disconnect all ports and reject all pending on disconnect()', async () => {
+    const port2 = createMockPort();
+    (browser.tabs.connect as any)
+      .mockReturnValueOnce(mockPort)
+      .mockReturnValueOnce(port2);
+    const bridge = new ContentBridge();
+
+    // 两个标签页各一个未决请求 + 一个已完成的连接
+    const p1 = bridge.sendToContent(1, 'a');
+    const p2 = bridge.sendToContent(2, 'b');
+    const p3 = bridge.sendToContent(2, 'c');
+    port2._messageListeners[0]({ jsonrpc: '2.0', id: 3, result: 'done' });
+    await p3;
+
+    bridge.disconnect();
+
+    expect(mockPort.disconnect).toHaveBeenCalled();
+    expect(port2.disconnect).toHaveBeenCalled();
+    await expect(p1).rejects.toThrow('disconnected');
+    await expect(p2).rejects.toThrow('disconnected');
+  });
+
+  it('should reject pending requests when their port disconnects', async () => {
+    const bridge = new ContentBridge();
+
+    const p1 = bridge.sendToContent(1, 'page.getContent');
+    const p2 = bridge.sendToContent(1, 'page.getContent');
+
+    mockPort._disconnectListeners[0]();
+
+    await expect(p1).rejects.toThrow('Port disconnected');
+    await expect(p2).rejects.toThrow('Port disconnected');
+  });
+
+  it('should recreate the port for a tab after it disconnects', async () => {
+    const port2 = createMockPort();
+    (browser.tabs.connect as any)
+      .mockReturnValueOnce(mockPort)
+      .mockReturnValueOnce(port2);
+    const bridge = new ContentBridge();
+
+    // 第一次连接
+    const p1 = bridge.sendToContent(1, 'page.getContent');
+    expect(browser.tabs.connect).toHaveBeenCalledTimes(1);
+    mockPort._disconnectListeners[0](); // 端口断开 → ports 清掉
+    await expect(p1).rejects.toThrow();
+
+    // 再次请求同一 tab → 重新 connect
+    const p2 = bridge.sendToContent(1, 'page.getContent');
+    expect(browser.tabs.connect).toHaveBeenCalledTimes(2);
+    port2._messageListeners[0]({ jsonrpc: '2.0', id: 2, result: 'ok' });
+    await expect(p2).resolves.toBe('ok');
+  });
+
+  it('should resolve with undefined result for responses without result field', async () => {
+    const bridge = new ContentBridge();
+
+    const promise = bridge.sendToContent(1, 'page.method');
+
+    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1 });
+
+    await expect(promise).resolves.toBeUndefined();
+  });
+
+  it('should ignore non-object messages and messages with unknown id', async () => {
+    const bridge = new ContentBridge();
+
+    const promise = bridge.sendToContent(1, 'page.method');
+
+    // 无关消息不会 resolve/reject 当前请求
+    mockPort._messageListeners[0](null);
+    mockPort._messageListeners[0]('string');
+    mockPort._messageListeners[0]({ noId: true });
+    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 999, result: 'ghost' });
+
+    // 最终正确响应才 resolve
+    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'real' });
+    await expect(promise).resolves.toBe('real');
+  });
+
+  it('should not fail when disconnect(tabId) is called for an unknown tab', () => {
+    const bridge = new ContentBridge();
+    expect(() => bridge.disconnect(999)).not.toThrow();
+    expect(mockPort.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('should ignore disconnect errors for a specific tab', async () => {
+    const bridge = new ContentBridge();
+    mockPort.disconnect = vi.fn(() => { throw new Error('port already gone'); });
+
+    const p1 = bridge.sendToContent(1, 'page.getContent');
+    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    await p1;
+
+    expect(() => bridge.disconnect(1)).not.toThrow();
+    expect(mockPort.disconnect).toHaveBeenCalled();
+  });
+
+  it('should ignore disconnect errors when disconnecting all ports', async () => {
+    const bridge = new ContentBridge();
+    mockPort.disconnect = vi.fn(() => { throw new Error('port already gone'); });
+
+    const p1 = bridge.sendToContent(1, 'page.getContent');
+    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    await p1;
+
+    expect(() => bridge.disconnect()).not.toThrow();
+  });
 });

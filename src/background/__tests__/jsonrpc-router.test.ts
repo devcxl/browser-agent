@@ -69,6 +69,24 @@ describe('JsonRpcRouter', () => {
     expect(response.result).toEqual({ foo: 'bar' });
   });
 
+  it('should return -32603 when handler throws a non-Error value', async () => {
+    const router = new JsonRpcRouter();
+    router.register('throw-string', async () => {
+      throw 'boom string';
+    });
+
+    const request: JsonRpcRequest = {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'throw-string',
+    };
+
+    const response = await router.handle(request);
+    expect(response.error).toBeDefined();
+    expect(response.error!.code).toBe(-32603);
+    expect(response.error!.message).toBe('Internal error');
+  });
+
   it('should handle multiple registered methods', async () => {
     const router = new JsonRpcRouter();
     router.register('a', async () => 1);
