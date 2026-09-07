@@ -291,4 +291,76 @@ malicious: true</h1>
 
     expect(result.markdown).toContain('==important==');
   });
+
+  it('converts pre with bare code child and language class (not language-*)', () => {
+    const document = createDocument(`
+      <!doctype html>
+      <html>
+        <head><title>Bare pre</title></head>
+        <body>
+          <article>
+            <h1>Bare pre</h1>
+            <pre class="highlighted"><code>const a = 1;
+const b = 2;</code></pre>
+          </article>
+        </body>
+      </html>
+    `);
+
+    const result = convertToMarkdown(document, new Date('2026-06-21T12:00:00Z'));
+
+    // preCodeBlock 规则触发，且非 language-* 的 className 不会污染语言名
+    expect(result.markdown).toContain('```\nconst a = 1;');
+    expect(result.markdown).not.toContain('```highlighted');
+    expect(result.markdown).not.toContain('```foo');
+  });
+
+  it('removes href attribute from unsafe links instead of dropping text', () => {
+    const document = createDocument(`
+      <!doctype html>
+      <html>
+        <head><title>Unsafe Links</title></head>
+        <body>
+          <article>
+            <h1>Unsafe Links</h1>
+            <p>
+              <a href="javascript:alert(1)">js link</a>
+              <a href="http://[invalid">malformed url</a>
+              <a href="https://example.com/ok">ok link</a>
+            </p>
+          </article>
+        </body>
+      </html>
+    `);
+
+    const result = convertToMarkdown(document, new Date('2026-06-21T12:00:00Z'));
+
+    // 不安全链接被去除 href，但链接文本保留
+    expect(result.markdown).toContain('js link');
+    expect(result.markdown).toContain('malformed url');
+    expect(result.markdown).not.toContain('javascript:');
+    expect(result.markdown).not.toContain('[js link]');
+    expect(result.markdown).not.toContain('[malformed url]');
+    expect(result.markdown).toContain('[ok link](https://example.com/ok)');
+  });
+
+  it('escapes control characters when frontmatter contains a backslash', () => {
+    const document = createDocument(`
+      <!doctype html>
+      <html>
+        <head><title>\\Back\\ "quoted"</title></head>
+        <body>
+          <article>
+            <h1>\\Back\\ "quoted"</h1>
+            <p>Body text.</p>
+          </article>
+        </body>
+      </html>
+    `);
+
+    const result = convertToMarkdown(document, new Date('2026-06-21T12:00:00Z'));
+
+    // 反斜杠在 YAML 字符串中被转义
+    expect(result.markdown).toContain('title: "\\\\Back\\\\ \\"quoted\\""');
+  });
 });

@@ -63,4 +63,77 @@ describe('ReadabilityExtractor', () => {
 
     await expect(extractor.extract()).rejects.toThrow('DOM parsing failed');
   });
+
+  it('should resolve synchronously and not leave a dangling timer', async () => {
+    mockParse.mockReturnValue({
+      title: 'Ok',
+      textContent: 'x',
+      excerpt: '',
+      byline: null,
+      siteName: null,
+    });
+
+    // 同步提取路径正常 resolve（内部已 clearTimeout），等待超过 30s 阈值不应再产生副作用
+    const result = await extractor.extract();
+    expect(result.title).toBe('Ok');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(mockParse).toHaveBeenCalledTimes(1);
+  });
+
+  it('should handle article missing optional fields (null/undefined)', async () => {
+    mockParse.mockReturnValue({});
+
+    const result = await extractor.extract();
+
+    expect(result).toEqual({
+      title: '',
+      textContent: '',
+      excerpt: '',
+      byline: null,
+      siteName: null,
+    });
+  });
+
+  it('should resolve with partial content when the timeout guard fires and extraction succeeds', async () => {
+    mockParse.mockReturnValue({
+      title: 'Partial',
+      textContent: 'partial text',
+      excerpt: '',
+      byline: null,
+      siteName: null,
+    });
+
+    // 让 setTimeout 回调立即执行，模拟超时保护先于同步提取路径触发
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((((fn: () => void) => {
+      fn();
+      return 0;
+    }) as unknown) as typeof setTimeout);
+    try {
+      const result = await extractor.extract();
+      expect(result).toEqual({
+        title: 'Partial',
+        textContent: 'partial text',
+        excerpt: '',
+        byline: null,
+        siteName: null,
+      });
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('should reject with timeout error when the timeout guard fires and nothing can be extracted', async () => {
+    mockParse.mockReturnValue(null);
+
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation((((fn: () => void) => {
+      fn();
+      return 0;
+    }) as unknown) as typeof setTimeout);
+    try {
+      const promise = extractor.extract();
+      await expect(promise).rejects.toThrow('提取超时');
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
 });
