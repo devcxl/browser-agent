@@ -328,4 +328,44 @@ describe('Database', () => {
     const b = Database.getInstance();
     expect(a).not.toBe(b);
   });
+
+  // #21 deleteDatabase 被其它连接阻塞时 onblocked 兜底 resolve
+  it('should resolve when deleteDatabase is blocked by open connections', async () => {
+    const req = indexedDB.open(DB_NAME, 3);
+    const blockingDb = await new Promise<IDBDatabase>((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    // 该连接保持打开 → deleteDatabase 会触发 onblocked 而非一直挂起
+    await expect(Database.getInstance().deleteDatabase()).resolves.toBeUndefined();
+    // 关闭阻塞连接，避免影响后续测试的清理逻辑
+    blockingDb.close();
+  });
+
+  // #22 SkillContent CRUD
+  it('should get/put/delete skill content', async () => {
+    const db = Database.getInstance();
+    const content = {
+      skillId: 'skill-1',
+      prompt: '你是一个测试助手',
+      resources: [{ path: 'helper.md', content: 'helper content' }],
+    };
+
+    await expect(db.getSkillContent('skill-1')).resolves.toBeUndefined();
+
+    await db.putSkillContent(content);
+    await expect(db.getSkillContent('skill-1')).resolves.toEqual(content);
+
+    await db.putSkillContent({
+      skillId: 'skill-1',
+      prompt: '覆盖后的 prompt',
+      resources: [],
+    });
+    await expect(db.getSkillContent('skill-1')).resolves.toEqual(
+      expect.objectContaining({ skillId: 'skill-1', prompt: '覆盖后的 prompt' }),
+    );
+
+    await db.deleteSkillContent('skill-1');
+    await expect(db.getSkillContent('skill-1')).resolves.toBeUndefined();
+  });
 });

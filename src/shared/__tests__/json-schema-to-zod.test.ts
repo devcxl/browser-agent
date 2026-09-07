@@ -316,6 +316,18 @@ describe('jsonSchemaToZod — description', () => {
     const shape = (zodSchema as unknown as Record<string, unknown>).shape as Record<string, { description?: string }> | undefined;
     expect(shape?.name?.description).toBe('用户姓名');
   });
+
+  it('顶层 schema 自身的 description 会挂到返回的 schema 上', () => {
+    const zodSchema = jsonSchemaToZod({
+      type: 'object',
+      description: '工具顶层描述',
+      properties: { a: { type: 'string' } },
+    });
+    // zod v4 中 .describe() 会把 description 暴露在 schema 上
+    expect((zodSchema as unknown as { description?: string }).description).toBe(
+      '工具顶层描述',
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -339,6 +351,28 @@ describe('jsonSchemaToZod — 空 schema / 边界', () => {
       { data: 'anything' },
     );
     expect(result.success).toBe(true);
+  });
+
+  it('object 缺省 properties 时视为空对象', () => {
+    const zodSchema = jsonSchemaToZod({ type: 'object' });
+    // 缺省 properties → 空 shape；未知字段被 strip（但仍可通过）
+    const result = zodSchema.safeParse({ extra: 'key' });
+    expect(result.success).toBe(true);
+    expect(result.success && result.data).toEqual({});
+  });
+
+  it('array 缺省 items 时元素回退为 unknown', () => {
+    const result = parseSafely(
+      { type: 'object', properties: { list: { type: 'array' } } },
+      { list: ['mixed', 123, { a: 1 }, null] },
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('顶层 type 为 array 的 schema 直接可用', () => {
+    const zodSchema = jsonSchemaToZod({ type: 'array', items: { type: 'number' } });
+    expect(zodSchema.safeParse([1, 2, 3]).success).toBe(true);
+    expect(zodSchema.safeParse(['x']).success).toBe(false);
   });
 });
 
