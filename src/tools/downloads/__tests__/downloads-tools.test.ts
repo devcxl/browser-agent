@@ -129,5 +129,88 @@ describe('Downloads tools', () => {
       expect(result.affectedObjects[0]?.reason).toContain('清除所有下载记录');
       expect(result.warnings.length).toBeGreaterThan(0);
     });
+
+    it('downloads_erase preflight 携带过滤条件时拼接条件描述', async () => {
+      const rpc = createMockRpc();
+      const tools = createDownloadsTools(rpc);
+      const tool = tools.find((t) => t.name === 'downloads_erase')!;
+      const startedBefore = new Date('2026-01-01T00:00:00.000Z').getTime();
+      const startedAfter = new Date('2025-01-01T00:00:00.000Z').getTime();
+      const result = await tool.preflight!({
+        startedBefore,
+        startedAfter,
+        totalBytesGreater: 1024,
+        totalBytesLess: 999999,
+        urlRegex: '.*\\.pdf$',
+      });
+
+      expect(result.affectedObjects).toHaveLength(1);
+      const reason = result.affectedObjects[0]?.reason ?? '';
+      expect(reason).toContain('开始时间<2026-01-01T00:00:00.000Z');
+      expect(reason).toContain('开始时间>2025-01-01T00:00:00.000Z');
+      expect(reason).toContain('大小>1024B');
+      expect(reason).toContain('大小<999999B');
+      expect(reason).toContain('URL 匹配: .*\\.pdf$');
+    });
+
+    it('downloads_erase execute 调用 rpc.request("downloads.erase")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createDownloadsTools(rpc);
+      const tool = tools.find((t) => t.name === 'downloads_erase')!;
+      const result = await tool.execute({ urlRegex: '.*' });
+
+      expect(rpc.request).toHaveBeenCalledWith('downloads.erase', { urlRegex: '.*' });
+      expect(result).toEqual({ success: true });
+    });
+
+    it('downloads_open execute 调用 rpc.request("downloads.open")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createDownloadsTools(rpc);
+      const tool = tools.find((t) => t.name === 'downloads_open')!;
+      const result = await tool.execute({ downloadId: 1 });
+
+      expect(rpc.request).toHaveBeenCalledWith('downloads.open', { downloadId: 1 });
+      expect(result).toEqual({ success: true });
+    });
+
+    it('downloads_cancel execute 调用 rpc.request("downloads.cancel")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createDownloadsTools(rpc);
+      const tool = tools.find((t) => t.name === 'downloads_cancel')!;
+      const result = await tool.execute({ downloadId: 2 });
+
+      expect(rpc.request).toHaveBeenCalledWith('downloads.cancel', { downloadId: 2 });
+      expect(result).toEqual({ success: true });
+    });
+
+    it('downloads_pause execute 调用 rpc.request("downloads.pause")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createDownloadsTools(rpc);
+      const tool = tools.find((t) => t.name === 'downloads_pause')!;
+      const result = await tool.execute({ downloadId: 3 });
+
+      expect(rpc.request).toHaveBeenCalledWith('downloads.pause', { downloadId: 3 });
+      expect(result).toEqual({ success: true });
+    });
+
+    it('downloads_resume execute 调用 rpc.request("downloads.resume")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createDownloadsTools(rpc);
+      const tool = tools.find((t) => t.name === 'downloads_resume')!;
+      const result = await tool.execute({ downloadId: 4 });
+
+      expect(rpc.request).toHaveBeenCalledWith('downloads.resume', { downloadId: 4 });
+      expect(result).toEqual({ success: true });
+    });
   });
 });

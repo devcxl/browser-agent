@@ -116,5 +116,60 @@ describe('History tools', () => {
       expect(result.affectedObjects[0]?.reason).toContain('清空全部浏览历史记录');
       expect(result.warnings.length).toBeGreaterThan(0);
     });
+
+    it('history_delete preflight 携带 url 时返回对应受影响对象', async () => {
+      const rpc = createMockRpc();
+      const tools = createHistoryTools(rpc);
+      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const result = await tool.preflight!({ url: 'https://example.com/page' });
+
+      expect(result.warnings).toEqual([]);
+      expect(result.affectedObjects).toHaveLength(1);
+      expect(result.affectedObjects[0]).toMatchObject({
+        type: 'history',
+        url: 'https://example.com/page',
+      });
+      expect(result.affectedObjects[0]?.reason).toContain('此 URL');
+    });
+
+    it('history_delete preflight 携带时间范围时返回时间范围受影响对象', async () => {
+      const rpc = createMockRpc();
+      const tools = createHistoryTools(rpc);
+      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const startTime = new Date('2026-01-01T00:00:00.000Z').getTime();
+      const endTime = new Date('2026-01-02T00:00:00.000Z').getTime();
+      const result = await tool.preflight!({ startTime, endTime });
+
+      expect(result.affectedObjects).toHaveLength(1);
+      const obj = result.affectedObjects[0]!;
+      expect(obj.type).toBe('history');
+      expect(obj.url).toBeUndefined();
+      expect(obj.reason).toContain('时间范围内的所有历史记录');
+      expect(obj.reason).toContain('2026-01-01T00:00:00.000Z');
+      expect(obj.reason).toContain('2026-01-02T00:00:00.000Z');
+    });
+
+    it('history_delete preflight 同时携带 url 与仅 startTime 时返回两个受影响对象', async () => {
+      const rpc = createMockRpc();
+      const tools = createHistoryTools(rpc);
+      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const startTime = new Date('2026-01-01T00:00:00.000Z').getTime();
+      const result = await tool.preflight!({ url: 'https://example.com', startTime });
+
+      expect(result.affectedObjects).toHaveLength(2);
+      expect(result.affectedObjects[0]?.url).toBe('https://example.com');
+      expect(result.affectedObjects[1]?.reason).toContain('起始: 2026-01-01T00:00:00.000Z');
+      expect(result.affectedObjects[1]?.reason).not.toContain('结束:');
+    });
+
+    it('history_delete preflight 空参数返回空 affectedObjects 与空 warnings', async () => {
+      const rpc = createMockRpc();
+      const tools = createHistoryTools(rpc);
+      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const result = await tool.preflight!({});
+
+      expect(result.affectedObjects).toEqual([]);
+      expect(result.warnings).toEqual([]);
+    });
   });
 });

@@ -90,6 +90,21 @@ describe('Cookies tools', () => {
       expect(result).toEqual({ success: true, data: { name: 'session', value: 'abc123', domain: 'example.com' } });
     });
 
+    it('cookies_getAll execute 调用 rpc.request("cookies.getAll")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue([{ name: 'session', domain: 'example.com' }]);
+
+      const tools = createCookiesTools(rpc);
+      const tool = tools.find((t) => t.name === 'cookies_getAll')!;
+      const result = await tool.execute({ url: 'https://example.com', domain: 'example.com' });
+
+      expect(rpc.request).toHaveBeenCalledWith('cookies.getAll', {
+        url: 'https://example.com',
+        domain: 'example.com',
+      });
+      expect(result).toEqual({ success: true, data: [{ name: 'session', domain: 'example.com' }] });
+    });
+
     it('cookies_set execute 调用 rpc.request("cookies.set")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue({ name: 'session', value: 'newvalue', domain: 'example.com' });
@@ -100,6 +115,21 @@ describe('Cookies tools', () => {
 
       expect(rpc.request).toHaveBeenCalledWith('cookies.set', { url: 'https://example.com', name: 'session', value: 'newvalue' });
       expect(result).toEqual({ success: true, data: { name: 'session', value: 'newvalue', domain: 'example.com' } });
+    });
+
+    it('cookies_remove execute 调用 rpc.request("cookies.remove")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue({ url: 'https://example.com', name: 'session', storeId: '0' });
+
+      const tools = createCookiesTools(rpc);
+      const tool = tools.find((t) => t.name === 'cookies_remove')!;
+      const result = await tool.execute({ url: 'https://example.com', name: 'session' });
+
+      expect(rpc.request).toHaveBeenCalledWith('cookies.remove', { url: 'https://example.com', name: 'session' });
+      expect(result).toEqual({
+        success: true,
+        data: { url: 'https://example.com', name: 'session', storeId: '0' },
+      });
     });
 
     it('cookies_remove preflight 返回正确格式', async () => {

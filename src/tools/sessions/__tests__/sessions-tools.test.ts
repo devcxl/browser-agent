@@ -102,5 +102,29 @@ describe('Sessions tools', () => {
       expect(result.affectedObjects[0]?.id).toBe('snap-1');
       expect(result.affectedObjects[0]?.reason).toContain('删除会话快照');
     });
+
+    it('sessions_list execute 调用 rpc.request("sessions.list")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue([{ id: 'snap-1' }]);
+
+      const tools = createSessionsTools(rpc);
+      const tool = tools.find((t) => t.name === 'sessions_list')!;
+      const result = await tool.execute({});
+
+      expect(rpc.request).toHaveBeenCalledWith('sessions.list', {});
+      expect(result).toEqual({ success: true, data: [{ id: 'snap-1' }] });
+    });
+
+    it('sessions_delete execute 调用 rpc.request("sessions.delete")', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createSessionsTools(rpc);
+      const tool = tools.find((t) => t.name === 'sessions_delete')!;
+      const result = await tool.execute({ sessionId: 'snap-1' });
+
+      expect(rpc.request).toHaveBeenCalledWith('sessions.delete', { sessionId: 'snap-1' });
+      expect(result).toEqual({ success: true });
+    });
   });
 });

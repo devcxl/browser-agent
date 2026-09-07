@@ -108,6 +108,22 @@ describe('Misc tools', () => {
       expect(result).toEqual({ success: true, data: { text: 'clipboard content' } });
     });
 
+    it('clipboard_write execute 调用 content.execute 转发 clipboard.write', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'clipboard_write')!;
+      const result = await tool.execute({ tabId: 456, text: 'hello' });
+
+      expect(rpc.request).toHaveBeenCalledWith('content.execute', {
+        tabId: 456,
+        method: 'clipboard.write',
+        params: { text: 'hello' },
+      });
+      expect(result).toEqual({ success: true });
+    });
+
     it('notifications_create execute 调用 rpc.request("notifications.create")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
@@ -120,14 +136,149 @@ describe('Misc tools', () => {
       expect(result).toEqual({ success: true });
     });
 
-    it('storage_local_remove preflight 返回正确格式', async () => {
+    it('storage_local_get execute 读取非敏感键', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue({ theme: 'dark' });
+
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_get')!;
+      const result = await tool.execute({ keys: ['theme'] });
+
+      expect(rpc.request).toHaveBeenCalledWith('storage.local.get', { keys: ['theme'] });
+      expect(result).toEqual({ success: true, data: { theme: 'dark' } });
+    });
+
+    it('storage_local_get execute 未传 keys 时返回错误且不调用 rpc', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_get')!;
+      const result1 = await tool.execute({});
+      expect(result1).toEqual({ success: false, error: expect.stringContaining('必须指定') });
+
+      const result2 = await tool.execute({ keys: [] });
+      expect(result2).toEqual({ success: false, error: expect.stringContaining('必须指定') });
+      expect(rpc.request).not.toHaveBeenCalled();
+    });
+
+    it('storage_local_get execute 全部为敏感键时返回错误', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_get')!;
+      const result = await tool.execute({ keys: ['providers', 'skills'] });
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('无法读取以下敏感键');
+      expect(result.error).toContain('providers');
+    });
+
+    it('storage_local_get execute 混合敏感与非敏感键时返回数据并带 warnings', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue({ theme: 'dark' });
+
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_get')!;
+      const result = await tool.execute({ keys: ['theme', 'providers'] });
+
+      expect(rpc.request).toHaveBeenCalledWith('storage.local.get', { keys: ['theme'] });
+      expect(result).toEqual({
+        success: true,
+        data: { theme: 'dark' },
+        warnings: ['已忽略敏感键: providers'],
+      });
+    });
+
+    it('storage_local_get execute 过滤 markdown: 前缀敏感键', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue({});
+
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_get')!;
+      const result = await tool.execute({ keys: ['markdown:note-1'] });
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('markdown:note-1');
+    });
+
+    it('storage_local_set execute 写入普通键', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_set')!;
+      const result = await tool.execute({ items: { theme: 'light' } });
+
+      expect(rpc.request).toHaveBeenCalledWith('storage.local.set', { items: { theme: 'light' } });
+      expect(result).toEqual({ success: true });
+    });
+
+    it('storage_local_set execute 写入敏感键时返回错误', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_set')!;
+      const result = await tool.execute({ items: { agentSettings: { dangerous: true }, theme: 'x' } });
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('无法修改以下敏感键');
+      expect(result.error).toContain('agentSettings');
+    });
+
+    it('storage_local_remove preflight 未指定 keys 时返回清空警告', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_remove')!;
+      const result = await tool.preflight!({});
+
+      expect(result.affectedObjects).toHaveLength(1);
+      expect(result.affectedObjects[0]?.reason).toBe('即将清空所有 storage 数据');
+      expect(result.warnings).toEqual(['即将清空所有 local storage 数据，请谨慎确认。']);
+    });
+
+    it('storage_local_remove preflight 指定 keys 时列出待删除键且无警告', async () => {
       const rpc = createMockRpc();
       const tools = createMiscTools(rpc);
       const tool = tools.find((t) => t.name === 'storage_local_remove')!;
       const result = await tool.preflight!({ keys: ['key1', 'key2'] });
 
       expect(result.affectedObjects).toHaveLength(1);
-      expect(result.affectedObjects[0]?.reason).toContain('key1');
+      expect(result.affectedObjects[0]?.reason).toBe('即将删除 storage 键: key1, key2');
+      expect(result.warnings).toEqual([]);
+    });
+
+    it('storage_local_remove execute 删除普通键', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue(undefined);
+
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_remove')!;
+      const result = await tool.execute({ keys: ['theme', 'session'] });
+
+      expect(rpc.request).toHaveBeenCalledWith('storage.local.remove', { keys: ['theme', 'session'] });
+      expect(result).toEqual({ success: true });
+    });
+
+    it('storage_local_remove execute 未指定 keys 时返回错误', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_remove')!;
+      const result = await tool.execute({});
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result).toEqual({ success: false, error: expect.stringContaining('必须指定') });
+    });
+
+    it('storage_local_remove execute 删除敏感键时返回错误', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_local_remove')!;
+      const result = await tool.execute({ keys: ['theme', 'providers'] });
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('无法删除以下敏感键');
+      expect(result.error).toContain('providers');
     });
 
     it('time_get: category system, riskLevel low, confirmationRequired false', () => {
