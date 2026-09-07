@@ -81,6 +81,18 @@ function flushMicrotasks(): Promise<void> {
 // ── Tests ──────────────────────────────────────────────
 
 describe('JsonRpcClient', () => {
+  describe('constructor', () => {
+    it('should pass custom name to runtime.connect', () => {
+      new JsonRpcClient({ name: 'sidepanel' });
+      expect(connectSpy).toHaveBeenCalledWith({ name: 'sidepanel' });
+    });
+
+    it('should default name to "default"', () => {
+      new JsonRpcClient();
+      expect(connectSpy).toHaveBeenCalledWith({ name: 'default' });
+    });
+  });
+
   describe('connected getter', () => {
     it('should be true after successful connect', () => {
       const client = new JsonRpcClient();
@@ -262,6 +274,48 @@ describe('JsonRpcClient', () => {
         error: { code: -32603, message: 'Something went wrong' },
       });
     });
+
+    it('should return INTERNAL_ERROR with generic message when handler throws non-Error', async () => {
+      const handler = vi.fn(async () => {
+        throw 'a string error';
+      });
+      const client = new JsonRpcClient();
+
+      client.onRequest('fragile', handler);
+
+      mockPort._receiveMessage({ jsonrpc: '2.0', id: 8, method: 'fragile' });
+      await flushMicrotasks();
+
+      expect(mockPort.postMessage).toHaveBeenCalledWith({
+        jsonrpc: '2.0',
+        id: 8,
+        error: { code: -32603, message: 'Internal error' },
+      });
+    });
+
+    it('should drop the response when the port is gone while handler is pending', async () => {
+      const handler = vi.fn(
+        async () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve('slow-result'), 20);
+          }),
+      );
+      const client = new JsonRpcClient();
+      client.onRequest('slow', handler);
+
+      mockPort._receiveMessage({ jsonrpc: '2.0', id: 5, method: 'slow' });
+      // handler 尚未 resolve 时端口断开（port → null）
+      client.disconnect();
+
+      await vi.advanceTimersByTimeAsync(30);
+      await flushMicrotasks();
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      // sendResponse 因 port 为空直接 return，不发任何响应
+      expect(mockPort.postMessage).not.toHaveBeenCalledWith(
+        expect.objectContaining({ id: 5 }),
+      );
+    });
   });
 
   describe('onNotification', () => {
@@ -384,25 +438,211 @@ describe('JsonRpcClient', () => {
       vi.advanceTimersByTime(2000);
       expect(connectSpy).toHaveBeenCalledTimes(1); // 只有构造函数的那一次
     });
+
+    it('should ignore duplicate disconnect events while a reconnect is pending', () => {
+      new JsonRpcClient();
+
+      // 第一次断线 → 进入重连等待
+      mockPort._disconnect();
+      // 重连定时器尚未触发时再次收到 disconnect 事件：
+      // scheduleReconnect 命中 reconnectTimer 守卫，不应重复安排定时器
+      mockPort._disconnect();
+
+      vi.advanceTimersByTime(2000);
+
+      // 只发生一次重连（首次断线排程的那次）
+      expect(connectSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not schedule a duplicate reconnect when disconnect fires twice before removeListener takes effect', () => {
+      // 构造 removeListener 不生效的“异常”端口：
+      // 断线处理器被触发两次而监听器仍在，模拟真实浏览器中重复的 disconnect 事件
+      const port = createMockPort();
+      (port.onMessage.removeListener as ReturnType<typeof vi.fn>).mockImplementation(() => {});
+      (port.onDisconnect.removeListener as ReturnType<typeof vi.fn>).mockImplementation(() => {});
+      connectSpy = vi.fn(() => port);
+      vi.stubGlobal('browser', { runtime: { connect: connectSpy } });
+
+      new JsonRpcClient();
+
+      // 第一次断线排程重连
+      port._disconnect();
+      // 定时器未触发时再次收到断线事件 → scheduleReconnect 命中 reconnectTimer 守卫
+      port._disconnect();
+
+      vi.advanceTimersByTime(2000);
+
+      // 无论重复事件多少次，重连只发生一次
+      expect(connectSpy).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('message validation', () => {
     it('should ignore non-object messages', () => {
-      new JsonRpcClient();
+      const client = new JsonRpcClient();
+      const onRequest = vi.fn();
+      const onNotification = vi.fn();
+      client.onRequest('rpc.ping', onRequest);
+      client.onNotification('evt.changed', onNotification);
 
       expect(() => {
         mockPort._receiveMessage(null);
         mockPort._receiveMessage('string');
         mockPort._receiveMessage(42);
       }).not.toThrow();
+
+      expect(onRequest).not.toHaveBeenCalled();
+      expect(onNotification).not.toHaveBeenCalled();
     });
 
     it('should ignore messages without jsonrpc "2.0"', () => {
-      new JsonRpcClient();
+      const client = new JsonRpcClient();
+      const onRequest = vi.fn();
+      const onNotification = vi.fn();
+      client.onRequest('rpc.ping', onRequest);
+      client.onNotification('evt.changed', onNotification);
 
       expect(() => {
         mockPort._receiveMessage({ id: 1, result: 'x' });
+        mockPort._receiveMessage({ method: 'rpc.ping' });
+        mockPort._receiveMessage({ method: 'evt.changed' });
       }).not.toThrow();
+
+      expect(onRequest).not.toHaveBeenCalled();
+      expect(onNotification).not.toHaveBeenCalled();
+    });
+
+    it('should dispatch method+id messages to request handlers only', async () => {
+      const client = new JsonRpcClient();
+      const onRequest = vi.fn().mockResolvedValue(undefined);
+      const onNotification = vi.fn();
+      client.onRequest('rpc.ping', onRequest);
+      client.onNotification('rpc.ping', onNotification);
+
+      // 带 id 的 method 消息只能触发 request handler，绝不能触发 notification
+      mockPort._receiveMessage({ jsonrpc: '2.0', id: 7, method: 'rpc.ping' });
+      await flushMicrotasks();
+
+      expect(onRequest).toHaveBeenCalledTimes(1);
+      expect(onNotification).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('not connected', () => {
+    it('request() should throw when connect failed (port is null)', async () => {
+      connectSpy = vi.fn(() => {
+        throw new Error('connect failed');
+      });
+      vi.stubGlobal('browser', { runtime: { connect: connectSpy } });
+
+      const client = new JsonRpcClient();
+      await expect(client.request('ping')).rejects.toThrow('Not connected');
+      expect(client.connected).toBe(false);
+    });
+
+    it('request() should throw after disconnect()', async () => {
+      const client = new JsonRpcClient();
+      client.disconnect();
+      await expect(client.request('ping')).rejects.toThrow('Not connected');
+    });
+  });
+
+  describe('cleanup edge cases', () => {
+    it('disconnect() should clear a pending reconnect timer', () => {
+      const client = new JsonRpcClient();
+      // 触发断线 → 进入重连等待（reconnectTimer 非空）
+      mockPort._disconnect();
+      // 显式断开 → cleanup 应清除 reconnectTimer
+      client.disconnect();
+
+      vi.advanceTimersByTime(2000);
+      // 不应发生任何重连
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('disconnect() should reject all pending requests with Client disconnected', async () => {
+      const client = new JsonRpcClient();
+      const promise1 = client.request('r1');
+      const promise2 = client.request('r2');
+
+      client.disconnect();
+
+      await expect(promise1).rejects.toThrow('Client disconnected');
+      await expect(promise2).rejects.toThrow('Client disconnected');
+    });
+
+    it('disconnect() should tolerate listener removal / port.disconnect errors', () => {
+      const port = createMockPort();
+      (port.onMessage.removeListener as ReturnType<typeof vi.fn>).mockImplementation(
+        () => {
+          throw new Error('removeListener failed');
+        },
+      );
+      (port.onDisconnect.removeListener as ReturnType<typeof vi.fn>).mockImplementation(
+        () => {
+          throw new Error('removeListener failed');
+        },
+      );
+      port.disconnect = vi.fn(() => {
+        throw new Error('port.disconnect failed');
+      });
+      connectSpy = vi.fn(() => port);
+      vi.stubGlobal('browser', { runtime: { connect: connectSpy } });
+
+      const client = new JsonRpcClient();
+      expect(() => client.disconnect()).not.toThrow();
+      expect(client.connected).toBe(false);
+    });
+
+    it('port disconnect should tolerate listener removal errors', () => {
+      const port = createMockPort();
+      (port.onMessage.removeListener as ReturnType<typeof vi.fn>).mockImplementation(
+        () => {
+          throw new Error('removeListener failed');
+        },
+      );
+      (port.onDisconnect.removeListener as ReturnType<typeof vi.fn>).mockImplementation(
+        () => {
+          throw new Error('removeListener failed');
+        },
+      );
+      connectSpy = vi.fn(() => port);
+      vi.stubGlobal('browser', { runtime: { connect: connectSpy } });
+
+      const client = new JsonRpcClient();
+      expect(() => port._disconnect()).not.toThrow();
+      expect(client.connected).toBe(false);
+    });
+
+    it('port disconnect should remove message/disconnect listeners and null the port', () => {
+      const client = new JsonRpcClient();
+
+      mockPort._disconnect();
+
+      expect(mockPort.onMessage.removeListener).toHaveBeenCalled();
+      expect(mockPort.onDisconnect.removeListener).toHaveBeenCalled();
+
+      // 断线后 client 不再响应任何消息（listener 已移除）
+      const onRequest = vi.fn().mockResolvedValue(undefined);
+      client.onRequest('rpc.ping', onRequest);
+      mockPort._receiveMessage({ jsonrpc: '2.0', id: 1, method: 'rpc.ping' });
+      expect(onRequest).not.toHaveBeenCalled();
+    });
+
+    it('disconnect() should remove listeners, clear pending and call port.disconnect', async () => {
+      const client = new JsonRpcClient();
+      const promise = client.request('r1');
+
+      client.disconnect();
+
+      expect(mockPort.onMessage.removeListener).toHaveBeenCalled();
+      expect(mockPort.onDisconnect.removeListener).toHaveBeenCalled();
+      expect(mockPort.disconnect).toHaveBeenCalled();
+      expect(client.connected).toBe(false);
+
+      // 断线后收到响应不应产生任何副作用
+      mockPort._receiveMessage({ jsonrpc: '2.0', id: 1, result: 'late' });
+      await expect(promise).rejects.toThrow('Client disconnected');
     });
   });
 });
