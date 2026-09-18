@@ -194,4 +194,12 @@ export class ProviderCatalog {
     await browser.storage.local.remove(CACHE_KEY);
     this.catalog = null;
   }
+
+  /** 解析 provider 可用的模型列表（优先本地快照，回退目录） */
+  async getModels(providerConfig: ProviderConfig): Promise<CatalogModel[]> {
+    if (providerConfig.models) return Object.values(providerConfig.models);
+    if (!providerConfig.providerId) return [];
+    const info = await this.getProvider(providerConfig.providerId);
+    return info ? Object.values(info.models) : [];
+  }
 }

@@ -1,5 +1,3 @@
-import type { OpenAIToolSchema } from './tool';
-
 // ==================== Reasoning Effort ====================
 
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'max';
@@ -86,7 +84,6 @@ export interface ChatMessage {
 export interface ChatCompletionRequest {
   model: string;
   messages: ChatMessage[];
-  tools?: OpenAIToolSchema[];
   stream?: boolean;
   temperature?: number;
   max_tokens?: number;
@@ -111,46 +108,9 @@ export interface ChatCompletionResponse {
   };
 }
 
-// ==================== Stream ====================
-
-export interface StreamChunk {
-  id: string;
-  choices: Array<{
-    delta: {
-      role?: 'assistant';
-      content?: string;
-      reasoning_content?: string;
-      tool_calls?: Array<{
-        index: number;
-        id?: string;
-        type?: 'function';
-        function?: {
-          name?: string;
-          arguments?: string;
-        };
-      }>;
-    };
-    finish_reason: 'stop' | 'tool_calls' | 'length' | null;
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-}
-
 // ==================== LLM Client 接口 ====================
 
 export interface ILlmClient {
   /** 非流式聊天 */
   chat(request: ChatCompletionRequest, signal?: AbortSignal): Promise<ChatCompletionResponse>;
-  /** 流式聊天 */
-  chatStream(
-    request: ChatCompletionRequest,
-    onChunk: (chunk: StreamChunk) => void,
-    signal?: AbortSignal,
-    onReasoning?: (content: string) => void,
-  ): Promise<void>;
-  /** 健康检查 */
-  checkHealth(config: ProviderConfig): Promise<boolean>;
 }

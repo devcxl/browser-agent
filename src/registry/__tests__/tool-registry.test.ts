@@ -106,43 +106,6 @@ describe("ToolRegistry", () => {
     });
   });
 
-  describe("toOpenAISchema", () => {
-    it("should return an empty array when no tools are registered", () => {
-      const registry = new ToolRegistry();
-      expect(registry.toOpenAISchema()).toEqual([]);
-    });
-
-    it("should convert registered tools to OpenAI function schema format", () => {
-      const registry = new ToolRegistry();
-      registry.register(
-        createMockTool({
-          name: "getTabs",
-          description: "Get all open tabs",
-          schema: {
-            type: "object",
-            properties: { windowId: { type: "number" } },
-            required: [],
-          },
-        }),
-      );
-
-      const schema = registry.toOpenAISchema();
-      expect(schema).toHaveLength(1);
-      expect(schema[0]).toEqual({
-        type: "function",
-        function: {
-          name: "getTabs",
-          description: "Get all open tabs",
-          parameters: {
-            type: "object",
-            properties: { windowId: { type: "number" } },
-            required: [],
-          },
-        },
-      });
-    });
-  });
-
   describe("unregisterCategory", () => {
     it("should remove all tools of the specified category", () => {
       const registry = new ToolRegistry();

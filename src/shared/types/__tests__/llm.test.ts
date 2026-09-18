@@ -5,7 +5,6 @@ import type {
   ChatMessage,
   ChatCompletionRequest,
   ChatCompletionResponse,
-  StreamChunk,
   ILlmClient,
 } from '../llm';
 
@@ -95,19 +94,6 @@ describe('LLM types', () => {
     });
   });
 
-  describe('StreamChunk', () => {
-    it('should accept a stream chunk', () => {
-      const chunk: StreamChunk = {
-        id: 'chatcmpl-123',
-        choices: [{
-          delta: { content: 'Hello' },
-          finish_reason: null,
-        }],
-      };
-      expect(chunk.choices[0]!.delta.content).toBe('Hello');
-    });
-  });
-
   describe('ILlmClient', () => {
     it('should define the client interface', () => {
       const client: ILlmClient = {
@@ -115,11 +101,8 @@ describe('LLM types', () => {
           id: '',
           choices: [{ message: { role: 'assistant', content: '' }, finish_reason: 'stop' }],
         }),
-        chatStream: async () => {},
-        checkHealth: async () => true,
       };
       expect(typeof client.chat).toBe('function');
-      expect(typeof client.chatStream).toBe('function');
     });
   });
 });

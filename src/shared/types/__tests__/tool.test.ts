@@ -7,7 +7,6 @@ import type {
   PreflightResult,
   ToolResult,
   ToolParameterSchema,
-  OpenAIToolSchema,
   ToolDefinition,
   IToolRegistry,
   ToolCallRecord,
@@ -97,27 +96,6 @@ describe('Tool types', () => {
     });
   });
 
-  describe('OpenAIToolSchema', () => {
-    it('should define OpenAI tool schema with extensions', () => {
-      const schema: OpenAIToolSchema = {
-        type: 'function',
-        function: {
-          name: 'tabs_query',
-          description: 'Query tabs',
-          parameters: {
-            type: 'object',
-            properties: {},
-          },
-        },
-        'x-capability': 'tabs',
-        'x-risk-level': 'low',
-        'x-confirmation-required': false,
-      };
-      expect(schema.type).toBe('function');
-      expect(schema['x-capability']).toBe('tabs');
-    });
-  });
-
   describe('ToolDefinition', () => {
     it('should define a complete tool', () => {
       const tool: ToolDefinition = {
@@ -148,7 +126,6 @@ describe('Tool types', () => {
         getAllTools: () => [],
         getTool: () => undefined,
         getToolsByCategory: () => [],
-        toOpenAISchema: () => [],
         unregisterCategory: () => {},
         size: 0,
       };

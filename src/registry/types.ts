@@ -7,7 +7,6 @@ export type {
   ToolDefinition,
   ToolResult,
   ToolParameterSchema,
-  OpenAIToolSchema,
   PreflightAffectedObject,
   PreflightResult,
 } from '@/shared/types/tool';

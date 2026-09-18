@@ -15,7 +15,7 @@ import type {
   TypedToolCall,
   TypedToolResult,
 } from 'ai';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createLanguageModel } from '@/provider/language-model';
 import { jsonSchemaToZod } from '@/shared/json-schema-to-zod';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
 import { estimateTokens } from '@/shared/token-estimate';
@@ -69,6 +69,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
   private _tools: AdapterTools | null = null;
   private toolClassifier: ToolClassifier;
   private onRequestApproval?: OnRequestApproval;
+  /** 缓存的 LanguageModel；provider 或模型变化时由调用方重建 adapter */
+  private _model: Promise<LanguageModelV4> | null = null;
   /** 缓存的 guardrail 上下文，由 run() 入口构建，executeTool/filterResult 复用 */
   private guardrailContext: GuardrailContext = {
     isLocalTrusted: false,
@@ -109,12 +111,12 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   async generate(options: any): Promise<any> {
-    const agent = this.getOrCreateAgent();
+    const agent = await this.getOrCreateAgent();
     return agent.generate(options);
   }
 
   async stream(options: any): Promise<any> {
-    const agent = this.getOrCreateAgent();
+    const agent = await this.getOrCreateAgent();
     return agent.stream(options);
   }
 
@@ -148,7 +150,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
       console.debug('[ToolLoopAdapter] buildMessages 完成, count:', messages.length);
 
       console.debug('[ToolLoopAdapter] ensureAgentCreated');
-      this.ensureAgentCreated(input);
+      await this.ensureAgentCreated(input);
 
       let accumulatedText = '';
       let accumulatedReasoning = '';
@@ -227,11 +229,11 @@ export class ToolLoopAdapter implements IAgentRuntime {
   // ─── 私有方法 ──────────────────────────────────────────
 
   /** 懒加载创建 ToolLoopAgent（仅首次或 abort 后重建） */
-  private getOrCreateAgent(): ToolLoopAgent {
+  private async getOrCreateAgent(): Promise<ToolLoopAgent> {
     if (!this._agent) {
       this.abortController = new AbortController();
       this._agent = new ToolLoopAgent({
-        model: this.createModel(),
+        model: await this.createModel(),
         maxOutputTokens: this.getModelConfig()?.defaults?.maxOutputTokens,
         temperature: this.getModelConfig()?.defaults?.temperature,
         reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
@@ -254,7 +256,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   /** 为 run() 路径创建 agent（带 run() 特有的 onStepFinish 和正确的 guardrail 上下文） */
-  private ensureAgentCreated(input: AgentRunInput): void {
+  private async ensureAgentCreated(input: AgentRunInput): Promise<void> {
     if (this._agent) {
       this._agent = null;
     }
@@ -269,7 +271,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     const toolCalls: ToolCallRecord[] = [];
     this.abortController = new AbortController();
     this._agent = new ToolLoopAgent({
-      model: this.createModel(),
+      model: await this.createModel(),
       maxOutputTokens: this.getModelConfig()?.defaults?.maxOutputTokens,
       temperature: this.getModelConfig()?.defaults?.temperature,
       reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
@@ -632,7 +634,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
     try {
       const result = await generateText({
-        model: this.createModel(),
+        model: await this.createModel(),
         prompt: buildSummaryPrompt(
           conversation.messages.slice(startIndex, cutoff),
           conversation.summary,
@@ -729,20 +731,14 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   /** 创建 LanguageModel */
-  private createModel(): LanguageModelV4 {
-    const headers = {
-      ...(this.providerConfig.apiKey ? { Authorization: `Bearer ${this.providerConfig.apiKey}` } : {}),
-      ...this.providerConfig.extraHeaders,
-    };
-    const provider = createOpenAICompatible({
-      name: this.providerConfig.name,
-      baseURL: this.providerConfig.api ?? this.providerConfig.endpoint ?? '',
-      headers,
-      // 必须请求流式 usage：否则 OpenAI-compatible 服务端默认不返回 usage，
-      // tokenUsage 恒为 undefined，上下文占用进度环永不显示
-      includeUsage: true,
-    });
-    return provider.chatModel(this.modelId) as unknown as LanguageModelV4;
+  private createModel(): Promise<LanguageModelV4> {
+    if (!this._model) {
+      this._model = createLanguageModel(
+        this.providerConfig,
+        this.modelId,
+      ) as Promise<LanguageModelV4>;
+    }
+    return this._model;
   }
 
   private getModelConfig() {

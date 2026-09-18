@@ -59,7 +59,6 @@ vi.mock('@/registry', () => ({
     registerAll: vi.fn(),
     getAllTools: vi.fn().mockReturnValue([]),
     getTool: vi.fn(),
-    toOpenAISchema: vi.fn().mockReturnValue([]),
     unregisterCategory: vi.fn(),
     getToolsByCategory: vi.fn().mockReturnValue([]),
   })),

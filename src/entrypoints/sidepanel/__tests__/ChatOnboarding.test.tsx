@@ -72,12 +72,13 @@ vi.mock('@/provider/provider-catalog', () => ({
       migrateProviderConfig: vi.fn((p: ProviderConfig) => p),
       getProviderList: vi.fn().mockResolvedValue([]),
       getProvider: vi.fn().mockResolvedValue(null),
+      getModels: vi.fn().mockResolvedValue([]),
     })),
   },
 }));
 
-vi.mock('@/provider/provider-client-factory', () => ({
-  getProviderClientFactory: vi.fn(),
+vi.mock('@/provider/language-model', () => ({
+  createLanguageModel: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock('../theme', () => ({

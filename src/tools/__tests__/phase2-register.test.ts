@@ -23,7 +23,6 @@ function createMockRegistry(): IToolRegistry {
     getAllTools: vi.fn(() => [...tools]),
     getTool: vi.fn((name: string) => tools.find((t) => t.name === name)),
     getToolsByCategory: vi.fn((category) => tools.filter((t) => t.category === category)),
-    toOpenAISchema: vi.fn(),
     unregisterCategory: vi.fn(),
     size: 0,
   };

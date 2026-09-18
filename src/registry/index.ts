@@ -8,5 +8,4 @@ export type {
   PreflightResult,
   PreflightAffectedObject,
   IToolRegistry,
-  OpenAIToolSchema,
 } from "./types";

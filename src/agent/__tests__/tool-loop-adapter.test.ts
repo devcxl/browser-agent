@@ -60,7 +60,6 @@ function createMockToolRegistry(tools: ToolDefinition[]): IToolRegistry {
     register: vi.fn(),
     registerAll: vi.fn(),
     getToolsByCategory: vi.fn().mockReturnValue([]),
-    toOpenAISchema: vi.fn().mockReturnValue([]),
     unregisterCategory: vi.fn(),
     get size() {
       return tools.length;

@@ -76,20 +76,6 @@ export interface ToolParameterSchema {
   required?: string[];
 }
 
-/** OpenAI Function Calling Schema - 完整格式 */
-export interface OpenAIToolSchema {
-  type: 'function';
-  function: {
-    name: string;
-    description: string;
-    parameters: ToolParameterSchema;
-  };
-  // 扩展字段（非 OpenAI 标准，内部使用）
-  'x-capability'?: ToolCategory;
-  'x-risk-level'?: RiskLevel;
-  'x-confirmation-required'?: boolean;
-}
-
 /** 工具定义 */
 export interface ToolDefinition {
   /** 唯一名称，如 "tabs_query", "tabs_remove" */
@@ -133,8 +119,6 @@ export interface IToolRegistry {
   getTool(name: string): ToolDefinition | undefined;
   /** 按类别过滤 */
   getToolsByCategory(category: ToolCategory): ToolDefinition[];
-  /** 导出为 OpenAI Tool Schema 格式 */
-  toOpenAISchema(): OpenAIToolSchema[];
   /** 卸载某类别的所有工具 */
   unregisterCategory(category: ToolCategory): void;
   /** 已注册工具数量 */

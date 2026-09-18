@@ -2,7 +2,6 @@ import type {
   IToolRegistry,
   ToolCategory,
   ToolDefinition,
-  OpenAIToolSchema,
 } from "./types";
 
 export class ToolRegistry implements IToolRegistry {
@@ -39,16 +38,6 @@ export class ToolRegistry implements IToolRegistry {
     return this.getAllTools().filter((t) => t.category === category);
   }
 
-  toOpenAISchema(): OpenAIToolSchema[] {
-    return this.getAllTools().map((t) => ({
-      type: "function" as const,
-      function: {
-        name: t.name,
-        description: t.description,
-        parameters: t.schema,
-      },
-    }));
-  }
 
   unregisterCategory(category: ToolCategory): void {
     for (const [name, tool] of this.tools) {

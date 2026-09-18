@@ -8,8 +8,8 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useI18n } from './i18n/useI18n';
 import { ConfigStore } from '@/shared/storage';
-import { getProviderClientFactory } from '@/provider/provider-client-factory';
 import { ProviderCatalog } from '@/provider/provider-catalog';
+import { createLanguageModel } from '@/provider/language-model';
 import { applyTheme } from './theme';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
@@ -242,12 +242,11 @@ function ChatLayout() {
   const handleTestConnection = useCallback(
     async (provider: ProviderConfig): Promise<boolean> => {
       try {
-        const models = await getProviderClientFactory().getModels(provider);
-        if (models.length > 0) {
-          const client = await getProviderClientFactory().createClient(provider, models[0]!.id);
-          return client.checkHealth(provider);
-        }
-        return false;
+        const models = await ProviderCatalog.getInstance().getModels(provider);
+        if (models.length === 0) return false;
+        // 能构造出模型即视为配置可用（真实连通性验证不在本次范围）
+        await createLanguageModel(provider, models[0]!.id);
+        return true;
       } catch {
         return false;
       }

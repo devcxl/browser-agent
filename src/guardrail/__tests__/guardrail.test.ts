@@ -10,7 +10,6 @@ function createMockRegistry(getTool: (name: string) => ToolDefinition | undefine
     registerAll: vi.fn(),
     getAllTools: vi.fn(),
     getToolsByCategory: vi.fn(),
-    toOpenAISchema: vi.fn(),
     unregisterCategory: vi.fn(),
   };
 }

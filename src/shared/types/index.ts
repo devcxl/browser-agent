@@ -63,7 +63,6 @@ export type {
   PreflightResult,
   ToolResult,
   ToolParameterSchema,
-  OpenAIToolSchema,
   ToolDefinition,
   IToolRegistry,
 } from './tool';
@@ -82,7 +81,6 @@ export type {
   ChatMessage,
   ChatCompletionRequest,
   ChatCompletionResponse,
-  StreamChunk,
   ILlmClient,
 } from './llm';
 
