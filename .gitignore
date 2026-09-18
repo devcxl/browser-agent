@@ -9,3 +9,6 @@ design-demo.html
 .stryker-tmp/
 stryker.log
 reports/
+# playwright
+test-results/
+playwright-report/

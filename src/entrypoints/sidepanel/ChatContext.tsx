@@ -2,7 +2,6 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import type { AgentStatus, UIMessage, ConfirmRequest, TokenUsage } from './types';
 import { useConversations } from './hooks/useConversations';
 import { useAgent } from './hooks/useAgent';
-import { useBrowserState } from './hooks/useBrowserState';
 import { ConversationManager } from '@/conversation';
 import { Database } from '@/shared/db/database';
 import { storedMessagesToUIMessages } from './utils';
@@ -13,7 +12,6 @@ const manager = new ConversationManager(db);
 interface ChatContextValue {
   conversations: ReturnType<typeof useConversations>;
   agent: ReturnType<typeof useAgent>;
-  browserState: ReturnType<typeof useBrowserState>;
   messages: UIMessage[];
   addMessage: (msg: UIMessage) => void;
   clearMessages: () => void;
@@ -30,7 +28,6 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const conversations = useConversations();
   const agent = useAgent();
-  const browserState = useBrowserState();
   const [messages, setMessages] = useState<UIMessage[]>([]);
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -160,7 +157,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       value={{
         conversations,
         agent,
-        browserState,
         messages,
         addMessage,
         clearMessages,
