@@ -18,7 +18,6 @@ import type {
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { jsonSchemaToZod } from '@/shared/json-schema-to-zod';
 import type { LanguageModelV4 } from '@ai-sdk/provider';
-import { FEATURE_FLAGS } from '@/shared/feature-flags';
 import { estimateTokens } from '@/shared/token-estimate';
 import {
   buildSummaryPrompt,
@@ -277,36 +276,30 @@ export class ToolLoopAdapter implements IAgentRuntime {
       tools: this.tools,
       allowSystemInMessages: true,
       stopWhen: [isStepCount(Math.max(1, this.agentConfig.maxToolRounds)), isLoopFinished()],
-      toolApproval: this.createToolApproval(input),
-        prepareStep: async ({ messages, stepNumber, model }) => {
-          console.debug('[ToolLoopAdapter] prepareStep step:', stepNumber, 'totalTools:', Object.keys(this.tools).length);
-          const toolFilter = await this.classifyAndFilterTools(messages, stepNumber, model);
-          const prunedMessages = this.pruneContextIfNeeded(
-            messages,
-            input.modelConfig?.defaults?.maxOutputTokens,
-          );
-          const result = { ...(prunedMessages ? { messages: prunedMessages } : {}), ...toolFilter };
-          console.debug('[ToolLoopAdapter] prepareStep result:', {
-            activeTools: result.activeTools?.length ?? 'all',
-            contextManaged: !!prunedMessages,
-          });
-          if (FEATURE_FLAGS.usePrepareStepContext) return result;
-          console.debug('[ToolLoopAdapter] prepareStep activeTools:', toolFilter.activeTools?.length ?? 'all');
-          return toolFilter;
-        },
-        onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
-          this.recordStepToolCalls(stepResult, toolCalls);
-        },
-      });
-    }
+      toolApproval: this.createToolApproval(),
+      prepareStep: async ({ messages, stepNumber, model }) => {
+        console.debug('[ToolLoopAdapter] prepareStep step:', stepNumber, 'totalTools:', Object.keys(this.tools).length);
+        const toolFilter = await this.classifyAndFilterTools(messages, stepNumber, model);
+        const prunedMessages = this.pruneContextIfNeeded(
+          messages,
+          input.modelConfig?.defaults?.maxOutputTokens,
+        );
+        const result = { ...(prunedMessages ? { messages: prunedMessages } : {}), ...toolFilter };
+        console.debug('[ToolLoopAdapter] prepareStep result:', {
+          activeTools: result.activeTools?.length ?? 'all',
+          contextManaged: !!prunedMessages,
+        });
+        return result;
+      },
+      onStepFinish: (stepResult: StepResult<Record<string, AISdkTool>>) => {
+        this.recordStepToolCalls(stepResult, toolCalls);
+      },
+    });
+  }
 
   /** 创建 toolApproval 函数 */
-  private createToolApproval(_input?: AgentRunInput) {
+  private createToolApproval() {
     return async ({ toolCall }: { toolCall: { toolName: string; input: unknown } }) => {
-      if (!FEATURE_FLAGS.useToolApproval) {
-        return { type: 'approved' as const };
-      }
-
       const guardrailCtx = this.guardrailContext;
 
       const check = await this.guardrail.check(
@@ -388,8 +381,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     stepNumber: number,
     model: LanguageModel,
   ): Promise<{ activeTools?: string[] }> {
-    if (!FEATURE_FLAGS.useToolLazyLoad || stepNumber !== 0) {
-      if (stepNumber === 0) console.debug('[ToolLoopAdapter] classify: FLAG=false, skip');
+    if (stepNumber !== 0) {
       return {};
     }
 
@@ -564,7 +556,6 @@ export class ToolLoopAdapter implements IAgentRuntime {
       ?? this.getModelConfig()?.limit?.output
       ?? 0,
   ): ModelMessage[] | undefined {
-    if (!FEATURE_FLAGS.usePrepareStepContext) return undefined;
     const budget = calculateContextBudget(
       this.agentConfig.contextWindowTokens,
       maxOutputTokens,

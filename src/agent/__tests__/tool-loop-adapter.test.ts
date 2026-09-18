@@ -5,7 +5,6 @@ import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types
 import type { IGuardrail, GuardrailCheck } from '@/shared/types/guardrail';
 import type { Conversation, IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
-import { FEATURE_FLAGS } from '@/shared/feature-flags';
 import { estimateTokens } from '@/shared/token-estimate';
 
 // ==================== Mocks ====================
@@ -98,8 +97,7 @@ function createMockConversationManager(): IConversationManager {
     getRecentMessages: vi.fn().mockImplementation(() => {
       return Promise.resolve([...storedMessages]);
     }),
-    generateSummary: vi.fn(),
-    needsSummary: vi.fn().mockResolvedValue(false),
+    generateTitle: vi.fn(),
   };
 }
 
@@ -611,12 +609,7 @@ describe('ToolLoopAdapter', () => {
   // ── toolApproval 风险映射 ─────────────────────────
 
   describe('toolApproval 风险映射', () => {
-    beforeEach(() => {
-      FEATURE_FLAGS.useToolApproval = true;
-    });
-
     afterEach(() => {
-      FEATURE_FLAGS.useToolApproval = true;
       vi.clearAllMocks();
     });
 
@@ -628,17 +621,6 @@ describe('ToolLoopAdapter', () => {
         opts: { toolCall: { toolName: string; input: Record<string, unknown> } },
       ) => Promise<{ type: string; reason?: string }>;
     }
-
-    it('FEATURE_FLAGS.useToolApproval=false 时直接 approved', async () => {
-      FEATURE_FLAGS.useToolApproval = false;
-
-      await adapter.run(basicInput);
-      const result = await getToolApproval()({
-        toolCall: { toolName: 'tabs_query', input: { tabId: 1 } },
-      });
-
-      expect(result).toEqual({ type: 'approved' });
-    });
 
     it('guardrail check.allowed=false → denied with reason', async () => {
       (mockGuardrail.check as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -926,13 +908,6 @@ describe('ToolLoopAdapter', () => {
         expect(result).toEqual({ type: 'user-approval' });
       });
     });
-  });
-});
-
-// 验证 Feature Flag 默认值（模块级别，不受 beforeEach 影响）
-describe('Feature Flag 默认值', () => {
-  it('FEATURE_FLAGS.useToolApproval 默认为 true', () => {
-    expect(FEATURE_FLAGS.useToolApproval).toBe(true);
   });
 });
 
@@ -1520,7 +1495,6 @@ describe('toolApproval preflight 与兜底', () => {
     mockGuardrail = createMockGuardrail();
     mockConversationManager = createMockConversationManager();
     providerConfig = createMockProviderConfig();
-    FEATURE_FLAGS.useToolApproval = true;
     adapter = new ToolLoopAdapter(
       mockToolRegistry,
       mockGuardrail,
@@ -1530,10 +1504,6 @@ describe('toolApproval preflight 与兜底', () => {
       undefined,
       undefined,
     );
-  });
-
-  afterEach(() => {
-    FEATURE_FLAGS.useToolApproval = true;
   });
 
   it('high 风险 + onRequestApproval 时 preflight 成功并把 affectedObjects 传给确认回调', async () => {

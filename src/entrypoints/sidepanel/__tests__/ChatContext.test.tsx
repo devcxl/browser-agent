@@ -23,8 +23,6 @@ const mockConversationManager = vi.hoisted(() => ({
   delete: vi.fn(),
   addMessage: vi.fn(),
   getRecentMessages: vi.fn(),
-  needsSummary: vi.fn(),
-  generateSummary: vi.fn(),
 }));
 
 vi.mock('@/shared/storage', () => ({

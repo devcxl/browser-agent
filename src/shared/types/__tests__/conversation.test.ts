@@ -61,12 +61,9 @@ describe('Conversation types', () => {
         delete: async () => {},
         addMessage: async () => {},
         getRecentMessages: async () => [],
-        generateSummary: async () => '',
         generateTitle: async () => undefined,
-        needsSummary: async () => false,
       };
       expect(typeof manager.create).toBe('function');
-      expect(typeof manager.generateSummary).toBe('function');
     });
   });
 });

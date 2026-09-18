@@ -49,10 +49,6 @@ export interface IConversationManager {
   delete(id: string): Promise<void>;
   addMessage(conversationId: string, message: StoredMessage): Promise<void>;
   getRecentMessages(conversationId: string, count: number): Promise<StoredMessage[]>;
-  /** 生成摘要 */
-  generateSummary(conversationId: string, llmClient: ILlmClient): Promise<string>;
   /** 根据首轮问答生成标题，无法生成时返回 undefined */
   generateTitle(conversationId: string, llmClient: ILlmClient, model: string): Promise<string | undefined>;
-  /** 检查是否需要生成摘要 */
-  needsSummary(conversationId: string): Promise<boolean>;
 }

@@ -29,11 +29,6 @@ vi.mock('@/agent/tool-loop-adapter', () => ({
 vi.mock('@/provider', () => ({
   LlmClient: vi.fn(),
 }));
-vi.mock('@/agent/context-builder', () => ({
-  ContextBuilder: vi.fn().mockImplementation(() => ({
-    build: vi.fn().mockResolvedValue([]),
-  })),
-}));
 vi.mock('@/shared/db/database', () => ({
   Database: {
     getInstance: vi.fn().mockReturnValue({}),

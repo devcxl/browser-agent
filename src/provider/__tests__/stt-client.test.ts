@@ -1,7 +1,3 @@
-// 注意：SttClient 是旧 fetch 路径，已由 AI SDK transcribe() 替代（Phase 3.1）。
-// 在 useSDKTranscribe feature flag 启用前，此路径保留作为向后兼容。
-// audio-utils 模块已标记 @deprecated，Phase 5 将一并移除。
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SttClient } from '../stt-client';
 import type { ProviderConfig } from '@/shared/types';
@@ -38,19 +34,6 @@ function makeConfig(overrides: Partial<ProviderConfig> = {}): ProviderConfig {
 
 function makeAudioBlob(): Blob {
   return new Blob(['fake-audio-data'], { type: 'audio/webm' });
-}
-
-function mockFetchOk(body: unknown, status = 200) {
-  return vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { 'Content-Type': 'application/json' },
-    }),
-  );
-}
-
-function mockFetchError(status: number) {
-  return vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status }));
 }
 
 /** 返回一个永不 resolve 但尊重 AbortSignal 的 fetch mock */
@@ -93,25 +76,10 @@ function mockTranscribeOk(text: string) {
 
 describe('SttClient', () => {
   let client: SttClient;
-  let config: ProviderConfig;
 
   beforeEach(() => {
-    config = makeConfig();
-    client = new SttClient(config);
+    client = new SttClient(makeConfig());
 
-    vi.stubGlobal('OfflineAudioContext', class {
-      constructor() {}
-      decodeAudioData() {
-        return Promise.resolve({
-          numberOfChannels: 1,
-          sampleRate: 48000,
-          getChannelData: () => new Float32Array(48000),
-        });
-      }
-      close() {}
-    });
-
-    // 为 SDK 路径设置默认 mock return
     const mockTranscriptionFn = vi.fn().mockReturnValue({});
     mockCreateOpenAI.mockReturnValue({
       transcription: mockTranscriptionFn,
@@ -122,285 +90,20 @@ describe('SttClient', () => {
     vi.restoreAllMocks();
   });
 
-  // ============ fetch path (default) ============
-
-  describe('transcribe (fetch path)', () => {
-    it('should send POST to /v1/audio/transcriptions and return text', async () => {
-      const fetchSpy = mockFetchOk({ text: 'Hello world' });
-
-      const result = await client.transcribe(makeAudioBlob());
-
-      expect(result).toBe('Hello world');
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-
-      const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      expect(url).toBe('https://api.test.com/v1/audio/transcriptions');
-      expect(init.method).toBe('POST');
-      expect(init.body).toBeInstanceOf(FormData);
-
-      const formData = init.body as FormData;
-      expect(formData.has('file')).toBe(true);
-      expect(formData.has('model')).toBe(true);
-      expect(formData.get('model')).toBe('whisper-1');
-
-      const file = formData.get('file') as File;
-      expect(file).toBeInstanceOf(File);
-      expect(file.name).toBe('audio.wav');
-    });
-
-    it('should include Authorization header', async () => {
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await client.transcribe(makeAudioBlob());
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      expect(init.headers).toMatchObject({ Authorization: 'Bearer sk-test-key' });
-    });
-
-    it('should strip trailing slash and prefer api over endpoint for transcription url', async () => {
-      const slashClient = new SttClient(
-        makeConfig({ api: 'https://api.test.com//', endpoint: 'https://ignored.example.com' }),
-      );
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await slashClient.transcribe(makeAudioBlob());
-
-      expect(fetchSpy.mock.calls[0]![0]).toBe(
-        'https://api.test.com/v1/audio/transcriptions',
-      );
-    });
-
-    it('should fall back to endpoint and use relative transcription path when no api', async () => {
-      const noApiClient = new SttClient(makeConfig({ api: undefined }));
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await noApiClient.transcribe(makeAudioBlob());
-
-      expect(fetchSpy.mock.calls[0]![0]).toBe(
-        'https://api.test.com/v1/audio/transcriptions',
-      );
-    });
-
-    it('should not set Content-Type header', async () => {
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await client.transcribe(makeAudioBlob());
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const headers = init.headers as Record<string, string>;
-      expect(headers['Content-Type']).toBeUndefined();
-    });
-
-    it('should throw on HTTP 400 error', async () => {
-      mockFetchError(400);
-
-      await expect(client.transcribe(makeAudioBlob())).rejects.toThrow('STT API 错误 400');
-    });
-
-    it('should include the server error body in the thrown message', async () => {
-      const res = new Response(JSON.stringify({ error: 'invalid_model' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      });
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(res);
-
-      await expect(client.transcribe(makeAudioBlob())).rejects.toThrow(
-        'STT API 错误 400: {"error":"invalid_model"}',
-      );
-    });
-
-    it('should fall back to empty error text when response body read fails', async () => {
-      const res = new Response(null, { status: 400 });
-      vi.spyOn(res, 'text').mockRejectedValue(new Error('body stream broken'));
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(res);
-
-      // 读 body 失败必须回退为空串：整条消息精确等于 "STT API 错误 400: "
-      // （若 errorText 被变异为 undefined / 其它字符串，则此处严格相等断言失败）
-      const err = await client.transcribe(makeAudioBlob()).catch((e: Error) => e);
-      expect(err.message).toBe('STT API 错误 400: ');
-    });
-
-    it('should include the error body text verbatim in the thrown message', async () => {
-      const res = new Response(JSON.stringify({ error: 'boom' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
-      vi.spyOn(globalThis, 'fetch').mockResolvedValue(res);
-
-      const promise = client.transcribe(makeAudioBlob());
-      await expect(promise).rejects.toThrow('STT API 错误 500: {"error":"boom"}');
-    });
-
-    it('should throw on HTTP 500 error', async () => {
-      mockFetchError(500);
-
-      await expect(client.transcribe(makeAudioBlob())).rejects.toThrow('STT API 错误 500');
-    });
-
-    it('should throw on timeout', async () => {
-      vi.useFakeTimers();
-      const fastConfig = makeConfig({ timeoutMs: 100 });
-      const fastClient = new SttClient(fastConfig);
-      mockFetchPending();
-
-      const promise = fastClient.transcribe(makeAudioBlob());
-      vi.advanceTimersByTime(100);
-
-      await expect(promise).rejects.toThrow('请求超时');
-      vi.useRealTimers();
-    });
-
-    it('should abort on external AbortSignal', async () => {
-      mockFetchPending();
-      const controller = new AbortController();
-
-      const promise = client.transcribe(makeAudioBlob(), controller.signal);
-      controller.abort();
-
-      await expect(promise).rejects.toThrow(/aborted/i);
-    });
-
-    it('should attach extraHeaders', async () => {
-      const configWithHeaders = makeConfig({
-        extraHeaders: { 'X-Custom': 'value1' },
-      });
-      const customClient = new SttClient(configWithHeaders);
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await customClient.transcribe(makeAudioBlob());
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const headers = init.headers as Record<string, string>;
-      expect(headers['X-Custom']).toBe('value1');
-      expect(headers['Authorization']).toBe('Bearer sk-test-key');
-    });
-
-    it('should use configured sttModel', async () => {
-      const configWithSttModel = makeConfig({ sttModel: 'whisper-2' });
-      const customClient = new SttClient(configWithSttModel);
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await customClient.transcribe(makeAudioBlob());
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const formData = init.body as FormData;
-      expect(formData.get('model')).toBe('whisper-2');
-    });
-
-    it('should propagate fetch network errors', async () => {
-      vi.spyOn(globalThis, 'fetch').mockRejectedValue(new TypeError('Failed to fetch'));
-
-      await expect(client.transcribe(makeAudioBlob())).rejects.toThrow('Failed to fetch');
-    });
-
-    it('should throw when response has no text field', async () => {
-      mockFetchOk({ no_text: true });
-
-      const result = await client.transcribe(makeAudioBlob());
-
-      expect(result).toBeUndefined();
-    });
-
-    it('should not include Authorization header when apiKey is empty', async () => {
-      const noKeyConfig = makeConfig({ apiKey: '' });
-      const noKeyClient = new SttClient(noKeyConfig);
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await noKeyClient.transcribe(makeAudioBlob());
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const headers = init.headers as Record<string, string>;
-      expect(headers['Authorization']).toBeUndefined();
-    });
-
-    it('should send blob as-is when audioFormat matches blob type', async () => {
-      // audioFormat 与 blob.type 相同 → shouldConvertToWav 返回 false → 不转 WAV
-      const wavConfig = makeConfig({ audioFormat: 'audio/webm' });
-      const wavClient = new SttClient(wavConfig);
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await wavClient.transcribe(makeAudioBlob());
-
-      const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
-      const formData = init.body as FormData;
-      const file = formData.get('file') as File;
-      expect(file.type).toBe('audio/webm');
-      expect(file.name).toBe('audio.webm');
-    });
-
-    it('should throw when sttModel is not configured (fetch path)', async () => {
-      const noModelConfig = makeConfig({ sttModel: undefined });
-      const noModelClient = new SttClient(noModelConfig);
-
-      await expect(noModelClient.transcribe(makeAudioBlob())).rejects.toThrow(
-        '未配置 STT 语音识别模型',
-      );
-    });
-
-    it('should use relative transcription path when neither api nor endpoint is set', async () => {
-      const bareClient = new SttClient(makeConfig({ api: undefined, endpoint: undefined }));
-      const fetchSpy = mockFetchOk({ text: 'ok' });
-
-      await bareClient.transcribe(makeAudioBlob());
-
-      expect(fetchSpy.mock.calls[0]![0]).toBe('/v1/audio/transcriptions');
-    });
-
-    it('should honor an already-aborted external signal immediately', async () => {
-      mockFetchPending();
-      const controller = new AbortController();
-      controller.abort(new Error('already cancelled'));
-
-      await expect(
-        client.transcribe(makeAudioBlob(), controller.signal),
-      ).rejects.toThrow('already cancelled');
-    });
-
-    it('should not abort when the external signal is still active', async () => {
-      // 外部 signal 未 abort 时，传给 fetch 的 signal 不能是已中止状态
-      // （createTimeoutSignal 的 if(externalSignal.aborted) 分支不应误触发）
-      const controller = new AbortController();
-      const fetchSpy = mockFetchPending();
-
-      const promise = client.transcribe(makeAudioBlob(), controller.signal);
-      // 等待 convertToWav 的 async 转换链完成、fetch 真正发出
-      for (let i = 0; i < 50 && fetchSpy.mock.calls.length === 0; i++) {
-        await Promise.resolve();
-      }
-      expect(fetchSpy).toHaveBeenCalledTimes(1);
-
-      const signal = (fetchSpy.mock.calls[0]![1] as RequestInit).signal as AbortSignal;
-      expect(signal.aborted).toBe(false);
-
-      controller.abort(new Error('user cancelled'));
-      await expect(promise).rejects.toThrow('user cancelled');
-    });
-  });
-
-  // ============ AI SDK path ============
-
-  describe('transcribe (AI SDK path)', () => {
-    beforeEach(() => {
-      mockTranscribe.mockReset();
-      // 重新设置 transcription mock
-      const mockTranscriptionFn = vi.fn().mockReturnValue({});
-      mockCreateOpenAI.mockReturnValue({
-        transcription: mockTranscriptionFn,
-      } as any);
-    });
-
-    function makeSDKClient(overrides: Partial<ProviderConfig> = {}) {
-      return new SttClient(makeConfig({ useSDKTranscribe: true, ...overrides }));
-    }
-
+  describe('transcribe', () => {
     it('should call AI SDK transcribe() and return text', async () => {
       mockTranscribeOk('Hello from SDK');
-      const sdkClient = makeSDKClient();
 
-      const result = await sdkClient.transcribe(makeAudioBlob());
+      const result = await client.transcribe(makeAudioBlob());
 
       expect(result).toBe('Hello from SDK');
       expect(mockTranscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('should pass Uint8Array audio and AbortSignal', async () => {
+      mockTranscribeOk('ok');
+
+      await client.transcribe(makeAudioBlob());
 
       const callArgs = mockTranscribe.mock.calls[0]![0];
       expect(callArgs.model).toBeDefined();
@@ -410,10 +113,9 @@ describe('SttClient', () => {
 
     it('should pass apiKey and baseURL to createOpenAI', async () => {
       mockTranscribeOk('ok');
-      const sdkClient = makeSDKClient({
-        endpoint: 'https://custom.api.com',
-        apiKey: 'sk-custom',
-      });
+      const sdkClient = new SttClient(
+        makeConfig({ endpoint: 'https://custom.api.com', apiKey: 'sk-custom' }),
+      );
 
       await sdkClient.transcribe(makeAudioBlob());
 
@@ -425,9 +127,22 @@ describe('SttClient', () => {
       );
     });
 
+    it('should prefer api over endpoint as baseURL', async () => {
+      mockTranscribeOk('ok');
+      const sdkClient = new SttClient(
+        makeConfig({ api: 'https://api.example.com/v1', endpoint: 'https://api.test.com' }),
+      );
+
+      await sdkClient.transcribe(makeAudioBlob());
+
+      expect(mockCreateOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ baseURL: 'https://api.example.com/v1' }),
+      );
+    });
+
     it('should pass sttModel to transcription()', async () => {
       mockTranscribeOk('ok');
-      const sdkClient = makeSDKClient({ sttModel: 'whisper-3' });
+      const sdkClient = new SttClient(makeConfig({ sttModel: 'whisper-3' }));
 
       await sdkClient.transcribe(makeAudioBlob());
 
@@ -437,9 +152,9 @@ describe('SttClient', () => {
 
     it('should pass extraHeaders to createOpenAI', async () => {
       mockTranscribeOk('ok');
-      const sdkClient = makeSDKClient({
-        extraHeaders: { 'X-Custom': 'val' },
-      });
+      const sdkClient = new SttClient(
+        makeConfig({ extraHeaders: { 'X-Custom': 'val' } }),
+      );
 
       await sdkClient.transcribe(makeAudioBlob());
 
@@ -452,9 +167,8 @@ describe('SttClient', () => {
 
     it('should propagate transcribe errors', async () => {
       mockTranscribe.mockRejectedValue(new Error('SDK transcription failed'));
-      const sdkClient = makeSDKClient();
 
-      await expect(sdkClient.transcribe(makeAudioBlob())).rejects.toThrow(
+      await expect(client.transcribe(makeAudioBlob())).rejects.toThrow(
         'SDK transcription failed',
       );
     });
@@ -462,7 +176,7 @@ describe('SttClient', () => {
     it('should throw on timeout', async () => {
       vi.useFakeTimers();
       mockTranscribePending();
-      const sdkClient = makeSDKClient({ timeoutMs: 100 });
+      const sdkClient = new SttClient(makeConfig({ timeoutMs: 100 }));
 
       const promise = sdkClient.transcribe(makeAudioBlob());
       vi.advanceTimersByTime(100);
@@ -473,17 +187,16 @@ describe('SttClient', () => {
 
     it('should abort on external AbortSignal', async () => {
       mockTranscribePending();
-      const sdkClient = makeSDKClient();
       const controller = new AbortController();
 
-      const promise = sdkClient.transcribe(makeAudioBlob(), controller.signal);
+      const promise = client.transcribe(makeAudioBlob(), controller.signal);
       controller.abort();
 
       await expect(promise).rejects.toThrow(/aborted/i);
     });
 
     it('should throw when sttModel is not configured', async () => {
-      const sdkClient = makeSDKClient({ sttModel: undefined });
+      const sdkClient = new SttClient(makeConfig({ sttModel: undefined }));
 
       await expect(sdkClient.transcribe(makeAudioBlob())).rejects.toThrow(
         '未配置 STT 语音识别模型',
@@ -492,10 +205,9 @@ describe('SttClient', () => {
 
     it('should convert Blob to Uint8Array for audio', async () => {
       mockTranscribeOk('ok');
-      const sdkClient = makeSDKClient();
       const blob = makeAudioBlob();
 
-      await sdkClient.transcribe(blob);
+      await client.transcribe(blob);
 
       const callArgs = mockTranscribe.mock.calls[0]![0];
       expect(callArgs.audio).toBeInstanceOf(Uint8Array);
@@ -505,7 +217,7 @@ describe('SttClient', () => {
 
     it('should handle empty apiKey gracefully (provider handles auth)', async () => {
       mockTranscribeOk('ok');
-      const sdkClient = makeSDKClient({ apiKey: '' });
+      const sdkClient = new SttClient(makeConfig({ apiKey: '' }));
 
       await sdkClient.transcribe(makeAudioBlob());
 
@@ -514,8 +226,6 @@ describe('SttClient', () => {
       );
     });
   });
-
-  // ============ checkHealth ============
 
   describe('checkHealth', () => {
     it('should return true on 200', async () => {

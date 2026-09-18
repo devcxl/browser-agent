@@ -1,38 +1,21 @@
 import type { ProviderConfig } from '@/shared/types';
-import { convertToWav, mimeToExt } from './audio-utils';
 
-const WAV_MIME = 'audio/wav';
+const DEFAULT_TIMEOUT_MS = 120_000;
 
-function shouldConvertToWav(blob: Blob, config: ProviderConfig): boolean {
-  if (!config.sttModel) return false;
-  const format = config.audioFormat;
-  if (!format) return blob.type !== WAV_MIME;
-  return format !== blob.type;
-}
-
+/**
+ * 语音转写客户端
+ *
+ * 通过 AI SDK transcribe() 调用 OpenAI 兼容的 /audio/transcriptions 端点。
+ * baseURL 语义与 chat 路径一致（见 tool-loop-adapter 的 createModel）：
+ * 传入 provider 的 base（含 /v1），由 SDK 追加资源路径。
+ */
 export class SttClient {
   constructor(private config: ProviderConfig) {}
-
-  private get apiUrl(): string {
-    const base = (this.config.api ?? this.config.endpoint ?? '').replace(/\/+$/, '');
-    return `${base}/v1/audio/transcriptions`;
-  }
-
-  private get headers(): Record<string, string> {
-    const headers: Record<string, string> = {};
-    if (this.config.apiKey) {
-      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-    }
-    if (this.config.extraHeaders) {
-      Object.assign(headers, this.config.extraHeaders);
-    }
-    return headers;
-  }
 
   private createTimeoutSignal(
     externalSignal?: AbortSignal,
   ): { signal: AbortSignal; clear: () => void } {
-    const timeoutMs = this.config.timeoutMs ?? 120_000;
+    const timeoutMs = this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const controller = new AbortController();
     const timeoutId = setTimeout(
       () => controller.abort(new Error('请求超时')),
@@ -58,76 +41,31 @@ export class SttClient {
   }
 
   async transcribe(audioBlob: Blob, externalSignal?: AbortSignal): Promise<string> {
+    if (!this.config.sttModel) {
+      throw new Error('未配置 STT 语音识别模型');
+    }
+
     const { signal, clear } = this.createTimeoutSignal(externalSignal);
     try {
-      if (this.config.useSDKTranscribe) {
-        return await this.transcribeWithSDK(audioBlob, signal);
-      }
-      return await this.transcribeWithFetch(audioBlob, signal);
+      const { transcribe } = await import('ai');
+      const { createOpenAI } = await import('@ai-sdk/openai');
+
+      const provider = createOpenAI({
+        apiKey: this.config.apiKey,
+        baseURL: this.config.api ?? this.config.endpoint,
+        headers: this.config.extraHeaders,
+      });
+
+      const result = await transcribe({
+        model: provider.transcription(this.config.sttModel),
+        audio: new Uint8Array(await audioBlob.arrayBuffer()),
+        abortSignal: signal,
+      });
+
+      return result.text;
     } finally {
       clear();
     }
-  }
-
-  /**
-   * 使用 AI SDK transcribe() 的转录路径。
-   */
-  private async transcribeWithSDK(audioBlob: Blob, signal: AbortSignal): Promise<string> {
-    const { transcribe } = await import('ai');
-    const { createOpenAI } = await import('@ai-sdk/openai');
-
-    if (!this.config.sttModel) {
-      throw new Error('未配置 STT 语音识别模型');
-    }
-
-    const provider = createOpenAI({
-      apiKey: this.config.apiKey,
-      baseURL: this.config.endpoint,
-      headers: this.config.extraHeaders,
-    });
-
-    const buffer = await audioBlob.arrayBuffer();
-    const audioData = new Uint8Array(buffer);
-
-    const result = await transcribe({
-      model: provider.transcription(this.config.sttModel),
-      audio: audioData,
-      abortSignal: signal,
-    });
-
-    return result.text;
-  }
-
-  /**
-   * 原有的手动 fetch + FormData 转录路径。
-   */
-  private async transcribeWithFetch(audioBlob: Blob, signal: AbortSignal): Promise<string> {
-    const sendBlob = shouldConvertToWav(audioBlob, this.config)
-      ? await convertToWav(audioBlob)
-      : audioBlob;
-
-    const ext = mimeToExt(sendBlob.type);
-    const formData = new FormData();
-    formData.append('file', sendBlob, `audio.${ext}`);
-    if (!this.config.sttModel) {
-      throw new Error('未配置 STT 语音识别模型');
-    }
-    formData.append('model', this.config.sttModel);
-
-    const response = await fetch(this.apiUrl, {
-      method: 'POST',
-      headers: this.headers,
-      body: formData,
-      signal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      throw new Error(`STT API 错误 ${response.status}: ${errorText}`);
-    }
-
-    const data = (await response.json()) as { text: string };
-    return data.text;
   }
 
   async checkHealth(): Promise<boolean> {
