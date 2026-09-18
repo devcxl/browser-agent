@@ -1,7 +1,7 @@
 # ADR: 自研 Agent 管线迁移到 AI SDK v7
 
 - **日期**: 2026-07-17
-- **状态**: Proposed
+- **状态**: Implemented（Task 5.1 / 5.2 于 2026-09-19 完成，见「后续行动」）
 - **决策者**: Felix
 - **相关**: [技术方案](../dev/specs/ai-sdk-migration.md)
 
@@ -116,8 +116,41 @@
 
 ## 后续行动
 
-1. [ ] T0.1: 实现 `jsonSchemaToZod` 转换器并验证所有工具 schema
-2. [ ] T1.1: 实现 `ToolLoopAdapter` 并通过 Feature Flag 并行运行
+1. [x] T0.1: 实现 `jsonSchemaToZod` 转换器并验证所有工具 schema
+2. [x] T1.1: 实现 `ToolLoopAdapter` 并通过 Feature Flag 并行运行
 3. [ ] 测量 AI SDK v7 迁移后的包体积增量
 4. [ ] 评估 `@ai-sdk/policy-opa` 在未来版本中替代 Guardrail 的可行性
-5. [ ] 全部 Phase 完成后，移除旧代码和 Feature Flag
+5. [x] 全部 Phase 完成后，移除旧代码和 Feature Flag
+
+### Task 5.1 / 5.2 完成记录（2026-09-19）
+
+**交付**：
+
+- 删除旧 Agent 管线：`ContextBuilder`、`SummaryManager`、`@/agent` barrel；
+  上下文裁剪与摘要由 `prepareStep` + `pruneMessages` 与 `compactConversation`
+  （AI SDK `generateText`）承担。
+- 删除随之孤立的 `ConversationManager.generateSummary` / `needsSummary`。
+- 移除 `FEATURE_FLAGS` 全部三个开关，改为直连（三者已恒为 true）。
+- STT 收敛到 AI SDK `transcribe()`，删除 `audio-utils` 与手动 fetch/WAV 路径；
+  移除从未启用的 `useSDKTranscribe`。
+- 新增 `src/provider/language-model.ts` 承载 provider 路由，`ToolLoopAdapter`
+  与 `LlmClient` 共用；删除 `ProviderClientFactory` 与其 Chat Completions
+  适配层（`mapMessagesToPrompt` / `mapOpenAITools` / chatStream chunk 适配）。
+- 删除未使用的 `@ai-sdk/react` 依赖；`toOpenAISchema` / `OpenAIToolSchema` 一并移除。
+
+**顺带修复**：
+
+- `ToolLoopAdapter.createModel` 此前硬编码 `createOpenAICompatible` 并忽略
+  `ProviderConfig.npm`，导致向导中选择的 Anthropic / Google / Cohere 在聊天中
+  不可用；现按 `npm` 路由。
+- STT 旧 fetch 路径把 catalog 中已含 `/v1` 的 endpoint 再拼 `/v1/audio/transcriptions`，
+  产生 `/v1/v1/...`；SDK 路径与 chat 路径 baseURL 语义一致。
+
+**未纳入本次**（与本 ADR 无关，属 skill / i18n 迁移遗留）：
+`SkillPanel`、`TokenPanel`、`BrowserStatePanel`、`ToolCallCard` 四个组件在生产
+代码中已无引用；`e2e/skill-system.spec.ts` 引用了已移除的
+`[data-testid="skill-panel-trigger"]`（e2e 不在 CI 中，故静默失效）。
+
+**验证**：`tsc` 0 错误、`eslint` 0 error、`vitest` 1431 通过、覆盖率 99.76%、
+`build:all` Chrome / Firefox 双构建成功；CI（Lint + Test）与 Build (Package)
+两个 workflow 在 master 上均为 success。
