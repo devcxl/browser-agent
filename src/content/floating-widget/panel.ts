@@ -16,6 +16,9 @@ const LOAD_TIMEOUT = 5000;
 /** 面板宽度（px） */
 const PANEL_WIDTH = 420;
 
+/** 滑入/滑出动画时长（ms），与 CSS transition 保持一致 */
+const TRANSITION_MS = 250;
+
 export class ChatPanel {
   private containerEl: HTMLElement;
   private iframe: HTMLIFrameElement | null = null;
@@ -23,6 +26,8 @@ export class ChatPanel {
   private _isOpen = false;
   private loaded = false;
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
+  /** close() 的隐藏兑底定时器（transitionend 缺席时使用） */
+  private hideTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** 清理函数引用 */
   private cleanupFns: Array<() => void> = [];
@@ -50,6 +55,9 @@ export class ChatPanel {
     if (this._isOpen) return;
     this._isOpen = true;
 
+    // 取消上轮 close() 可能尚未触发的隐藏兑底，避免刚打开又被隐藏
+    this.clearHideTimer();
+
     // 首次打开 → 懒加载 iframe
     if (!this.iframe) {
       this.createIframe();
@@ -61,7 +69,7 @@ export class ChatPanel {
 
     // 触发滑入动画（下一帧执行，确保 display: block 生效）
     requestAnimationFrame(() => {
-      this.containerEl.style.transition = 'transform 250ms ease-out';
+      this.containerEl.style.transition = `transform ${TRANSITION_MS}ms ease-out`;
       this.containerEl.style.transform = 'translateX(0)';
     });
   }
@@ -74,13 +82,17 @@ export class ChatPanel {
     this.containerEl.style.transition = 'transform 250ms ease-out';
     const translate = this.side === 'left' ? '-110%' : '110%';
     this.containerEl.style.transform = `translateX(${translate})`;
-
-    // 动画结束后隐藏
-    const onTransitionEnd = () => {
+    // 动画结束后隐藏；不能只依赖 transitionend：
+    // 元素不可见/无合成帧（如无头浏览器）时该事件不触发，面板会卡在 display: block。
+    const hide = () => {
+      this.clearHideTimer();
       this.containerEl.removeEventListener('transitionend', onTransitionEnd);
       this.containerEl.style.display = 'none';
     };
+    const onTransitionEnd = () => hide();
     this.containerEl.addEventListener('transitionend', onTransitionEnd, { once: true });
+    // 兜底：略长于动画时长，确保 transitionend 缺席时仍能隐藏
+    this.hideTimer = setTimeout(hide, TRANSITION_MS + 100);
 
     this._isOpen = false;
   }
@@ -88,6 +100,7 @@ export class ChatPanel {
   /** 销毁：移除 iframe，清理事件 */
   destroy(): void {
     this.clearLoadTimer();
+    this.clearHideTimer();
 
     // 清理 message listener
     for (const fn of this.cleanupFns) {
@@ -215,6 +228,13 @@ export class ChatPanel {
     if (this.loadTimer) {
       clearTimeout(this.loadTimer);
       this.loadTimer = null;
+    }
+  }
+
+  private clearHideTimer(): void {
+    if (this.hideTimer) {
+      clearTimeout(this.hideTimer);
+      this.hideTimer = null;
     }
   }
 }

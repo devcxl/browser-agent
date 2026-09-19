@@ -117,6 +117,47 @@ describe('ChatPanel', () => {
       expect(container.style.transform).toBe('translateX(110%)');
       expect(container.style.display).toBe('block');
     });
+
+    it('close() 在 transitionend 缺席时仍靠兑底定时器隐藏面板', () => {
+      vi.useFakeTimers();
+      const { container, panel } = setupPanel();
+      panel.open();
+
+      panel.close();
+      expect(container.style.display).toBe('block');
+
+      // 无头环境/无合成帧时不会派发 transitionend；不能因此卡在可见状态
+      vi.advanceTimersByTime(400);
+      expect(container.style.display).toBe('none');
+    });
+
+    it('close() 后紧接 open() 不被待触发的兑底隐藏（快速开合）', () => {
+      vi.useFakeTimers();
+      const { container, panel } = setupPanel();
+      panel.open();
+
+      panel.close();
+      panel.open();
+
+      // 券底定时器应已被取消，面板保持可见
+      vi.advanceTimersByTime(400);
+      expect(container.style.display).toBe('block');
+      expect(panel.isOpen).toBe(true);
+    });
+
+    it('destroy() 清理待触发的兑底定时器', () => {
+      vi.useFakeTimers();
+      const { container, panel } = setupPanel();
+      panel.open();
+      panel.close();
+
+      panel.destroy();
+      vi.advanceTimersByTime(400);
+
+      // destroy 后定时器不应再操作已销毁的容器
+      expect(panel.isOpen).toBe(false);
+      expect(container.querySelector('iframe')).toBeNull();
+    });
   });
 
   describe('懒加载 iframe', () => {
