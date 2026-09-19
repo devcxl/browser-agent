@@ -187,7 +187,9 @@ export class ChatPanel {
     style.bottom = '0';
     style.width = `${PANEL_WIDTH}px`;
     style.maxWidth = '100vw';
-    style.zIndex = '2147483647';
+    // 必须低于 .float-btn（2147483647）：面板与按钮同侧且全高，若同级或更高
+    // 会覆盖按钮区域，使「再点按钮关闭面板」不可达（spec §7.3）。
+    style.zIndex = '2147483646';
     style.background = '#ffffff';
     style.boxShadow = '0 0 40px rgba(0, 0, 0, 0.15)';
 

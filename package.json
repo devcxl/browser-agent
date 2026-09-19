@@ -22,7 +22,9 @@
     "build:all": "bash scripts/build-all.sh",
     "verify:manifest": "bash scripts/verify-manifest.sh",
     "check:size": "bash scripts/check-size.sh",
-    "pre-release": "npm run test:run && npm run build:all && npm run check:size && npm run verify:manifest"
+    "pre-release": "npm run test:run && npm run build:all && npm run check:size && npm run verify:manifest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.34",

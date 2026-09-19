@@ -30,3 +30,25 @@ jobs:
       - run: npm ci
       - run: npm run test:run
       - run: npx vitest run --coverage
+
+  e2e:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      # 扩展 e2e 使用 channel: 'chromium'（新 headless 模式支持 --load-extension；
+      # headless shell 不支持），需完整 Chromium
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:chrome
+      - run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

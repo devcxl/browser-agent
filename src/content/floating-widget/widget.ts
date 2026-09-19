@@ -45,6 +45,9 @@ const SHADOW_CSS = /* css */ `
 
 .float-btn {
   all: unset;
+  /* 需严格高于 .panel-container，否则面板覆盖按钮区域时无法再点按钮关闭面板。 */
+  position: relative;
+  z-index: 2147483647;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -136,7 +139,9 @@ const SHADOW_CSS = /* css */ `
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.15);
   pointer-events: auto;
   display: none;
-  z-index: 2147483647;
+  /* 必须低于 .float-btn（2147483647）：两者同侧时面板覆盖按钮区域，
+     面板若同级或更高会使「再点按钮关闭面板」不可达（spec §7.3）。 */
+  z-index: 2147483646;
 }
 
 .panel-container iframe {

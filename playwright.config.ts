@@ -4,6 +4,10 @@ export default defineConfig({
   testDir: './e2e',
   timeout: 60000,
   retries: 1,
+  // 扩展 e2e 共享持久化 context 与 chrome.storage，并行 worker 会互相干扰
+  // （如 skill 用例 seed 的 provider 影响浮动控件页面的渲染分支），故串行执行。
+  fullyParallel: false,
+  workers: 1,
   use: {
     // 新 headless 模式支持加载扩展；headless shell 无法加载。
     // 因此依赖扩展的 e2e 必须使用 channel: 'chromium'（见下方 project）。
