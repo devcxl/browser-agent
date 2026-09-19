@@ -44,7 +44,9 @@ describe('ChatPanel', () => {
 
       // positionContainer 设置的定位样式
       expect(container.style.position).toBe('fixed');
-      expect(container.style.zIndex).toBe('2147483647');
+      // 必须低于 .float-btn（2147483647），否则面板覆盖按钮区域，
+      // 「再点按钮关闭面板」不可达（见 widget.ts 的 .float-btn / .panel-container）
+      expect(container.style.zIndex).toBe('2147483646');
       expect(container.style.width).toBe('420px');
       // 右侧：right=0（jsdom 序列化为 0px），初始 transform 为滑出状态
       expect(container.style.right).toBe('0px');

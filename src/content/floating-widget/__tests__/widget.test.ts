@@ -147,6 +147,20 @@ describe('FloatingWidget', () => {
       expect(shadow.querySelector('div.panel-container')).not.toBeNull();
     });
 
+    it('按钮 z-index 严格大于面板，保证「再点按钮关闭面板」可达', () => {
+      const shadow = mountWithShadow();
+
+      // 面板全高且与按钮同侧；若同级或更高会覆盖按钮区域，
+      // 使第二次点击落在面板上（spec §7.3 要求再点按钮可关闭）
+      const css = shadow.querySelector('style')?.textContent ?? '';
+      const btnZ = Number(/\.float-btn\s*\{[^}]*z-index:\s*(\d+)/s.exec(css)?.[1]);
+      const panelZ = Number(/\.panel-container\s*\{[^}]*z-index:\s*(\d+)/s.exec(css)?.[1]);
+
+      expect(Number.isFinite(btnZ)).toBe(true);
+      expect(Number.isFinite(panelZ)).toBe(true);
+      expect(btnZ).toBeGreaterThan(panelZ);
+    });
+
     it('mount 幂等：重复调用不重复注入 host', () => {
       mountWithShadow();
       widget?.mount();
