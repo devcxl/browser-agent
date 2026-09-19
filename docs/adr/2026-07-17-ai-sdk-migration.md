@@ -146,11 +146,30 @@
 - STT 旧 fetch 路径把 catalog 中已含 `/v1` 的 endpoint 再拼 `/v1/audio/transcriptions`，
   产生 `/v1/v1/...`；SDK 路径与 chat 路径 baseURL 语义一致。
 
-**未纳入本次**（与本 ADR 无关，属 skill / i18n 迁移遗留）：
-`SkillPanel`、`TokenPanel`、`BrowserStatePanel`、`ToolCallCard` 四个组件在生产
-代码中已无引用；`e2e/skill-system.spec.ts` 引用了已移除的
-`[data-testid="skill-panel-trigger"]`（e2e 不在 CI 中，故静默失效）。
-
 **验证**：`tsc` 0 错误、`eslint` 0 error、`vitest` 1431 通过、覆盖率 99.76%、
 `build:all` Chrome / Firefox 双构建成功；CI（Lint + Test）与 Build (Package)
 两个 workflow 在 master 上均为 success。
+
+### 遗留项清理（2026-09-19 后续提交）
+
+上述「未纳入本次」的四项已处理：
+
+- 删除 `SkillPanel` / `TokenPanel` / `BrowserStatePanel` / `ToolCallCard` 及
+  其测试，连带孤立的 `useBrowserState` 与 `ChatContext.browserState`。
+  `SkillPanel` 的功能已在 `a47fe83` 迁入 `SettingsPanel` 的 Skills tab
+  （并已从手工创建重构为 GitHub 订阅制）。
+- 修复浮动按钮真实缺陷：`.panel-container` 与 `.float-btn` 的 z-index 均为
+  2147483647 且面板全高，面板打开后覆盖按钮区域，使「再点按钮关闭面板」
+  不可达（违反 spec §7.3）。现面板为 2147483646、按钮为 2147483647，
+  并新增断言从 CSS 源校验二者相对关系。
+- 修复 e2e 运行链路（此前完全无法运行且未接入 CI）：ESM `__dirname`、
+  `channel: 'chromium'`（headless shell 不支持 `--load-extension`）、
+  穿透 closed shadow root 的 CDP 断言方案、`page.frames()` 替代受 sandbox
+  限制的 `window.frames`、SSE 格式的 LLM mock（Agent 走
+  `ToolLoopAgent.stream()`，普通 JSON 无法解析）、i18n 迁移后的文案与
+  provider seed 数据；删除无断言的 `chat-flow.spec.ts` 与已失效的
+  `skill-system` E2E-1..4。
+- e2e 接入 CI（新增 `e2e` job），避免再次静默腐烂。
+
+**验证**：`eslint` 0 error、`vitest` 1408 通过、覆盖率 99.76%；
+CI 三个 job（lint / test / e2e）与 Build (Package) 均为 success。
