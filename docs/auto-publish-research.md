@@ -3,7 +3,8 @@
 > **实施更新（2026-10-01）**：本文是当时的调研记录。最终没有采用文中的 v1.1 + OAuth 刷新令牌方案，
 > 而是统一落地为 **CWS API v2 + GCP 服务账号**（见 `.github/workflows/publish-stores.yml`），
 > 需要的 secret 为 `CHROME_EXTENSION_ID` / `CHROME_PUBLISHER_ID` /
-> `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL` / `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`，
+> `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL` / `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`。
+> 决策与理由见 [ADR: Chrome Web Store 自动发布改用 API v2 + 服务账号](adr/2026-10-01-chrome-web-store-v2-publishing.md)，
 > 配置步骤见 [chatgpt-markdown-exporter AGENTS.md](https://github.com/devcxl/chatgpt-markdown-exporter/blob/master/AGENTS.md#chrome-web-store-自动发布配置)。
 > 下文涉及 v1.1 / OAuth 的内容仅作历史参考。
 
