@@ -20,7 +20,7 @@ Chrome Web Store API v1.1 于 **2026-10-15 停用**，而本仓库的 `.github/w
 ## 决策
 
 1. **认证改用 GCP 服务账号**。CWS API v2 原生支持服务账号，Google 明确推荐用于 CI/CD，令牌不过期、无需人工授权流程。凭证为 `CHROME_PUBLISHER_ID` + `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL` + `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`，服务账号不做任何 IAM 授权，权限全部来自开发者后台的绑定。
-2. **把 `publish-browser-extension` 提为直接 devDependency，并固定 `--chrome-api-version v2`**。Chrome 发布契约不再依赖 wxt 的传递依赖版本 —— 无论调用方式是直接执行 `publish-extension`（本仓库）还是经 `wxt submit` 透传（见方案 B 的补充说明），生效的 CLI 版本都由仓库自己锁定。
+2. **三个仓库统一用 `wxt submit` 提交，CLI 版本靠「直接 devDependency + 包管理器 overrides」锁定在 `^6.1.1`**，并固定 `--chrome-api-version v2`。`wxt submit` 是零成本的 CLI 透传入口，但它加载哪个版本取决于 wxt 自己声明的依赖范围（见方案 B），因此 override 是这套方案的必要组成，不是可选项。
 3. **凭证经环境变量传入**（该 CLI 原生读取 `CHROME_*` 环境变量），不进入 argv。
 4. **私钥必须是带真实换行的 PEM**。workflow 增加前置校验，把「拷贝 JSON 里的字面量 `\n`」这类错误拦在提交前，而不是等到签名时报 `DECODER routines::unsupported`。
 5. **Chrome 与 Firefox 提交拆成两个独立步骤**，各自判定凭证是否齐备，互不影响。
@@ -33,11 +33,15 @@ Chrome Web Store API v1.1 于 **2026-10-15 停用**，而本仓库的 `.github/w
 
 不采用。v1.1 已于 2026-10-15 停用；且测试态同意屏幕的刷新令牌 7 天失效，会让 CI 间歇性失败。
 
-### 方案 B：只升级 wxt，让版本由 wxt 的依赖范围决定
+### 方案 B：升级 wxt，让 CLI 版本由 wxt 的依赖范围决定
 
-不采用。功能上可行，但这样一来实际生效的 `publish-browser-extension` 版本由 wxt 的依赖范围决定，且升级 wxt 的同时也在改动构建工具链。发布凭证这份契约值得显式持有。
+不采用（但其中的关键事实决定了最终方案）。
 
-**补充（2026-10-01）**：`chatgpt-analytics` 采用了同一决策的等价变体 —— 同样把 CLI 提为直接 devDependency，但提交时仍走 `wxt submit` 透传 `--chrome-api-version v2`。只要版本由仓库自己的直接依赖锁定，透传与直调等价（`wxt submit` 是 `publish-extension` 的全参数透传别名，`node_modules/.bin` 优先解析直接依赖）。本仓库选择直调只是为了少一层间接。
+`wxt submit` 的实现只是 `await import('publish-browser-extension/cli')`，按 wxt **自身的模块解析路径**加载 CLI，所以实际生效的版本由 wxt 声明的依赖范围决定；项目里的直接依赖只在 wxt 允许的范围内参与选版。实测：wxt 0.21.0 的范围是 `^2.3.0 || ^3.0.2 || ^4.0.4`，即便项目已直接依赖 6.x，`wxt submit` 仍加载嵌套的 4.0.5，`--chrome-api-version v2` 直接报 `Unknown option --chromeApiVersion`。
+
+于是把解析强制到 6.1.1 而不是升级 wxt：直接依赖声明 `^6.1.1`（npm 用 `overrides`，pnpm 用 `pnpm.overrides`）覆盖 wxt 范围内的旧版本。这样既保住了统一的 `wxt submit` 入口，又不动构建工具链。
+
+升级 wxt 本身也能达到同样效果，但代价更高：把 `chatgpt-markdown-exporter` 升到 wxt 0.21.4 后，生成的 tsconfig 严格度变化导致约 10 个既有测试文件报 TS2532 / TS18048，影响面远超本次目标。`chatgpt-analytics` 的 wxt 0.21.4 范围已是 `^5.1.0 || ^6.0.0`，无需 override。
 
 ### 方案 C：改用 `chrome-webstore-upload-cli`
 
@@ -49,6 +53,7 @@ Chrome Web Store API v1.1 于 **2026-10-15 停用**，而本仓库的 `.github/w
 - 服务账号 JSON 密钥是长期凭证：本地备份不入库，GitHub 侧只放 PEM 私钥本身。
 - `docs/auto-publish-research.md` 中的 v1.1 配置章节已成为历史记录，正文顶部加了实施更新提示。
 - Chrome 上传仍会产生商店后台的待处理版本，需人工在后台提交审核（与改动前一致）。
+- `overrides` 是对 wxt 声明范围的强制覆盖（wxt 只用到该包的 CLI 入口，不涉及内部 JS API）。若将来 wxt 把范围放宽到 6.x，可删掉 override，行为不变。
 
 ## 回退路径
 
@@ -56,12 +61,14 @@ v1.1 停用后没有等价的 API 回退路径。若 v2 提交出现故障，临
 
 ## 后续行动
 
-1. `chatgpt-analytics` 已采用同一套改动（`9c498a4`、`25dfb62`，CLI 锁在 `^6.1.1`）。
+1. 三个仓库已统一：`wxt submit` 提交、CLI 锁在 `^6.1.1`（本仓库提交见本 ADR 所在 commit；`chatgpt-analytics` 为 `9c498a4`、`25dfb62`；`chatgpt-markdown-exporter` 的 `pnpm.overrides` 见对应 commit）。
 2. 服务账号密钥按 Google 建议周期轮换（约 90 天），轮换时同步更新三个仓库的 `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`。
 
 ## 验证
 
 - 三个扩展的 v2 `:fetchStatus` 直连返回 200。
-- `--dry-run` 在三个仓库均通过（本仓库经 `publish-extension`，`chatgpt-analytics` 经 `wxt submit` 透传）；该 CLI 的「Validating credentials」阶段本身就是一次真实的 `:fetchStatus` 调用，不是本地格式检查。
+- `npx wxt submit --dry-run --chrome-... --chrome-api-version v2` 在三个仓库均通过（都经 `wxt submit`，且各自解析到 6.1.1）；该 CLI 的「Validating credentials」阶段本身就是一次真实的 `:fetchStatus` 调用，不是本地格式检查。
+- 版本解析实测：wxt 0.20.27 / 0.21.0 加 override 后 `wxt submit` 均由 4.0.5 变为 6.1.1（加 override 前 0.20.27 实测报 `Unknown option --chromeApiVersion`）。
 - workflow 的凭证校验脚本按场景实跑：凭证齐备时 `chrome=true` 退出 0，缺字段 / 缺 zip / 全缺失时各自报错退出 1。
 - PEM 守卫实测：真实 PEM 通过，字面量 `\n` 版本被拦截。
+- `chatgpt-markdown-exporter` 侧加 override 后 wxt 保持 0.20.27，typecheck / lint / 367 个测试 / `build:all` 全通过。
