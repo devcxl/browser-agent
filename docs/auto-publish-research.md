@@ -1,5 +1,12 @@
 # 研究报告：Chrome 扩展自动发布到 Chrome Web Store 的 CI/CD 方案
 
+> **实施更新（2026-10-01）**：本文是当时的调研记录。最终没有采用文中的 v1.1 + OAuth 刷新令牌方案，
+> 而是统一落地为 **CWS API v2 + GCP 服务账号**（见 `.github/workflows/publish-stores.yml`），
+> 需要的 secret 为 `CHROME_EXTENSION_ID` / `CHROME_PUBLISHER_ID` /
+> `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL` / `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`，
+> 配置步骤见 [chatgpt-markdown-exporter AGENTS.md](https://github.com/devcxl/chatgpt-markdown-exporter/blob/master/AGENTS.md#chrome-web-store-自动发布配置)。
+> 下文涉及 v1.1 / OAuth 的内容仅作历史参考。
+
 ## 1. 研究结论摘要
 
 本项目（browser-agent）已通过 **WXT** 构建，已有较完整的 CI（lint + test + build + package）和 Release（tag 触发 → 构建 → 发布 AMO → 创建 GitHub Release）pipeline。**核心缺失环节是 Chrome Web Store 的自动发布**。
