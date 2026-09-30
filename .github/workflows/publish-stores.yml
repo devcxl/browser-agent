@@ -115,7 +115,9 @@ jobs:
 
           # Chrome Web Store API v1.1 已于 2026-10-15 停用，这里固定走 v2：
           # 认证用 GCP 服务账号（需在开发者后台绑定，每个发布者仅限一个）。
-          npx publish-extension \
+          # 提交入口与另两个扩展统一为 `wxt submit`；它是 publish-extension 的
+          # 全参数透传别名，CLI 版本由 package.json 的直接依赖 + overrides 锁定。
+          npx wxt submit \
             --chrome-zip "${{ steps.stores.outputs.chrome_zip }}" \
             --chrome-api-version v2 \
             --chrome-skip-submit-review
