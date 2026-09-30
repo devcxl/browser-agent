@@ -20,7 +20,7 @@ Chrome Web Store API v1.1 于 **2026-10-15 停用**，而本仓库的 `.github/w
 ## 决策
 
 1. **认证改用 GCP 服务账号**。CWS API v2 原生支持服务账号，Google 明确推荐用于 CI/CD，令牌不过期、无需人工授权流程。凭证为 `CHROME_PUBLISHER_ID` + `CHROME_SERVICE_ACCOUNT_CLIENT_EMAIL` + `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`，服务账号不做任何 IAM 授权，权限全部来自开发者后台的绑定。
-2. **直接依赖 `publish-browser-extension@^5.1.0`，调用其 `publish-extension` 二进制**，并固定 `--chrome-api-version v2`。Chrome 发布契约不再依赖 wxt 的传递依赖版本。
+2. **把 `publish-browser-extension` 提为直接 devDependency，并固定 `--chrome-api-version v2`**。Chrome 发布契约不再依赖 wxt 的传递依赖版本 —— 无论调用方式是直接执行 `publish-extension`（本仓库）还是经 `wxt submit` 透传（见方案 B 的补充说明），生效的 CLI 版本都由仓库自己锁定。
 3. **凭证经环境变量传入**（该 CLI 原生读取 `CHROME_*` 环境变量），不进入 argv。
 4. **私钥必须是带真实换行的 PEM**。workflow 增加前置校验，把「拷贝 JSON 里的字面量 `\n`」这类错误拦在提交前，而不是等到签名时报 `DECODER routines::unsupported`。
 5. **Chrome 与 Firefox 提交拆成两个独立步骤**，各自判定凭证是否齐备，互不影响。
@@ -33,9 +33,11 @@ Chrome Web Store API v1.1 于 **2026-10-15 停用**，而本仓库的 `.github/w
 
 不采用。v1.1 已于 2026-10-15 停用；且测试态同意屏幕的刷新令牌 7 天失效，会让 CI 间歇性失败。
 
-### 方案 B：升级 wxt 让它转发 v2 参数
+### 方案 B：只升级 wxt，让版本由 wxt 的依赖范围决定
 
-不采用。功能上可行，但实际生效的 `publish-browser-extension` 版本由 wxt 的依赖范围决定，升级 wxt 的同时也在改动构建工具链。发布凭证这份契约值得显式持有。
+不采用。功能上可行，但这样一来实际生效的 `publish-browser-extension` 版本由 wxt 的依赖范围决定，且升级 wxt 的同时也在改动构建工具链。发布凭证这份契约值得显式持有。
+
+**补充（2026-10-01）**：`chatgpt-analytics` 采用了同一决策的等价变体 —— 同样把 CLI 提为直接 devDependency，但提交时仍走 `wxt submit` 透传 `--chrome-api-version v2`。只要版本由仓库自己的直接依赖锁定，透传与直调等价（`wxt submit` 是 `publish-extension` 的全参数透传别名，`node_modules/.bin` 优先解析直接依赖）。本仓库选择直调只是为了少一层间接。
 
 ### 方案 C：改用 `chrome-webstore-upload-cli`
 
@@ -54,12 +56,12 @@ v1.1 停用后没有等价的 API 回退路径。若 v2 提交出现故障，临
 
 ## 后续行动
 
-1. `chatgpt-analytics` 采用同一套改动（工作区已改好，待与其 MV3 迁移一并提交）。
+1. `chatgpt-analytics` 已采用同一套改动（`9c498a4`、`25dfb62`，CLI 锁在 `^6.1.1`）。
 2. 服务账号密钥按 Google 建议周期轮换（约 90 天），轮换时同步更新三个仓库的 `CHROME_SERVICE_ACCOUNT_PRIVATE_KEY`。
 
 ## 验证
 
 - 三个扩展的 v2 `:fetchStatus` 直连返回 200。
-- `npx publish-extension --dry-run` 在三个仓库均通过；该 CLI 的「Validating credentials」阶段本身就是一次真实的 `:fetchStatus` 调用，不是本地格式检查。
+- `--dry-run` 在三个仓库均通过（本仓库经 `publish-extension`，`chatgpt-analytics` 经 `wxt submit` 透传）；该 CLI 的「Validating credentials」阶段本身就是一次真实的 `:fetchStatus` 调用，不是本地格式检查。
 - workflow 的凭证校验脚本按场景实跑：凭证齐备时 `chrome=true` 退出 0，缺字段 / 缺 zip / 全缺失时各自报错退出 1。
 - PEM 守卫实测：真实 PEM 通过，字面量 `\n` 版本被拦截。
