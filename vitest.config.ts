@@ -24,6 +24,9 @@ export default defineConfig({
         'src/**/types.ts',
         'src/**/index.ts',
         'src/entrypoints/**',
+        // vendor 的上游引擎（Coiggahou2002/grokbot-web @616c1dd）：原样引入、不修改，
+        // 其上游测试未一并移植，不计入本项目覆盖率门槛（见 THIRD_PARTY_NOTICES.md）
+        'src/content/floating-widget/grokbot/**',
       ],
       thresholds: {
         lines: 95,

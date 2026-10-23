@@ -127,8 +127,9 @@
 
 - `content.js`：**121,356 B**（gzip **43,318 B**），改造前约 71 KB，增量约 **50 KB**。增量主体推测是表情环数据（25 套 × 双眼 × 48 点）与状态表。
 - `dist/chrome-mv3` 构建目录：**1,936,574 B**，WXT 汇总 1.94 MB（按 1024 计约 1,891 KB），2048 KB 预算下余量约 **157 KB**。
-- 预算脚本 `scripts/check-size.sh` 校验的是 zip 体积；本次未生成 zip，按构建目录估算，压缩后只会更小。
+- 预算脚本 `scripts/check-size.sh` 校验的是 zip 体积；本机实测 chrome zip 为 **720 KB**（预算 2048 KB），余量充足。
 - 未新增运行时依赖，`package.json` 无改动。
+- **覆盖率阈值**：vendored 引擎原样引入且未移植上游测试，`vitest.config.ts` 将其排除出 coverage 统计；本项目自有代码仍须满足 95% 全局阈值。
 
 ### 与两份 2026-07-19 ADR 的兼容结论
 
