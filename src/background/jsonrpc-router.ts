@@ -4,8 +4,6 @@ import type { JsonRpcRequest, JsonRpcResponse, RpcMethodHandler } from '@/shared
  * Background 端 JSON-RPC 路由器
  *
  * 接收来自 Chat Page 的请求并路由到对应 handler。
- * 与 src/shared/jsonrpc/router.ts 不同，此 router 不依赖 IJsonRpcClient，
- * 直接维护 handler 映射并处理 request/response。
  */
 export class JsonRpcRouter {
   private handlers = new Map<string, RpcMethodHandler>();
