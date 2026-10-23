@@ -114,6 +114,86 @@ describe('ChatContext message loading', () => {
     expect(screen.getByTestId('messages-count').textContent).toBe('0');
   });
 
+  it('tracks only the running conversation and clears status when the run ends', async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+    mockConversationManager.list.mockResolvedValue([
+      { id: 'conv-A', title: 'Conv A', titleGenerated: true, updatedAt: now + 1, createdAt: now, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-B', title: 'Conv B', titleGenerated: true, updatedAt: now, createdAt: now, messages: [], sensitiveDataGranted: false },
+    ]);
+    mockConversationManager.get.mockResolvedValue({
+      id: 'conv-A', title: 'Conv A', titleGenerated: true, createdAt: now, updatedAt: now, messages: [], sensitiveDataGranted: false,
+    });
+    mockAgent.status = 'idle';
+    mockAgent.runningConversationId = null;
+    mockAgent.abort.mockClear();
+
+    function StatusInspector() {
+      const chat = useChat();
+      const statusFor = (id: string) => chat.conversationStatuses[id] ?? '(none)';
+      const refreshContext = () => chat.addMessage({
+        id: `status-update-${Date.now()}`,
+        role: 'user',
+        content: 'status update',
+        timestamp: Date.now(),
+      });
+
+      return (
+        <div>
+          <div data-testid="active-id">{chat.conversations.activeId ?? '(none)'}</div>
+          <div data-testid="conv-a-status">{statusFor('conv-A')}</div>
+          <div data-testid="conv-b-status">{statusFor('conv-B')}</div>
+          <button type="button" data-testid="start-conv-a" onClick={() => {
+            mockAgent.runningConversationId = 'conv-A';
+            mockAgent.status = 'streaming';
+            refreshContext();
+          }}>Start A</button>
+          <button type="button" data-testid="select-conv-b" onClick={() => chat.conversations.select('conv-B')}>
+            Select B
+          </button>
+          <button type="button" data-testid="finish-run" onClick={() => {
+            mockAgent.runningConversationId = null;
+            mockAgent.status = 'idle';
+            refreshContext();
+          }}>Finish</button>
+          <button type="button" data-testid="abort-run" onClick={() => {
+            chat.agent.abort();
+            mockAgent.runningConversationId = null;
+            mockAgent.status = 'idle';
+            refreshContext();
+          }}>Abort</button>
+        </div>
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <StatusInspector />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('active-id').textContent).toBe('conv-A'));
+    await user.click(screen.getByTestId('start-conv-a'));
+    expect(screen.getByTestId('conv-a-status').textContent).toBe('streaming');
+    expect(screen.getByTestId('conv-b-status').textContent).toBe('(none)');
+
+    await user.click(screen.getByTestId('select-conv-b'));
+    expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
+    expect(screen.getByTestId('conv-a-status').textContent).toBe('streaming');
+    expect(screen.getByTestId('conv-b-status').textContent).toBe('(none)');
+
+    await user.click(screen.getByTestId('finish-run'));
+    expect(screen.getByTestId('conv-a-status').textContent).toBe('(none)');
+    expect(screen.getByTestId('conv-b-status').textContent).toBe('(none)');
+
+    await user.click(screen.getByTestId('start-conv-a'));
+    expect(screen.getByTestId('conv-a-status').textContent).toBe('streaming');
+    await user.click(screen.getByTestId('abort-run'));
+    expect(mockAgent.abort).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('conv-a-status').textContent).toBe('(none)');
+    expect(screen.getByTestId('conv-b-status').textContent).toBe('(none)');
+  });
+
   it('loads messages when activeId is set from restored ConfigStore', async () => {
     const now = Date.now();
     mockConversationManager.list.mockResolvedValue([

@@ -14,7 +14,6 @@ interface ChatContextValue {
   agent: ReturnType<typeof useAgent>;
   messages: UIMessage[];
   addMessage: (msg: UIMessage) => void;
-  clearMessages: () => void;
   messagesLoading: boolean;
   messagesError: string | null;
   tokenUsage: TokenUsage;
@@ -33,28 +32,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messagesError, setMessagesError] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
-  const [conversationStatuses, setConversationStatuses] = useState<Record<string, AgentStatus>>({});
   const prevActiveIdRef = useRef<string | null>(null);
   const prevTokenResetIdRef = useRef<string | null>(null);
   const messageVersionRef = useRef(0);
-
-  // 跟踪每个会话的 agent 状态 — 使用 agent.runningConversationId 而非 activeId
-  useEffect(() => {
-    const id = agent.runningConversationId;
-    if (id) {
-      setConversationStatuses((prev) => ({ ...prev, [id]: agent.status }));
-    }
-  }, [agent.status, agent.runningConversationId]);
-
-  // 跟踪每个会话的 agent 状态
-  useEffect(() => {
-    if (conversations.activeId) {
-      setConversationStatuses((prev) => ({
-        ...prev,
-        [conversations.activeId!]: agent.status,
-      }));
-    }
-  }, [agent.status, conversations.activeId]);
+  const conversationStatuses: Record<string, AgentStatus> = agent.runningConversationId
+    ? { [agent.runningConversationId]: agent.status }
+    : {};
 
   const addMessage = useCallback((msg: UIMessage) => {
     messageVersionRef.current += 1;
@@ -67,11 +50,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, msg];
     });
-  }, []);
-
-  const clearMessages = useCallback(() => {
-    messageVersionRef.current += 1;
-    setMessages([]);
   }, []);
 
   agent.setCallbacks({
@@ -159,7 +137,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         agent,
         messages,
         addMessage,
-        clearMessages,
         messagesLoading,
         messagesError,
         tokenUsage,
