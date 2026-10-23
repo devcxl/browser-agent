@@ -14,19 +14,29 @@ import {
 } from './helpers/widget-harness';
 
 // ChatPanel 通过动态 import 延迟加载；用 mock 隔离 iframe 依赖并记录调用。
-const { toggleMock, ctorMock, destroyMock } = vi.hoisted(() => ({
+const { toggleMock, ctorMock, destroyMock, setWidthMock } = vi.hoisted(() => ({
   toggleMock: vi.fn(),
   ctorMock: vi.fn(),
   destroyMock: vi.fn(),
+  setWidthMock: vi.fn(),
 }));
 
 vi.mock('../panel', () => ({
   ChatPanel: class {
-    constructor(container: HTMLElement, side: 'left' | 'right') {
-      ctorMock(container, side);
+    constructor(
+      container: HTMLElement,
+      side: 'left' | 'right',
+      _onStatus?: unknown,
+      _onClose?: unknown,
+      width?: number,
+    ) {
+      ctorMock(container, side, width);
     }
     toggle(): void {
       toggleMock();
+    }
+    setWidth(width: number): void {
+      setWidthMock(width);
     }
     destroy(): void {
       destroyMock();
@@ -55,6 +65,7 @@ describe('FloatingWidget', () => {
     toggleMock.mockClear();
     ctorMock.mockClear();
     destroyMock.mockClear();
+    setWidthMock.mockClear();
     widget = null;
     currentBrowser = createBrowserStub();
     vi.stubGlobal('browser', currentBrowser.browser);
@@ -291,6 +302,77 @@ describe('FloatingWidget', () => {
       expect(side).toBe('left');
     });
 
+    it('创建面板时传入当前配置的面板宽度', async () => {
+      const shadow = mountWithShadow({ ...baseSettings, panelWidth: 600 });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+
+      expect(ctorMock).toHaveBeenCalledTimes(1);
+      const [, side, width] = ctorMock.mock.calls[0] as [HTMLDivElement, 'left' | 'right', number];
+      expect(side).toBe('right');
+      expect(width).toBe(600);
+    });
+
+    it('未配置面板宽度时向 ChatPanel 传入默认 420', async () => {
+      const shadow = mountWithShadow();
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+
+      const [, , width] = ctorMock.mock.calls[0] as [HTMLDivElement, 'left' | 'right', number];
+      expect(width).toBe(420);
+    });
+
+    it('apply() 宽度变化且面板已创建 → 调用 setWidth 热更新', async () => {
+      const shadow = mountWithShadow({ ...baseSettings, panelWidth: 420 });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+      expect(ctorMock).toHaveBeenCalledTimes(1);
+
+      const alive = widget?.apply({ ...baseSettings, panelWidth: 680 });
+
+      expect(alive).toBe(true);
+      expect(setWidthMock).toHaveBeenCalledWith(680);
+      expect(ctorMock).toHaveBeenCalledTimes(1); // 不重建面板
+    });
+
+    it('apply() 宽度被移除（undefined）时回退默认 420', async () => {
+      const shadow = mountWithShadow({ ...baseSettings, panelWidth: 600 });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+
+      widget?.apply({ ...baseSettings, panelWidth: undefined });
+
+      expect(setWidthMock).toHaveBeenCalledWith(420);
+    });
+
+    it('apply() 宽度未变化时不调用 setWidth', () => {
+      mountWithShadow({ ...baseSettings, panelWidth: 520 });
+
+      widget?.apply({ ...baseSettings, panelWidth: 520 });
+
+      expect(setWidthMock).not.toHaveBeenCalled();
+    });
+
+    it('apply() 宽度变化但面板尚未创建时不调用 setWidth（下次创建生效）', () => {
+      mountWithShadow({ ...baseSettings, panelWidth: 420 });
+
+      widget?.apply({ ...baseSettings, panelWidth: 640 });
+
+      expect(setWidthMock).not.toHaveBeenCalled();
+    });
+
     it('销毁后再次挂载可重新创建面板', async () => {
       const shadow = mountWithShadow();
       const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
@@ -463,6 +545,8 @@ describe('FloatingWidget', () => {
           enabled: true,
           position: { side: 'right', top: 100 },
           blacklist: ['already.com', HOSTNAME],
+          // ConfigStore.set 统一归一化：旧数据缺省宽度补齐为默认值
+          panelWidth: 420,
         },
       });
       expect(document.getElementById('ba-floating-host')).toBeNull();

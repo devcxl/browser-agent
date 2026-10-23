@@ -16,10 +16,11 @@ function setupPanel(
   side: 'left' | 'right' = 'right',
   onStatus?: (state: string, reason?: 'complete' | 'error' | 'abort') => void,
   onClose?: () => void,
+  width?: number,
 ) {
   const container = document.createElement('div');
   document.body.appendChild(container);
-  const panel = new ChatPanel(container, side, onStatus, onClose);
+  const panel = new ChatPanel(container, side, onStatus, onClose, width);
   return { container, panel };
 }
 
@@ -170,6 +171,77 @@ describe('ChatPanel', () => {
       // destroy 后定时器不应再操作已销毁的容器
       expect(panel.isOpen).toBe(false);
       expect(container.querySelector('iframe')).toBeNull();
+    });
+  });
+
+  describe('面板宽度', () => {
+    it('未传宽度时使用默认 420px', () => {
+      const { container, panel } = setupPanel();
+      panel.open();
+      expect(container.style.width).toBe('420px');
+    });
+
+    it('构造时传入宽度 → open 时应用该宽度', () => {
+      const { container, panel } = setupPanel('right', undefined, undefined, 620);
+      panel.open();
+      expect(container.style.width).toBe('620px');
+    });
+
+    it('构造宽度被钳制到 320–720 且按 10 步进', () => {
+      const low = setupPanel('right', undefined, undefined, 100);
+      low.panel.open();
+      expect(low.container.style.width).toBe('320px');
+
+      const high = setupPanel('right', undefined, undefined, 1000);
+      high.panel.open();
+      expect(high.container.style.width).toBe('720px');
+
+      const stepped = setupPanel('right', undefined, undefined, 424);
+      stepped.panel.open();
+      expect(stepped.container.style.width).toBe('420px');
+    });
+
+    it('视口宽度小于配置宽度时取视口宽度', () => {
+      const spy = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(400);
+      const { container, panel } = setupPanel('right', undefined, undefined, 620);
+      panel.open();
+      expect(container.style.width).toBe('400px');
+      spy.mockRestore();
+    });
+
+    it('setWidth() 只更新容器样式，不重建 iframe', () => {
+      const { container, panel } = setupPanel();
+      panel.open();
+      const iframe = container.querySelector('iframe');
+
+      panel.setWidth(600);
+
+      expect(container.style.width).toBe('600px');
+      expect(container.querySelector('iframe')).toBe(iframe);
+      expect(container.querySelectorAll('iframe').length).toBe(1);
+    });
+
+    it('setWidth() 在面板首次打开前生效', () => {
+      const { container, panel } = setupPanel();
+      panel.setWidth(560);
+      // 尚未创建 iframe，不触碰 DOM
+      expect(container.style.width).toBe('');
+
+      panel.open();
+      expect(container.style.width).toBe('560px');
+    });
+
+    it('setWidth() 同样经过钳制与视口上限', () => {
+      const { container, panel } = setupPanel();
+      panel.open();
+
+      panel.setWidth(2000);
+      expect(container.style.width).toBe('720px');
+
+      const spy = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(500);
+      panel.setWidth(700);
+      expect(container.style.width).toBe('500px');
+      spy.mockRestore();
     });
   });
 

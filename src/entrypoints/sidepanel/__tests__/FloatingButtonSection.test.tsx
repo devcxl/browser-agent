@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FloatingButtonSection } from '../components/FloatingButtonSection';
@@ -175,5 +175,60 @@ describe('FloatingButtonSection', () => {
     const configStore = ConfigStore.getInstance();
     const saved = await configStore.get<FloatingButtonSettings>('floatingButtonSettings');
     expect(saved.position).toBeNull();
+  });
+
+  it('面板宽度滑杆默认值为 420，并显示当前像素值', async () => {
+    await seedSettings();
+    await act(async () => {
+      renderWithI18n(<FloatingButtonSection />);
+    });
+
+    const slider = screen.getByRole('slider', { name: '聊天面板宽度' }) as HTMLInputElement;
+    expect(slider.value).toBe('420');
+    expect(slider.min).toBe('320');
+    expect(slider.max).toBe('720');
+    expect(slider.step).toBe('10');
+    expect(screen.getByTestId('panel-width-value').textContent).toBe('420 px');
+  });
+
+  it('拖动宽度滑杆后写入 panelWidth 并更新像素值展示', async () => {
+    await seedSettings({ panelWidth: 420 });
+    await act(async () => {
+      renderWithI18n(<FloatingButtonSection />);
+    });
+
+    const slider = screen.getByRole('slider', { name: '聊天面板宽度' });
+    await act(async () => {
+      fireEvent.change(slider, { target: { value: '600' } });
+    });
+
+    const configStore = ConfigStore.getInstance();
+    const saved = await configStore.get<FloatingButtonSettings>('floatingButtonSettings');
+    expect(saved.panelWidth).toBe(600);
+    expect(screen.getByTestId('panel-width-value').textContent).toBe('600 px');
+  });
+
+  it('存储中的越界宽度在展示与写入时按 320–720 钳制', async () => {
+    // 直接绕过 ConfigStore 写入原始越界值（模拟旧版本/手工篡改）
+    mockBrowser.storage.floatingButtonSettings = {
+      enabled: true,
+      position: null,
+      blacklist: [],
+      panelWidth: 999,
+    };
+    await act(async () => {
+      renderWithI18n(<FloatingButtonSection />);
+    });
+
+    const slider = screen.getByRole('slider', { name: '聊天面板宽度' }) as HTMLInputElement;
+    expect(slider.value).toBe('720');
+
+    await act(async () => {
+      fireEvent.change(slider, { target: { value: '100' } });
+    });
+
+    const configStore = ConfigStore.getInstance();
+    const saved = await configStore.get<FloatingButtonSettings>('floatingButtonSettings');
+    expect(saved.panelWidth).toBe(320);
   });
 });

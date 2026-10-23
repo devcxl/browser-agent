@@ -132,6 +132,29 @@ describe('ConfigStore', () => {
     expect(callback).toHaveBeenCalledWith({ providers: [{ id: 'p1' }] });
   });
 
+  it('onChange 对 preferences/floatingButtonSettings 做与读写一致的归一化', () => {
+    const store = ConfigStore.getInstance();
+    const callback = vi.fn();
+    store.onChange(callback);
+
+    const change: Record<string, chrome.storage.StorageChange> = {
+      preferences: { newValue: { theme: 'dark' } },
+      floatingButtonSettings: {
+        newValue: { enabled: true, position: null, blacklist: [], panelWidth: 9999 },
+      },
+    };
+    for (const listener of browserMock.listeners) {
+      listener(change);
+    }
+
+    const delivered = callback.mock.calls[0]![0] as {
+      preferences: { accentColor: string };
+      floatingButtonSettings: { panelWidth: number };
+    };
+    expect(delivered.preferences.accentColor).toBe('#c2410c');
+    expect(delivered.floatingButtonSettings.panelWidth).toBe(720);
+  });
+
   // #8 onChange 取消
   it('should stop listening after unsubscribe', async () => {
     const store = ConfigStore.getInstance();
@@ -181,15 +204,49 @@ describe('ConfigStore', () => {
     const store = ConfigStore.getInstance();
     browserMock.mock.get.mockResolvedValueOnce({});
     const result = await store.get('floatingButtonSettings');
-    expect(result).toEqual({ enabled: true, position: null, blacklist: [] });
+    expect(result).toEqual({ enabled: true, position: null, blacklist: [], panelWidth: 420 });
   });
 
   // #13 floatingButtonSettings 写入
   it('should set floatingButtonSettings correctly', async () => {
     const store = ConfigStore.getInstance();
-    const settings = { enabled: false, position: { side: 'left' as const, top: 100 }, blacklist: ['example.com'] };
+    const settings = { enabled: false, position: { side: 'left' as const, top: 100 }, blacklist: ['example.com'], panelWidth: 600 };
     await store.set('floatingButtonSettings', settings);
     expect(browserMock.mock.set).toHaveBeenCalledWith({ floatingButtonSettings: settings });
+  });
+
+  it('should clamp panelWidth on write', async () => {
+    const store = ConfigStore.getInstance();
+    await store.set('floatingButtonSettings', {
+      enabled: true,
+      position: null,
+      blacklist: [],
+      panelWidth: 999,
+    });
+    expect(browserMock.mock.set).toHaveBeenCalledWith({
+      floatingButtonSettings: { enabled: true, position: null, blacklist: [], panelWidth: 720 },
+    });
+  });
+
+  it('should fill default panelWidth when writing settings without it', async () => {
+    const store = ConfigStore.getInstance();
+    await store.set('floatingButtonSettings', {
+      enabled: true,
+      position: null,
+      blacklist: [],
+    });
+    expect(browserMock.mock.set).toHaveBeenCalledWith({
+      floatingButtonSettings: { enabled: true, position: null, blacklist: [], panelWidth: 420 },
+    });
+  });
+
+  it('should clamp panelWidth on read', async () => {
+    const store = ConfigStore.getInstance();
+    browserMock.mock.get.mockResolvedValueOnce({
+      floatingButtonSettings: { enabled: true, position: null, blacklist: [], panelWidth: 424 },
+    });
+    const result = await store.get<{ panelWidth?: number }>('floatingButtonSettings');
+    expect(result.panelWidth).toBe(420);
   });
 
   // #14 getAll 包含 floatingButtonSettings 默认值
@@ -197,6 +254,87 @@ describe('ConfigStore', () => {
     const store = ConfigStore.getInstance();
     browserMock.mock.get.mockResolvedValueOnce({});
     const result = await store.getAll();
-    expect(result.floatingButtonSettings).toEqual({ enabled: true, position: null, blacklist: [] });
+    expect(result.floatingButtonSettings).toEqual({
+      enabled: true,
+      position: null,
+      blacklist: [],
+      panelWidth: 420,
+    });
+  });
+
+  // ── 主色（accentColor）读写校验 ─────────────────────
+
+  it('get preferences 缺省主色时补默认暖橙', async () => {
+    const store = ConfigStore.getInstance();
+    browserMock.mock.get.mockResolvedValueOnce({
+      preferences: { theme: 'dark', sidebarExpanded: true },
+    });
+    const prefs = await store.get<{ accentColor: string }>('preferences');
+    expect(prefs.accentColor).toBe('#c2410c');
+  });
+
+  it('get preferences 主色非法时回退默认暖橙', async () => {
+    const store = ConfigStore.getInstance();
+    browserMock.mock.get.mockResolvedValueOnce({
+      preferences: { theme: 'light', accentColor: 'orange' },
+    });
+    const prefs = await store.get<{ accentColor: string }>('preferences');
+    expect(prefs.accentColor).toBe('#c2410c');
+  });
+
+  it('set preferences 写入时归一化主色并落库', async () => {
+    const store = ConfigStore.getInstance();
+    await store.set('preferences', {
+      theme: 'light',
+      sidebarExpanded: true,
+      reasoningAutoExpand: false,
+      accentColor: '#2563EB',
+    });
+    expect(browserMock.mock.set).toHaveBeenCalledWith({
+      preferences: expect.objectContaining({ accentColor: '#2563eb' }),
+    });
+  });
+
+  it('set preferences 非法主色落库为默认暖橙', async () => {
+    const store = ConfigStore.getInstance();
+    await store.set('preferences', {
+      theme: 'light',
+      sidebarExpanded: true,
+      reasoningAutoExpand: false,
+      accentColor: '#12345',
+    });
+    expect(browserMock.mock.set).toHaveBeenCalledWith({
+      preferences: expect.objectContaining({ accentColor: '#c2410c' }),
+    });
+  });
+
+  it('patch preferences 仅在携带主色时做校验', async () => {
+    const store = ConfigStore.getInstance();
+    await store.patch({
+      preferences: {
+        theme: 'dark',
+        sidebarExpanded: false,
+        reasoningAutoExpand: false,
+        accentColor: 'nope',
+      },
+    });
+    expect(browserMock.mock.set).toHaveBeenCalledWith({
+      preferences: expect.objectContaining({ accentColor: '#c2410c' }),
+    });
+  });
+
+  it('getAll 合并默认值并校验主色', async () => {
+    const store = ConfigStore.getInstance();
+    browserMock.mock.get.mockResolvedValueOnce({
+      preferences: { theme: 'dark', sidebarExpanded: false, accentColor: '#XYZXYZ' },
+    });
+    const result = await store.getAll();
+    expect(result.preferences.accentColor).toBe('#c2410c');
+    expect(result.preferences.theme).toBe('dark');
+  });
+
+  it('getDefaults 包含默认主色', () => {
+    const store = ConfigStore.getInstance();
+    expect(store.getDefaults().preferences.accentColor).toBe('#c2410c');
   });
 });

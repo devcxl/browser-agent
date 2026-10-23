@@ -9,14 +9,12 @@
  */
 
 import { translate } from '@/shared/i18n';
+import { PANEL_WIDTH_DEFAULT, clampPanelWidth } from '@/shared/panel-width';
 import type { WidgetStatusReason } from '@/shared/types';
 import { WIDGET_MESSAGE_SOURCE } from '@/shared/widget-protocol';
 
 /** iframe 加载超时时间（ms） */
 const LOAD_TIMEOUT = 5000;
-
-/** 面板宽度（px） */
-const PANEL_WIDTH = 420;
 
 /** 滑入/滑出动画时长（ms），与 CSS transition 保持一致 */
 const TRANSITION_MS = 250;
@@ -40,6 +38,8 @@ export class ChatPanel {
   private onClose?: () => void;
   private _isOpen = false;
   private loaded = false;
+  /** 配置的面板宽度；渲染时经 clampPanelWidth + 视口上限收敛 */
+  private width: number;
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
   /** close() 的隐藏兑底定时器（transitionend 缺席时使用） */
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
@@ -52,15 +52,26 @@ export class ChatPanel {
     side: 'left' | 'right' = 'right',
     onStatus?: (state: string, reason?: WidgetStatusReason) => void,
     onClose?: () => void,
+    width: number = PANEL_WIDTH_DEFAULT,
   ) {
     this.containerEl = containerEl;
     this.side = side;
     this.onStatus = onStatus;
     this.onClose = onClose;
+    this.width = clampPanelWidth(width);
   }
 
   get isOpen(): boolean {
     return this._isOpen;
+  }
+
+  /** 更新面板宽度：只改容器样式，不重建 iframe（已打开面板实时生效） */
+  setWidth(width: number): void {
+    this.width = clampPanelWidth(width);
+    // 面板尚未创建时仅记录，open() → positionContainer() 时统一应用
+    if (this.iframe) {
+      this.applyWidth();
+    }
   }
 
   /** 切换打开/关闭状态 */
@@ -230,8 +241,8 @@ export class ChatPanel {
     style.position = 'fixed';
     style.top = '0';
     style.bottom = '0';
-    style.width = `${PANEL_WIDTH}px`;
     style.maxWidth = '100vw';
+    this.applyWidth();
     // 必须低于 .float-btn（2147483647）：面板与按钮同侧且全高，若同级或更高
     // 会覆盖按钮区域，使「再点按钮关闭面板」不可达（spec §7.3）。
     style.zIndex = '2147483646';
@@ -254,6 +265,11 @@ export class ChatPanel {
       this.iframe.style.height = '100%';
       this.iframe.style.border = 'none';
     }
+  }
+
+  /** 应用有效宽度：配置值经钳制后再受视口上限约束 */
+  private applyWidth(): void {
+    this.containerEl.style.width = `${clampPanelWidth(this.width, window.innerWidth)}px`;
   }
 
   private clearLoadTimer(): void {

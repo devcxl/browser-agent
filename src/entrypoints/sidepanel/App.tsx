@@ -130,7 +130,7 @@ function ChatLayout() {
       });
       setExpertMode(await store.get('expertModeSettings'));
       const prefs = await store.get('preferences');
-      applyTheme(prefs.theme ?? 'system');
+      applyTheme(prefs.theme ?? 'system', prefs.accentColor);
     })();
   }, [replaceProviders]);
 
