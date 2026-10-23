@@ -488,4 +488,100 @@ describe('useAgent', () => {
 
     expect(onTokenUsage).toHaveBeenCalledWith({ prompt: 50, completion: 30 });
   });
+
+  it('工具执行期间状态为 running，供头像映射为 working', async () => {
+    const provider = {
+      id: 'test',
+      name: 'Test',
+      endpoint: 'https://api.test.com',
+      apiKey: 'key',
+      model: 'gpt-4o',
+      isLocalTrusted: false,
+    };
+    const record = {
+      toolName: 'tabs_query',
+      params: {},
+      result: { success: true, data: [] },
+      riskLevel: 'low' as const,
+      confirmed: true,
+      timestamp: Date.now(),
+      toolCallId: 'call-status',
+    };
+
+    let releaseRun: () => void = () => {};
+    const runGate = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    mockRun.mockImplementation(async ({ callbacks }: any) => {
+      callbacks.onToolCall(record);
+      await runGate;
+      return { finalMessage: '完成', toolCalls: [record] };
+    });
+
+    const { result } = renderHook(() => useAgent());
+
+    let runPromise: Promise<void> = Promise.resolve();
+    await act(async () => {
+      runPromise = result.current.run('conv-1', '你好', provider, 'gpt-4o');
+      // 让工具调用回调先提交，run 本身仍挂起
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(result.current.status).toBe('running');
+
+    releaseRun();
+    await act(async () => {
+      await runPromise;
+    });
+  });
+
+  it('用户确认后离开 waitingConfirmation（头像不再停在 listening）', async () => {
+    const provider = {
+      id: 'test',
+      name: 'Test',
+      endpoint: 'https://api.test.com',
+      apiKey: 'key',
+      model: 'gpt-4o',
+      isLocalTrusted: false,
+    };
+    let releaseRun: () => void = () => {};
+    const runGate = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    mockRun.mockImplementation(async () => {
+      await runGate;
+      return { finalMessage: '', toolCalls: [] };
+    });
+
+    const { result } = renderHook(() => useAgent());
+
+    let runPromise: Promise<void> = Promise.resolve();
+    await act(async () => {
+      runPromise = result.current.run('conv-1', '你好', provider, 'gpt-4o');
+      // 等 run 完成依赖初始化并构造 adapter / 注册审批回调
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    let approval: Promise<'approve' | 'deny'> = Promise.resolve('approve');
+    act(() => {
+      approval = state.capturedApprovalFn({
+        toolName: 'tabs_query',
+        params: {},
+        affectedObjects: [],
+        warnings: [],
+      });
+    });
+    expect(result.current.status).toBe('waitingConfirmation');
+
+    act(() => {
+      result.current.resolveConfirm(true);
+    });
+    expect(result.current.status).toBe('running');
+    await expect(approval).resolves.toBe('approve');
+
+    releaseRun();
+    await act(async () => {
+      await runPromise;
+    });
+  });
 });

@@ -77,6 +77,10 @@ interface ShadowSnapshot {
   panelDisplay: string | null;
   /** 悬浮球 canvas 的 aria-label；canvas 不存在时为 null */
   canvasAriaLabel: string | null;
+  /** canvas 的 role；引擎构造成功才会写入 'img' */
+  canvasRole: string | null;
+  /** canvas 是否对读屏隐藏（按钮自身已有 aria-label） */
+  canvasAriaHidden: string | null;
 }
 
 /** 一次 CDP 往返取出按钮坐标、面板 display 与头像 canvas 的可访问名 */
@@ -93,7 +97,10 @@ async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
   const host = findNode(root, (node) => nodeAttributes(node)['id'] === 'ba-floating-host');
   // 仅认 host 自己的 shadow root：避免把宿主页面上无关的 canvas 算进来
   const canvas = host ? findNode(host, (node) => node.nodeName === 'CANVAS') : null;
-  const canvasAriaLabel = canvas ? nodeAttributes(canvas)['aria-label'] ?? null : null;
+  const canvasAttrs = canvas ? nodeAttributes(canvas) : {};
+  const canvasAriaLabel = canvas ? canvasAttrs['aria-label'] ?? null : null;
+  const canvasRole = canvas ? canvasAttrs['role'] ?? null : null;
+  const canvasAriaHidden = canvas ? canvasAttrs['aria-hidden'] ?? null : null;
 
   let buttonCenter: ShadowSnapshot['buttonCenter'] = null;
   if (button) {
@@ -112,7 +119,7 @@ async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
     panelDisplay = computedStyle.find((p) => p.name === 'display')?.value ?? null;
   }
 
-  return { buttonCenter, panelDisplay, canvasAriaLabel };
+  return { buttonCenter, panelDisplay, canvasAriaLabel, canvasRole, canvasAriaHidden };
 }
 
 /** 点击穿透 closed shadow root 的浮动按钮 */
@@ -173,7 +180,10 @@ test.describe('浮动按钮 E2E', () => {
     await expect(page.locator(HOST_ID)).toBeAttached();
     // 按钮位于 closed shadow root 内，须经 CDP 穿透确认其已渲染且有尺寸
     await expect.poll(async () => (await inspectShadow(cdp)).buttonCenter).not.toBeNull();
-    // 头像由 canvas 承载，且带可访问名（屏幕阅读器可识别）
+    // 头像由 canvas 承载：role=img 只在引擎构造成功时由引擎写入，可作为「已构造」证据
+    await expect.poll(async () => (await inspectShadow(cdp)).canvasRole).toBe('img');
+    // canvas 对读屏隐藏，可访问名由按钮自身提供
+    await expect.poll(async () => (await inspectShadow(cdp)).canvasAriaHidden).toBe('true');
     await expect.poll(async () => (await inspectShadow(cdp)).canvasAriaLabel)
       .toBe(BUTTON_LABEL);
   });

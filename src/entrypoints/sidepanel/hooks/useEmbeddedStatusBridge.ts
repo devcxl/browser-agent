@@ -1,17 +1,9 @@
 import { useEffect } from 'react';
 import type { WidgetStatusReason } from '@/shared/types';
+import { WIDGET_MESSAGE_SOURCE, type StatusMessage } from '@/shared/widget-protocol';
 import type { AgentStatus } from '../types';
 
-/** 与 panel.ts 接收端约定的协议标识 */
-const WIDGET_MESSAGE_SOURCE = 'ba-floating-widget';
-
-export interface WidgetStatusMessage {
-  source: typeof WIDGET_MESSAGE_SOURCE;
-  type: 'status';
-  state: AgentStatus;
-  /** 仅 idle 转换携带；缺省时接收端按 complete 处理（向后兼容） */
-  reason?: WidgetStatusReason;
-}
+export type WidgetStatusMessage = StatusMessage;
 
 /** 构造 status 消息：独立纯函数，便于单测且保证消息形状只有一处定义 */
 export function createStatusMessage(

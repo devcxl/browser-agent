@@ -10,6 +10,7 @@
 
 import { translate } from '@/shared/i18n';
 import type { WidgetStatusReason } from '@/shared/types';
+import { WIDGET_MESSAGE_SOURCE } from '@/shared/widget-protocol';
 
 /** iframe 加载超时时间（ms） */
 const LOAD_TIMEOUT = 5000;
@@ -204,7 +205,7 @@ export class ChatPanel {
       const data = event.data as Record<string, unknown>;
 
       // 校验消息白名单
-      if (data.source !== 'ba-floating-widget') return;
+      if (data.source !== WIDGET_MESSAGE_SOURCE) return;
 
       if (data.type === 'close-request') {
         this.close();

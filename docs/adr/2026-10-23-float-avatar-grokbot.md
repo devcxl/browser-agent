@@ -32,7 +32,7 @@
 - `BUTTON_SIZE` 48 → 60；`<canvas>` 宽高 60，引擎 `size: 60`，DPR 由引擎处理；初始状态 `idle`，`autoBlink: true`。
 - 按钮不再有白底与描边，头像本体即按钮视觉，仅保留 `drop-shadow` 与 hover/active 缩放。
 - 降级：Canvas 2D 不可用（`getContext('2d')` 返回 null 等构造异常）时捕获异常，`bot = null`，按钮加 `.avatar-unavailable` 显示同色圆形兜底；点击、拖拽、菜单全部不受影响。
-- 可访问性：原生 `<button>` 的 `aria-label` / `title` 保留；引擎会向 canvas 写 `role="img"` 与相同 `aria-label`。
+- 可访问性：原生 `<button>` 的 `aria-label` / `title` 保留；引擎会向 canvas 写 `role="img"` 与相同 `aria-label`，外层再给 canvas 加 `aria-hidden="true"`，避免读屏把同一入口播报两次。
 - 动效偏好：引擎默认 `respectReducedMotion: true`，系统开启 `prefers-reduced-motion: reduce` 时停止自动眨眼与表情漂移、morph 即时落位；本项目未再写额外媒体查询。
 - 尺寸依据：上游 demo 最小展示尺寸为 72px，48px 下眼睛可读性不足（调研推断）；60px 是本次实现选定的折中，尚未做正式的 48 / 56 / 60 / 72px 对比验收。
 
@@ -76,7 +76,9 @@
 | `streaming` | `thinking` | 模型生成中 |
 | `waitingConfirmation` | `listening` | 等待用户确认 |
 
-`waitingConfirmation → listening` 是语义近似（侧头倾听），不是字面翻译。已知副作用：若 agent 侧新增了映射表外的状态，且它在活跃状态之后到达，会被当作 `idle` 并触发一次完成庆祝——这是「安全回退优先」的取舍，已由测试锁定。
+`waitingConfirmation → listening` 是语义近似（侧头倾听），不是字面翻译。
+
+状态源的语义约定（`useAgent` 侧保证，否则 `working` 不可达）：文本输出开始时置 `streaming`；工具即将执行时置 `running`；用户批准/拒绝确认后离开 `waitingConfirmation`。已知副作用：若 agent 侧新增了映射表外的状态，且它在活跃状态之后到达，会被当作 `idle` 并触发一次完成庆祝——这是「安全回退优先」的取舍，已由测试锁定。
 
 ## 决策 5：打磨参数与复位规则
 
@@ -136,7 +138,7 @@
 ### 无障碍
 
 - 按钮仍是原生 `<button>`，保留 `aria-label` / `title`，键盘行为不变。
-- canvas 由引擎写入 `role="img"` 与相同标签。按钮内嵌一个带标签的图片，读屏可能重复播报（推断，未实测）。
+- canvas 由引擎写入 `role="img"` 与相同标签，外层加 `aria-hidden="true"`；可访问名只由按钮提供，不会重复播报。
 - `prefers-reduced-motion` 由引擎默认处理：停止自动眨眼与表情漂移，保留静态表情，不出现「完全空白」。
 - 头像纯装饰之外的语义仍由按钮标签承担，状态变化不额外做 live region 播报（避免每个状态都打断读屏）。
 

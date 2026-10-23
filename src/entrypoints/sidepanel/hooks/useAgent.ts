@@ -136,7 +136,6 @@ export function useAgent() {
       modelConfig?: ProviderModelConfig,
     ) => {
       setRunningConversationId(conversationId);
-      setStatus('running');
       setError(null);
 
       const userMsg: UIMessage = {
@@ -200,6 +199,8 @@ export function useAgent() {
             return new Promise<'approve' | 'deny'>((resolve) => {
               setStatus('waitingConfirmation');
               confirmResolveRef.current = (allowed: boolean) => {
+                // 确认已给出，工具即将执行：先离开「等待确认」，执行期由 onToolCall 标为 running
+                setStatus('running');
                 resolve(allowed ? 'approve' : 'deny');
               };
               cbRef.current.onConfirm?.({
@@ -228,6 +229,8 @@ export function useAgent() {
           },
           callbacks: {
             onStreamChunk: (chunk: string) => {
+              // 工具执行结束、文本恢复输出：从 running 回到 streaming（思考/生成中）
+              setStatus((current) => (current === 'streaming' || current === 'idle' ? current : 'streaming'));
               // 工具调用后开启新的文本气泡
               if (assistantMsg.status === 'complete') {
                 cbRef.current.onMessage?.({ ...assistantMsg });
@@ -247,6 +250,8 @@ export function useAgent() {
               cbRef.current.onMessage?.({ ...assistantMsg });
             },
             onToolCall: (record: ToolCallRecord) => {
+              // 工具即将执行：进入 running（外部映射为 working），直到下一段文本恢复输出
+              setStatus('running');
               // 当前 assistant 消息如有内容则先终结，保证思考/文本/工具按时间顺序分格
               if (assistantMsg.content || assistantMsg.reasoningContent) {
                 cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined });

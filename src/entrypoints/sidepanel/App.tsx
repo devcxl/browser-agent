@@ -14,6 +14,7 @@ import { createLanguageModel } from '@/provider/language-model';
 import { applyTheme } from './theme';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
+import { WIDGET_MESSAGE_SOURCE, type CloseRequestMessage } from '@/shared/widget-protocol';
 
 import { ChatContentContainer } from './components/ChatContentContainer';
 import { EmbeddedHeader } from './components/EmbeddedHeader';
@@ -34,10 +35,11 @@ function ChatLayout() {
   const isEmbedded = new URLSearchParams(location.search).get('embedded') === '1';
 
   const handleEmbeddedClose = useCallback(() => {
-    window.parent.postMessage(
-      { source: 'ba-floating-widget', type: 'close-request' },
-      '*',
-    );
+    const message: CloseRequestMessage = {
+      source: WIDGET_MESSAGE_SOURCE,
+      type: 'close-request',
+    };
+    window.parent.postMessage(message, '*');
   }, []);
 
   const { t } = useI18n();

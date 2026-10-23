@@ -28,14 +28,10 @@ const ACTIVE_STATES: ReadonlySet<GrokBotState> = new Set([
 export interface BotStateControllerOptions {
   /** 应用一个可见状态（通常是 bot.update({ state })） */
   apply: (state: GrokBotState) => void;
-  debounceMs?: number;
-  celebrateMs?: number;
 }
 
 export class BotStateController {
   private readonly apply: (state: GrokBotState) => void;
-  private readonly debounceMs: number;
-  private readonly celebrateMs: number;
 
   /** 当前已经应用到引擎的状态 */
   private applied: GrokBotState = 'idle';
@@ -47,8 +43,6 @@ export class BotStateController {
 
   constructor(options: BotStateControllerOptions) {
     this.apply = options.apply;
-    this.debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
-    this.celebrateMs = options.celebrateMs ?? DEFAULT_CELEBRATE_MS;
   }
 
   /**
@@ -70,7 +64,7 @@ export class BotStateController {
       // 新状态立即中断庆祝并切走，避免庆祝动画盖住新任务
       this.cancelCelebration();
       this.cancelPending();
-      this.commit(state);
+      this.applyWithCelebration(state);
       return;
     }
 
@@ -105,11 +99,11 @@ export class BotStateController {
       this.debounceTimer = null;
       const next = this.pending;
       this.pending = null;
-      if (next) this.commit(next);
-    }, this.debounceMs);
+      if (next) this.applyWithCelebration(next);
+    }, DEFAULT_DEBOUNCE_MS);
   }
 
-  private commit(state: GrokBotState): void {
+  private applyWithCelebration(state: GrokBotState): void {
     if (state === 'idle' && ACTIVE_STATES.has(this.applied)) {
       this.applyImmediately('celebrate');
       this.celebrating = true;
@@ -117,7 +111,7 @@ export class BotStateController {
         this.celebrateTimer = null;
         this.celebrating = false;
         this.applyImmediately('idle');
-      }, this.celebrateMs);
+      }, DEFAULT_CELEBRATE_MS);
       return;
     }
 

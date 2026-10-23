@@ -336,6 +336,8 @@ export class FloatingWidget {
     canvas.width = BUTTON_SIZE;
     canvas.height = BUTTON_SIZE;
     canvas.setAttribute('aria-label', label);
+    // 按钮本身已有 aria-label；canvas 仅作视觉呈现，避免读屏重复播报
+    canvas.setAttribute('aria-hidden', 'true');
     btn.appendChild(canvas);
 
     try {

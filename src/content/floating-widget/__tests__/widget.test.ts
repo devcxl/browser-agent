@@ -2,8 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FloatingWidget } from '../widget';
 import { GrokBot } from '../grokbot';
 import { ConfigStore } from '@/shared/storage/config-store';
-import { createI18nMock } from '@/test/i18n-mock';
 import type { FloatingButtonSettings } from '@/shared/types/storage';
+import {
+  HOSTNAME,
+  baseSettings,
+  createBrowserStub,
+  createCanvasContextStub,
+  firePointer,
+  mountWidget,
+  patchPointerCapture,
+} from './helpers/widget-harness';
 
 // ChatPanel 通过动态 import 延迟加载；用 mock 隔离 iframe 依赖并记录调用。
 const { toggleMock, ctorMock, destroyMock } = vi.hoisted(() => ({
@@ -26,120 +34,20 @@ vi.mock('../panel', () => ({
   },
 }));
 
-const HOSTNAME = 'example.com';
-
-const baseSettings: FloatingButtonSettings = {
-  enabled: true,
-  position: null,
-  blacklist: [],
-};
-
-// jsdom 未实现 Pointer Capture；补 no-op 以便事件流完整执行
-if (typeof Element.prototype.setPointerCapture !== 'function') {
-  (Element.prototype as unknown as { setPointerCapture: () => void }).setPointerCapture = () => {};
-}
-if (typeof Element.prototype.releasePointerCapture !== 'function') {
-  (Element.prototype as unknown as { releasePointerCapture: () => void }).releasePointerCapture = () => {};
-}
-
-/**
- * jsdom 不实现 Canvas 2D；提供记录型 stub 让 GrokBot 引擎可以真实构造，
- * 从而覆盖 widget 与引擎的协作（渲染降级另有单独用例）。
- */
-function createCanvasContextStub(): CanvasRenderingContext2D {
-  const stub = {
-    save: vi.fn(),
-    restore: vi.fn(),
-    translate: vi.fn(),
-    scale: vi.fn(),
-    beginPath: vi.fn(),
-    moveTo: vi.fn(),
-    lineTo: vi.fn(),
-    closePath: vi.fn(),
-    ellipse: vi.fn(),
-    arc: vi.fn(),
-    fill: vi.fn(),
-    stroke: vi.fn(),
-    clip: vi.fn(),
-    clearRect: vi.fn(),
-    setTransform: vi.fn(),
-    fillStyle: '',
-    strokeStyle: '',
-    lineWidth: 1,
-  };
-  return stub as unknown as CanvasRenderingContext2D;
-}
-
-function createBrowserStub() {
-  const storage: Record<string, unknown> = {};
-  const local = {
-    get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {
-      if (keys === null) return { ...storage };
-      const keysArr = (Array.isArray(keys) ? keys : [keys]) as string[];
-      const result: Record<string, unknown> = {};
-      for (const key of keysArr) {
-        if (key in storage) result[key] = storage[key];
-      }
-      return result;
-    }),
-    set: vi.fn(async (items: Record<string, unknown>) => {
-      Object.assign(storage, items);
-    }),
-    remove: vi.fn(),
-    clear: vi.fn(),
-  };
-  const onChanged = { addListener: vi.fn(), removeListener: vi.fn() };
-  return {
-    browser: {
-      storage: { local, onChanged },
-      runtime: {
-        getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
-      },
-      i18n: createI18nMock(),
-    },
-    local,
-    storage,
-  };
-}
-
 let currentBrowser: ReturnType<typeof createBrowserStub>;
 let widget: FloatingWidget | null = null;
+
+patchPointerCapture();
 
 async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/** 挂载 widget 并返回其 closed shadow root（attachShadow 包装捕获引用） */
+/** 兼容既有调用点：挂载后更新模块级 widget，便于 afterEach 统一销毁 */
 function mountWithShadow(settings: FloatingButtonSettings = baseSettings): ShadowRoot {
-  const origAttach = Element.prototype.attachShadow;
-  let captured: ShadowRoot | null = null;
-  Element.prototype.attachShadow = function (
-    this: Element,
-    init: ShadowRootInit,
-  ): ShadowRoot {
-    const sr = origAttach.call(this, init);
-    captured = sr;
-    return sr;
-  };
-  try {
-    widget = new FloatingWidget(settings, HOSTNAME);
-    widget.mount();
-  } finally {
-    Element.prototype.attachShadow = origAttach;
-  }
-  return captured as ShadowRoot;
-}
-
-function firePointer(el: Element, type: string, clientX: number, clientY: number): void {
-  el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      pointerId: 1,
-      clientX,
-      clientY,
-    }),
-  );
+  const mounted = mountWidget(settings);
+  widget = mounted.widget;
+  return mounted.shadow;
 }
 
 describe('FloatingWidget', () => {

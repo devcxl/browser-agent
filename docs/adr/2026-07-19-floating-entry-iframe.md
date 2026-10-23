@@ -21,6 +21,7 @@
 2. **iframe 懒加载、加载后常驻**：首次打开面板才设置 `src`；关闭仅隐藏容器，不销毁 iframe，聊天上下文跨开合保留；总开关关闭或进入黑名单时随 host 一并销毁。
 3. **内嵌差异通过查询参数表达**：sidepanel 检测 `embedded=1` 时渲染含关闭按钮的内嵌头部，其余行为（含 Provider 引导、会话存储）完全不变。
 4. **外层与 iframe 单向通信**：仅 iframe → 外层的 `close-request`（`window.postMessage` + `event.source` 与消息类型白名单校验）；外层 → iframe 无消息，主题/语言/会话全部经共享存储同步。
+   - 2026-10-23 增量：为驱动悬浮球头像，新增 iframe → 外层 `status` 消息（同源校验 + 白名单，见 [悬浮球头像 ADR](2026-10-23-float-avatar-grokbot.md)）。方向仍为单向，外层 → iframe 依旧无消息。
 
 ## 替代方案
 
