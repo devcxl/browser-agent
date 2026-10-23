@@ -173,3 +173,11 @@
 
 **验证**：`eslint` 0 error、`vitest` 1408 通过、覆盖率 99.76%；
 CI 三个 job（lint / test / e2e）与 Build (Package) 均为 success。
+
+### 后续简化决策（2026-10-22）
+
+- 保留 `BrowserEventHub` 与 `browser.stateChanged` 推送作为浏览器状态扩展点；不因当前消费者暂缺而删除。
+- 删除仅由测试使用的旧 RPC 路径和 `ToolLoopAdapter` 的旧 Agent 包装入口；生产通信与 Agent 运行分别保留现行 `background/jsonrpc-router` 和 `run()` / `abort()`。
+- 会话状态由当前运行中会话的 `runningConversationId` 与 `status` 派生，避免切换空闲会话时留下错误状态。
+- 移除从未接入运行时的 Agent 提示词及其无效设置，不改变当前 system message 行为。此前提示词中的网页内容信任规则另由 [issue #198](https://github.com/devcxl/browser-agent/issues/198) 跟踪；敏感数据发送仍由 Guardrail 代码检查授权。
+- 将 IndexedDB 升至版本 4，删除没有生产写入者的 `toolCallLogs` 和 `snapshots` stores；保留会话、消息及技能内容，迁移时验证现有会话数据不受影响。
