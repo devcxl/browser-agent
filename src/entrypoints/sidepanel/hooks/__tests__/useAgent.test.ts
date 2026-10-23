@@ -141,6 +141,7 @@ describe('useAgent', () => {
     const { result } = renderHook(() => useAgent());
     expect(result.current.status).toBe('idle');
     expect(result.current.error).toBeNull();
+    expect(result.current.lastRunOutcome).toBeNull();
   });
 
   it('run 更新状态并调用 ToolLoopAdapter', async () => {
@@ -164,6 +165,7 @@ describe('useAgent', () => {
     expect(ToolLoopAdapter).toHaveBeenCalled();
     expect(mockRun).toHaveBeenCalled();
     expect(result.current.status).toBe('idle');
+    expect(result.current.lastRunOutcome).toBe('complete');
   });
 
   it('run 发送 user 和 assistant 消息', async () => {
@@ -251,6 +253,30 @@ describe('useAgent', () => {
     expect(mockAbort).toHaveBeenCalled();
   });
 
+  it('AbortError 结束时记录 abort 结果，供悬浮球跳过庆祝', async () => {
+    const abortError = new Error('aborted');
+    abortError.name = 'AbortError';
+    mockRun.mockRejectedValue(abortError);
+
+    const { result } = renderHook(() => useAgent());
+    result.current.setCallbacks({ onMessage: vi.fn() });
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'key',
+        model: 'gpt-4o',
+        isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(result.current.lastRunOutcome).toBe('abort');
+    expect(result.current.error).toBeNull();
+  });
+
   it('abort 在 idle 时安全调用', () => {
     const { result } = renderHook(() => useAgent());
 
@@ -279,6 +305,7 @@ describe('useAgent', () => {
 
     expect(result.current.status).toBe('idle');
     expect(result.current.error).toBe('网络错误');
+    expect(result.current.lastRunOutcome).toBe('error');
   });
 
   it('confirm 流程：onRequestApproval 被调用后 resolveConfirm(true) 返回 approve', async () => {

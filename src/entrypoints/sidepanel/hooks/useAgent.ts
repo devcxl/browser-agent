@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
-import type { ProviderConfig, ProviderModelConfig } from '@/shared/types';
+import type { ProviderConfig, ProviderModelConfig, WidgetStatusReason } from '@/shared/types';
 import type { ToolCallRecord } from '@/shared/types/agent';
 import type { IAgentRuntime, AgentConfig } from '@/shared/types/agent';
 import type { IToolRegistry } from '@/registry/types';
@@ -115,6 +115,8 @@ function recordToDisplay(record: ToolCallRecord): ToolCallDisplay {
 export function useAgent() {
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  /** 最近一次运行的结束原因；仅 idle 转换时供外层悬浮球区分「完成/出错/中止」 */
+  const [lastRunOutcome, setLastRunOutcome] = useState<WidgetStatusReason | null>(null);
   const [runningConversationId, setRunningConversationId] = useState<string | null>(null);
   const cbRef = useRef<AgentCallbacks>({});
   const loopRef = useRef<IAgentRuntime | null>(null);
@@ -294,6 +296,7 @@ export function useAgent() {
           cbRef.current.onTokenUsage?.(output.tokenUsage);
         }
         setRunningConversationId(null);
+        setLastRunOutcome('complete');
         setStatus('idle');
         generateTitle();
       } catch (err) {
@@ -302,6 +305,7 @@ export function useAgent() {
           assistantMsg.status = 'complete';
           cbRef.current.onMessage?.({ ...assistantMsg });
           setRunningConversationId(null);
+          setLastRunOutcome('abort');
           setStatus('idle');
           return;
         }
@@ -310,6 +314,7 @@ export function useAgent() {
         cbRef.current.onMessage?.({ ...assistantMsg });
         setError((err as Error).message);
         setRunningConversationId(null);
+        setLastRunOutcome('error');
         setStatus('idle');
       }
     },
@@ -325,5 +330,5 @@ export function useAgent() {
     confirmResolveRef.current = null;
   }, []);
 
-  return { status, error, run, abort, setCallbacks, resolveConfirm, runningConversationId };
+  return { status, error, lastRunOutcome, run, abort, setCallbacks, resolveConfirm, runningConversationId };
 }

@@ -75,9 +75,11 @@ function findNode(root: CdpNode, predicate: (node: CdpNode) => boolean): CdpNode
 interface ShadowSnapshot {
   buttonCenter: { x: number; y: number } | null;
   panelDisplay: string | null;
+  /** 悬浮球 canvas 的 aria-label；canvas 不存在时为 null */
+  canvasAriaLabel: string | null;
 }
 
-/** 一次 CDP 往返取出按钮坐标与面板容器 display */
+/** 一次 CDP 往返取出按钮坐标、面板 display 与头像 canvas 的可访问名 */
 async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
   const { root } = (await cdp.send('DOM.getDocument', { depth: -1, pierce: true })) as {
     root: CdpNode;
@@ -88,6 +90,10 @@ async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
     (node) => node.nodeName === 'BUTTON' && nodeAttributes(node)['aria-label'] === BUTTON_LABEL,
   );
   const panel = findNode(root, (node) => nodeAttributes(node)['class'] === 'panel-container');
+  const host = findNode(root, (node) => nodeAttributes(node)['id'] === 'ba-floating-host');
+  // 仅认 host 自己的 shadow root：避免把宿主页面上无关的 canvas 算进来
+  const canvas = host ? findNode(host, (node) => node.nodeName === 'CANVAS') : null;
+  const canvasAriaLabel = canvas ? nodeAttributes(canvas)['aria-label'] ?? null : null;
 
   let buttonCenter: ShadowSnapshot['buttonCenter'] = null;
   if (button) {
@@ -106,7 +112,7 @@ async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
     panelDisplay = computedStyle.find((p) => p.name === 'display')?.value ?? null;
   }
 
-  return { buttonCenter, panelDisplay };
+  return { buttonCenter, panelDisplay, canvasAriaLabel };
 }
 
 /** 点击穿透 closed shadow root 的浮动按钮 */
@@ -167,6 +173,9 @@ test.describe('浮动按钮 E2E', () => {
     await expect(page.locator(HOST_ID)).toBeAttached();
     // 按钮位于 closed shadow root 内，须经 CDP 穿透确认其已渲染且有尺寸
     await expect.poll(async () => (await inspectShadow(cdp)).buttonCenter).not.toBeNull();
+    // 头像由 canvas 承载，且带可访问名（屏幕阅读器可识别）
+    await expect.poll(async () => (await inspectShadow(cdp)).canvasAriaLabel)
+      .toBe(BUTTON_LABEL);
   });
 
   test('点击浮动按钮打开面板，iframe 加载 sidepanel.html', async () => {
