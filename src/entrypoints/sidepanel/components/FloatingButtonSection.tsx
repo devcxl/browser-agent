@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { FloatingButtonSettings } from '@/shared/types';
 import { ConfigStore } from '@/shared/storage';
+import { PANEL_WIDTH_DEFAULT, PANEL_WIDTH_MAX, PANEL_WIDTH_MIN, PANEL_WIDTH_STEP, clampPanelWidth } from '@/shared/panel-width';
 import { SettingsSwitch } from './SettingsControls';
 import { useI18n } from '../i18n/useI18n';
 
@@ -8,6 +9,7 @@ const DEFAULTS: FloatingButtonSettings = {
   enabled: true,
   position: null,
   blacklist: [],
+  panelWidth: PANEL_WIDTH_DEFAULT,
 };
 
 /**
@@ -57,6 +59,15 @@ export function FloatingButtonSection() {
     persist({ position: null });
   }, [persist]);
 
+  const handlePanelWidthChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      persist({ panelWidth: clampPanelWidth(Number(event.target.value)) });
+    },
+    [persist],
+  );
+
+  const panelWidth = clampPanelWidth(settings.panelWidth);
+
   return (
     <div className="space-y-4" data-testid="floating-button-section">
       {/* ── 总开关 ───────────────────────────────────── */}
@@ -76,6 +87,32 @@ export function FloatingButtonSection() {
             aria-label={t('settings.floatingButton.enabled')}
           />
         </div>
+      </div>
+
+      {/* ── 面板宽度 ─────────────────────────────────── */}
+      <div className="border border-hairline rounded-xl px-3 py-3">
+        <div className="flex items-center justify-between mb-2">
+          <label htmlFor="floating-panel-width" className="text-sm font-medium text-ink">
+            {t('settings.floatingButton.panelWidth')}
+          </label>
+          <span className="text-xs text-mute tabular-nums" data-testid="panel-width-value">
+            {t('settings.floatingButton.panelWidthValue', { width: panelWidth })}
+          </span>
+        </div>
+        <input
+          id="floating-panel-width"
+          type="range"
+          min={PANEL_WIDTH_MIN}
+          max={PANEL_WIDTH_MAX}
+          step={PANEL_WIDTH_STEP}
+          value={panelWidth}
+          onChange={handlePanelWidthChange}
+          aria-label={t('settings.floatingButton.panelWidth')}
+          className="w-full accent-ink"
+        />
+        <p className="text-xs text-mute mt-1">
+          {t('settings.floatingButton.panelWidthDesc')}
+        </p>
       </div>
 
       {/* ── 黑名单管理 ───────────────────────────────── */}

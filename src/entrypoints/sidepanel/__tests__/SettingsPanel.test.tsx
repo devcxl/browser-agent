@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsPanel } from '../components/SettingsPanel';
@@ -248,5 +248,76 @@ describe('SettingsPanel', () => {
         }),
       }),
     ]);
+  });
+
+  // ==================== 主色 ====================
+
+  it('外观 tab 默认展示暖橙主色与预设色板', async () => {
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('accent-color-value').textContent).toBe('#c2410c');
+    });
+    expect(screen.getByTestId('accent-color-input')).toHaveValue('#c2410c');
+    expect(screen.getAllByTestId(/^accent-preset-/)).toHaveLength(6);
+  });
+
+  it('点击预设色立即应用并持久化', async () => {
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+    await waitFor(() => expect(screen.getByTestId('accent-color-value')).toBeTruthy());
+
+    await userEvent.click(screen.getByTestId('accent-preset-2563eb'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('accent-color-value').textContent).toBe('#2563eb');
+    });
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
+    expect(document.documentElement.style.getPropertyValue('--on-accent')).toMatch(/^#[0-9a-f]{6}$/);
+    await waitFor(() => {
+      expect(mockBrowser.local.set).toHaveBeenCalledWith({
+        preferences: expect.objectContaining({ accentColor: '#2563eb' }),
+      });
+    });
+  });
+
+  it('自定义颜色输入立即应用并写入偏好', async () => {
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+    await waitFor(() => expect(screen.getByTestId('accent-color-value')).toBeTruthy());
+
+    fireEvent.change(screen.getByTestId('accent-color-input'), { target: { value: '#7c3aed' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('accent-color-value').textContent).toBe('#7c3aed');
+    });
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#7c3aed');
+    await waitFor(() => {
+      expect(mockBrowser.local.set).toHaveBeenCalledWith({
+        preferences: expect.objectContaining({ accentColor: '#7c3aed' }),
+      });
+    });
+  });
+
+  it('切换主题时保留已选主色并按深色重新派生', async () => {
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+    await waitFor(() => expect(screen.getByTestId('accent-color-value')).toBeTruthy());
+
+    await userEvent.click(screen.getByTestId('accent-preset-2563eb'));
+    await waitFor(() => {
+      expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
+    });
+
+    await userEvent.click(screen.getByRole('combobox', { name: '主题' }));
+    await userEvent.click(screen.getByRole('option', { name: '深色' }));
+
+    await waitFor(() => {
+      // 深色下主色被提亮，不再是浅色原值，但仍是同一色相来源
+      expect(document.documentElement.style.getPropertyValue('--accent')).not.toBe('#2563eb');
+    });
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    await waitFor(() => {
+      expect(mockBrowser.local.set).toHaveBeenLastCalledWith({
+        preferences: expect.objectContaining({ theme: 'dark', accentColor: '#2563eb' }),
+      });
+    });
   });
 });

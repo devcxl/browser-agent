@@ -75,6 +75,8 @@ function findNode(root: CdpNode, predicate: (node: CdpNode) => boolean): CdpNode
 interface ShadowSnapshot {
   buttonCenter: { x: number; y: number } | null;
   panelDisplay: string | null;
+  /** 面板计算宽度（px） */
+  panelWidth: string | null;
   /** 悬浮球 canvas 的 aria-label；canvas 不存在时为 null */
   canvasAriaLabel: string | null;
   /** canvas 的 role；引擎构造成功才会写入 'img' */
@@ -112,14 +114,16 @@ async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
   }
 
   let panelDisplay: string | null = null;
+  let panelWidth: string | null = null;
   if (panel) {
     const { computedStyle } = (await cdp.send('CSS.getComputedStyleForNode', {
       nodeId: panel.nodeId,
     })) as { computedStyle: Array<{ name: string; value: string }> };
     panelDisplay = computedStyle.find((p) => p.name === 'display')?.value ?? null;
+    panelWidth = computedStyle.find((p) => p.name === 'width')?.value ?? null;
   }
 
-  return { buttonCenter, panelDisplay, canvasAriaLabel, canvasRole, canvasAriaHidden };
+  return { buttonCenter, panelDisplay, panelWidth, canvasAriaLabel, canvasRole, canvasAriaHidden };
 }
 
 /** 点击穿透 closed shadow root 的浮动按钮 */
@@ -134,10 +138,32 @@ function panelFrames(page: Page) {
   return page.frames().filter((f) => f.url().includes('sidepanel.html'));
 }
 
+/** 通过扩展页面写入 floatingButtonSettings（content script 启动/热更新时读取） */
+async function seedFloatingButtonSettings(
+  context: BrowserContext,
+  extensionId: string,
+  settings: Record<string, unknown>,
+): Promise<void> {
+  if (!extensionId) throw new Error('未能获取扩展 ID，无法写入 chrome.storage');
+  const extensionPage = await context.newPage();
+  await extensionPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  await extensionPage.waitForLoadState('domcontentloaded');
+  await extensionPage.evaluate(
+    (value) =>
+      new Promise<void>((resolve) => {
+        chrome.storage.local.set({ floatingButtonSettings: value }, () => resolve());
+      }),
+    settings,
+  );
+  await extensionPage.close();
+}
+
 test.describe('浮动按钮 E2E', () => {
   let context: BrowserContext;
   let page: Page;
   let cdp: CDPSession;
+  /** 扩展 ID：通过扩展页面写 chrome.storage，模拟用户配置 */
+  let extensionId = '';
 
   test.beforeAll(async () => {
     context = await chromium.launchPersistentContext('', {
@@ -153,9 +179,10 @@ test.describe('浮动按钮 E2E', () => {
     });
 
     // 等待 Service Worker / background 就绪
-    await context.waitForEvent('serviceworker', { timeout: 30000 }).catch(() => {
-      // Chrome 扩展可能没有 service worker，忽略
-    });
+    const ready = await context
+      .waitForEvent('serviceworker', { timeout: 30000 })
+      .catch(() => context.serviceWorkers()[0] ?? null);
+    extensionId = ready?.url().split('/')[2] ?? '';
   });
 
   test.afterAll(async () => {
@@ -214,5 +241,26 @@ test.describe('浮动按钮 E2E', () => {
       timeout: 10000,
       intervals: [200],
     }).toBe('none');
+  });
+
+  test('配置面板宽度后打开面板，容器宽度等于配置值', async () => {
+    await seedFloatingButtonSettings(context, extensionId, {
+      enabled: true,
+      position: null,
+      blacklist: [],
+      panelWidth: 620,
+    });
+
+    // 重新加载测试页：content script 以最新配置初始化（避免 storage 传播时序影响）
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator(HOST_ID).waitFor({ state: 'attached', timeout: 15000 });
+
+    await clickFloatingButton(page, cdp);
+
+    await expect.poll(async () => (await inspectShadow(cdp)).panelDisplay, { timeout: 10000 })
+      .toBe('block');
+    // 视口 1280 > 620，配置值直接生效
+    await expect.poll(async () => (await inspectShadow(cdp)).panelWidth, { timeout: 10000 })
+      .toBe('620px');
   });
 });

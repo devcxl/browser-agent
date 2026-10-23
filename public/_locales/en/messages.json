@@ -200,6 +200,21 @@
   "settings_theme_dark": {
     "message": "Dark"
   },
+  "settings_accent_label": {
+    "message": "Accent color"
+  },
+  "settings_accent_description": {
+    "message": "Used for buttons, highlights, and the floating avatar"
+  },
+  "settings_accent_custom": {
+    "message": "Custom color"
+  },
+  "settings_accent_current": {
+    "message": "Current value"
+  },
+  "settings_accent_preset": {
+    "message": "Use {color}"
+  },
   "settings_tabs_provider": {
     "message": "Provider"
   },
@@ -577,6 +592,15 @@
   },
   "settings_floatingButton_resetSuccess": {
     "message": "Position reset"
+  },
+  "settings_floatingButton_panelWidth": {
+    "message": "Chat panel width"
+  },
+  "settings_floatingButton_panelWidthDesc": {
+    "message": "Width of the chat panel opened on web pages"
+  },
+  "settings_floatingButton_panelWidthValue": {
+    "message": "{width} px"
   },
   "dialog_confirmTitle": {
     "message": "Confirm Action"

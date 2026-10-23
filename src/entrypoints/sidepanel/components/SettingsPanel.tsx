@@ -7,6 +7,7 @@ import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
 import { cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
 import { EXPERT_API_DOMAINS } from '@/shared/types';
+import { DEFAULT_ACCENT_COLOR, normalizeAccentColor } from '@/shared/accent-palette';
 import { applyTheme } from '../theme';
 import { ProviderWizard } from './ProviderWizard';
 import {
@@ -17,6 +18,16 @@ import {
   SettingsTextarea,
 } from './SettingsControls';
 import { FloatingButtonSection } from './FloatingButtonSection';
+
+/** 外观 tab 的预设色板（首项与默认主色保持一致） */
+const ACCENT_PRESETS = [
+  DEFAULT_ACCENT_COLOR,
+  '#be123c',
+  '#7c3aed',
+  '#2563eb',
+  '#059669',
+  '#b45309',
+] as const;
 
 interface Props {
   providers: ProviderConfig[];
@@ -42,6 +53,7 @@ export function SettingsPanel({
   const { t, locale } = useI18n();
   const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'skills' | 'floatingButton'>('appearance');
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
+  const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
   const [openSelectId, setOpenSelectId] = useState<string | null>(null);
 
   // Provider
@@ -52,15 +64,28 @@ export function SettingsPanel({
   useEffect(() => {
     ConfigStore.getInstance().get<UserPreferences>('preferences').then((prefs) => {
       setTheme(prefs.theme ?? 'system');
+      setAccentColor(normalizeAccentColor(prefs.accentColor));
     });
+  }, []);
+
+  /** 统一偏好写入：读-改-写集中一处，避免两个 handler 各自复制 */
+  const updatePreferences = useCallback(async (patch: Partial<UserPreferences>) => {
+    const configStore = ConfigStore.getInstance();
+    const preferences = await configStore.get<UserPreferences>('preferences');
+    await configStore.set('preferences', { ...preferences, ...patch });
   }, []);
 
   const handleThemeChange = async (nextTheme: UserPreferences['theme']) => {
     setTheme(nextTheme);
-    applyTheme(nextTheme);
-    const configStore = ConfigStore.getInstance();
-    const preferences = await configStore.get<UserPreferences>('preferences');
-    await configStore.set('preferences', { ...preferences, theme: nextTheme });
+    applyTheme(nextTheme, accentColor);
+    await updatePreferences({ theme: nextTheme });
+  };
+
+  const handleAccentChange = async (nextColor: string) => {
+    const normalized = normalizeAccentColor(nextColor);
+    setAccentColor(normalized);
+    applyTheme(theme, normalized);
+    await updatePreferences({ accentColor: normalized });
   };
 
   const handleSaveProvider = (provider: ProviderConfig) => {
@@ -582,6 +607,51 @@ export function SettingsPanel({
                   onOpenChange={setOpenSelectId}
                   className="mt-1"
                 />
+              </div>
+
+              <div className="border-t border-hairline pt-3">
+                <span className="text-sm font-medium text-ink">{t('settings.accent.label')}</span>
+                <p className="mt-0.5 text-xs text-mute">{t('settings.accent.description')}</p>
+
+                <div
+                  role="group"
+                  aria-label={t('settings.accent.label')}
+                  className="mt-2 flex flex-wrap items-center gap-2"
+                >
+                  {ACCENT_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      data-testid={`accent-preset-${preset.slice(1)}`}
+                      aria-label={t('settings.accent.preset', { color: preset })}
+                      aria-pressed={accentColor === preset}
+                      onClick={() => handleAccentChange(preset)}
+                      className={cn(
+                        'size-7 rounded-full border border-hairline transition-transform hover:scale-110',
+                        accentColor === preset && 'ring-2 ring-primary ring-offset-2 ring-offset-canvas',
+                      )}
+                      style={{ backgroundColor: preset }}
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    type="color"
+                    data-testid="accent-color-input"
+                    aria-label={t('settings.accent.custom')}
+                    value={accentColor}
+                    onChange={(e) => handleAccentChange(e.target.value)}
+                    className="h-8 w-10 cursor-pointer rounded border border-hairline bg-surface-card p-0.5"
+                  />
+                  <span className="text-xs text-mute">{t('settings.accent.current')}</span>
+                  <code
+                    data-testid="accent-color-value"
+                    className="rounded bg-surface-soft px-1.5 py-0.5 text-xs text-ink"
+                  >
+                    {accentColor}
+                  </code>
+                </div>
               </div>
             </div>
           )}

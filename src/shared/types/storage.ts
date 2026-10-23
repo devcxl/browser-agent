@@ -12,6 +12,8 @@ export interface FloatingButtonSettings {
   position: { side: 'left' | 'right'; top: number } | null;
   /** 不显示浮窗的站点 blacklist */
   blacklist: string[];
+  /** 聊天面板宽度（px），320–720、步进 10；缺省 420 */
+  panelWidth?: number;
 }
 
 /** chrome.storage.local 中存储的所有数据 */
@@ -79,6 +81,8 @@ export type ExpertApiDomain = typeof EXPERT_API_DOMAINS[number];
 export interface UserPreferences {
   /** UI 主题 */
   theme: 'light' | 'dark' | 'system';
+  /** 主色（支持 #rgb / #rrggbb），缺省暖橙 #c2410c */
+  accentColor?: string;
   /** 侧边栏默认展开 */
   sidebarExpanded: boolean;
   /** 推理内容自动展开（流式输出时），默认 false */
