@@ -2,7 +2,7 @@
  * FloatingWidget — 浮动控件 DOM 组装与交互。
  *
  * 在页面注入 Shadow DOM 宿主，内含：
- * - 圆形拖拽按钮（logo + aria-label）
+ * - 圆形拖拽按钮（GrokBot 动画头像 + aria-label）
  * - 右键/长按快捷菜单
  * - iframe 面板容器（委托 ChatPanel）
  *
@@ -11,12 +11,15 @@
 
 import { isClick, resolveSide, clampTop } from './drag';
 import { addToBlacklist, shouldMount } from './blacklist';
+import { GrokBot } from './grokbot';
+import { BotStateController } from './bot-state-controller';
+import { mapAgentStatusToBotState } from './status-map';
 import { translate } from '@/shared/i18n';
 import type { FloatingButtonSettings } from '@/shared/types/storage';
 import { ConfigStore } from '@/shared/storage/config-store';
 
 /** 按钮尺寸（px），与 drag.ts 中 clampTop 的 buttonSize 保持一致 */
-const BUTTON_SIZE = 48;
+const BUTTON_SIZE = 60;
 /** 长按判定阈值（ms） */
 const LONG_PRESS_DURATION = 500;
 
@@ -54,41 +57,45 @@ const SHADOW_CSS = /* css */ `
   width: ${BUTTON_SIZE}px;
   height: ${BUTTON_SIZE}px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  /* 头像本体直接可见：按钮自身不加底色/描边，只用 drop-shadow 保留悬浮感 */
+  background: transparent;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.28));
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  transition: filter 0.2s ease, transform 0.15s ease;
   position: fixed;
-  overflow: hidden;
 }
 
 .float-btn:hover {
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.1);
-  transform: scale(1.05);
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+  transform: scale(1.06);
 }
 
 .float-btn:active {
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
-  transform: scale(0.97);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.22));
+  transform: scale(0.96);
 }
 
-.float-btn img {
+.float-btn canvas {
   width: ${BUTTON_SIZE}px;
   height: ${BUTTON_SIZE}px;
   display: block;
   pointer-events: none;
   -webkit-user-drag: none;
   user-select: none;
-  object-fit: contain;
 }
 
 .float-btn.dragging {
   transition: none;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.32));
+}
+
+/* Canvas 不可用时的兜底：至少保留可见的圆形点击目标（与头像主体同色） */
+.float-btn.avatar-unavailable {
+  background: #5b7fe5;
 }
 
 .context-menu {
@@ -163,6 +170,12 @@ export class FloatingWidget {
   private host: HTMLDivElement | null = null;
   private shadowRoot: ShadowRoot | null = null;
   private btn: HTMLButtonElement | null = null;
+  /** GrokBot 动画引擎；Canvas 2D 不可用时为 null（按钮仍可交互） */
+  private bot: GrokBot | null = null;
+  /** 状态去抖 / 庆祝 / 复位逻辑（与 DOM 解耦的纯逻辑单元） */
+  private readonly botState = new BotStateController({
+    apply: (state) => this.bot?.update({ state }),
+  });
   private menu: HTMLDivElement | null = null;
   private panelContainer: HTMLDivElement | null = null;
   /** ChatPanel 实例引用，延迟导入避免循环依赖 */
@@ -252,10 +265,17 @@ export class FloatingWidget {
     return true;
   }
 
-  /** 销毁：移除 host，清理事件 */
+  /** 销毁：停止动画引擎、移除 host，清理事件 */
   destroy(): void {
     this.unbindEvents();
     this.clearTimers();
+
+    // 先停状态机，避免销毁过程中仍有去抖/庆祝定时器回调引擎
+    this.botState.destroy();
+
+    // 停止 rAF / 眨眼定时器 / 观察者，避免销毁后继续占用资源
+    this.bot?.destroy();
+    this.bot = null;
 
     if (this.chatPanel && typeof (this.chatPanel as Record<string, unknown>).destroy === 'function') {
       ((this.chatPanel as Record<string, unknown>).destroy as () => void)();
@@ -307,27 +327,33 @@ export class FloatingWidget {
   private buildButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.className = 'float-btn';
-    btn.setAttribute('aria-label', translate('widget.buttonAriaLabel'));
-    btn.setAttribute('title', translate('widget.buttonAriaLabel'));
+    const label = translate('widget.buttonAriaLabel');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
 
-    const img = document.createElement('img');
+    // 头像由 GrokBot 引擎绘制到 canvas；尺寸固定 60，引擎内部处理 DPR
+    const canvas = document.createElement('canvas');
+    canvas.width = BUTTON_SIZE;
+    canvas.height = BUTTON_SIZE;
+    canvas.setAttribute('aria-label', label);
+    // 按钮本身已有 aria-label；canvas 仅作视觉呈现，避免读屏重复播报
+    canvas.setAttribute('aria-hidden', 'true');
+    btn.appendChild(canvas);
+
     try {
-      img.src = browser.runtime.getURL('logo-48.png');
+      this.bot = new GrokBot(canvas, {
+        state: 'idle',
+        size: BUTTON_SIZE,
+        autoBlink: true,
+        ariaLabel: label,
+      });
     } catch {
-      // 静默回退：扩展上下文失效时用占位 SVG
-      img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" rx="8" fill="%23ddd"/%3E%3C/svg%3E';
+      // 无 Canvas 2D 实现的宿主（如 jsdom/受限环境）：放弃动画但保留可见、可点击的按钮
+      this.bot = null;
+      btn.classList.add('avatar-unavailable');
     }
-    img.alt = 'BA';
-    // 图片加载失败时显示文字 fallback，确保按钮始终可见
-    img.addEventListener('error', () => {
-      const text = document.createElement('span');
-      text.textContent = 'BA';
-      text.style.cssText = 'font-size:18px;font-weight:700;color:#333;line-height:1;';
-      img.replaceWith(text);
-    }, { once: true });
-    btn.appendChild(img);
 
-    // 阻止默认拖拽行为（防止浏览器图片拖拽）
+    // 阻止默认拖拽行为（canvas 不参与原生拖拽）
     btn.addEventListener('dragstart', (e) => e.preventDefault());
 
     return btn;
@@ -515,7 +541,14 @@ export class FloatingWidget {
     // 延迟 / 按需加载 ChatPanel
     if (!this.chatPanel) {
       const { ChatPanel } = await import('./panel');
-      this.chatPanel = new ChatPanel(this.panelContainer, this.position.side);
+      this.chatPanel = new ChatPanel(
+        this.panelContainer,
+        this.position.side,
+        // Canvas 不可用时 bot 为 null：apply 里用可选链兜底，不影响面板功能
+        (state, reason) => this.botState.handle(mapAgentStatusToBotState(state), reason),
+        // 面板关闭（按钮或 iframe close-request）→ 立即取消去抖/庆祝并回 idle
+        () => this.botState.reset(),
+      );
     }
 
     (this.chatPanel as { toggle: () => void }).toggle();

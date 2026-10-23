@@ -4,11 +4,13 @@
  * 管理面板的打开/关闭生命周期：
  * - 首次 toggle() 时懒加载 iframe（src 指向 sidepanel.html?embedded=1）
  * - 滑入/滑出动画（transform translateX），250ms ease-out
- * - 监听 window.message 接收 sidepanel 的 close-request
+ * - 监听 window.message 接收 sidepanel 的 close-request / status
  * - iframe load 超时降级处理
  */
 
 import { translate } from '@/shared/i18n';
+import type { WidgetStatusReason } from '@/shared/types';
+import { WIDGET_MESSAGE_SOURCE } from '@/shared/widget-protocol';
 
 /** iframe 加载超时时间（ms） */
 const LOAD_TIMEOUT = 5000;
@@ -19,10 +21,23 @@ const PANEL_WIDTH = 420;
 /** 滑入/滑出动画时长（ms），与 CSS transition 保持一致 */
 const TRANSITION_MS = 250;
 
+/** 协议允许的结束原因；其他值一律视为缺省（complete），保持向后兼容 */
+const STATUS_REASONS: ReadonlySet<string> = new Set(['complete', 'error', 'abort']);
+
+function normalizeStatusReason(value: unknown): WidgetStatusReason | undefined {
+  return typeof value === 'string' && STATUS_REASONS.has(value)
+    ? (value as WidgetStatusReason)
+    : undefined;
+}
+
 export class ChatPanel {
   private containerEl: HTMLElement;
   private iframe: HTMLIFrameElement | null = null;
   private side: 'left' | 'right';
+  /** 嵌入页 agent 状态变化回调（由外层注入，用于驱动头像） */
+  private onStatus?: (state: string, reason?: WidgetStatusReason) => void;
+  /** 面板实际关闭后的回调（按钮关闭 / close-request），用于复位头像状态 */
+  private onClose?: () => void;
   private _isOpen = false;
   private loaded = false;
   private loadTimer: ReturnType<typeof setTimeout> | null = null;
@@ -32,9 +47,16 @@ export class ChatPanel {
   /** 清理函数引用 */
   private cleanupFns: Array<() => void> = [];
 
-  constructor(containerEl: HTMLElement, side: 'left' | 'right' = 'right') {
+  constructor(
+    containerEl: HTMLElement,
+    side: 'left' | 'right' = 'right',
+    onStatus?: (state: string, reason?: WidgetStatusReason) => void,
+    onClose?: () => void,
+  ) {
     this.containerEl = containerEl;
     this.side = side;
+    this.onStatus = onStatus;
+    this.onClose = onClose;
   }
 
   get isOpen(): boolean {
@@ -95,6 +117,7 @@ export class ChatPanel {
     this.hideTimer = setTimeout(hide, TRANSITION_MS + 100);
 
     this._isOpen = false;
+    this.onClose?.();
   }
 
   /** 销毁：移除 iframe，清理事件 */
@@ -132,7 +155,7 @@ export class ChatPanel {
     // 监听 iframe load 事件（带超时）
     this.setupLoadHandler(iframe);
 
-    // 监听 window.message（sidepanel 发送的 close-request）
+    // 监听 window.message（sidepanel 发送的 close-request / status）
     this.setupMessageListener(iframe);
   }
 
@@ -182,10 +205,19 @@ export class ChatPanel {
       const data = event.data as Record<string, unknown>;
 
       // 校验消息白名单
-      if (data.source !== 'ba-floating-widget') return;
+      if (data.source !== WIDGET_MESSAGE_SOURCE) return;
 
       if (data.type === 'close-request') {
         this.close();
+        return;
+      }
+
+      if (data.type === 'status') {
+        // 空串/非字符串对其他协议实现没有意义，外层据此切换视觉状态，
+        // 因此宁可不回调，避免把脏数据传给 T4 的头像渲染。
+        const state = data.state;
+        if (typeof state !== 'string' || state.length === 0) return;
+        this.onStatus?.(state, normalizeStatusReason(data.reason));
       }
     };
 

@@ -141,6 +141,7 @@ describe('useAgent', () => {
     const { result } = renderHook(() => useAgent());
     expect(result.current.status).toBe('idle');
     expect(result.current.error).toBeNull();
+    expect(result.current.lastRunOutcome).toBeNull();
   });
 
   it('run 更新状态并调用 ToolLoopAdapter', async () => {
@@ -164,6 +165,7 @@ describe('useAgent', () => {
     expect(ToolLoopAdapter).toHaveBeenCalled();
     expect(mockRun).toHaveBeenCalled();
     expect(result.current.status).toBe('idle');
+    expect(result.current.lastRunOutcome).toBe('complete');
   });
 
   it('run 发送 user 和 assistant 消息', async () => {
@@ -251,6 +253,30 @@ describe('useAgent', () => {
     expect(mockAbort).toHaveBeenCalled();
   });
 
+  it('AbortError 结束时记录 abort 结果，供悬浮球跳过庆祝', async () => {
+    const abortError = new Error('aborted');
+    abortError.name = 'AbortError';
+    mockRun.mockRejectedValue(abortError);
+
+    const { result } = renderHook(() => useAgent());
+    result.current.setCallbacks({ onMessage: vi.fn() });
+
+    await act(async () => {
+      await result.current.run('conv-1', '你好', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'key',
+        model: 'gpt-4o',
+        isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    expect(result.current.status).toBe('idle');
+    expect(result.current.lastRunOutcome).toBe('abort');
+    expect(result.current.error).toBeNull();
+  });
+
   it('abort 在 idle 时安全调用', () => {
     const { result } = renderHook(() => useAgent());
 
@@ -279,6 +305,7 @@ describe('useAgent', () => {
 
     expect(result.current.status).toBe('idle');
     expect(result.current.error).toBe('网络错误');
+    expect(result.current.lastRunOutcome).toBe('error');
   });
 
   it('confirm 流程：onRequestApproval 被调用后 resolveConfirm(true) 返回 approve', async () => {
@@ -460,5 +487,101 @@ describe('useAgent', () => {
     expect(toolCalls[0][0].toolCallDisplay.name).toBe('tabs_query');
 
     expect(onTokenUsage).toHaveBeenCalledWith({ prompt: 50, completion: 30 });
+  });
+
+  it('工具执行期间状态为 running，供头像映射为 working', async () => {
+    const provider = {
+      id: 'test',
+      name: 'Test',
+      endpoint: 'https://api.test.com',
+      apiKey: 'key',
+      model: 'gpt-4o',
+      isLocalTrusted: false,
+    };
+    const record = {
+      toolName: 'tabs_query',
+      params: {},
+      result: { success: true, data: [] },
+      riskLevel: 'low' as const,
+      confirmed: true,
+      timestamp: Date.now(),
+      toolCallId: 'call-status',
+    };
+
+    let releaseRun: () => void = () => {};
+    const runGate = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    mockRun.mockImplementation(async ({ callbacks }: any) => {
+      callbacks.onToolCall(record);
+      await runGate;
+      return { finalMessage: '完成', toolCalls: [record] };
+    });
+
+    const { result } = renderHook(() => useAgent());
+
+    let runPromise: Promise<void> = Promise.resolve();
+    await act(async () => {
+      runPromise = result.current.run('conv-1', '你好', provider, 'gpt-4o');
+      // 让工具调用回调先提交，run 本身仍挂起
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    expect(result.current.status).toBe('running');
+
+    releaseRun();
+    await act(async () => {
+      await runPromise;
+    });
+  });
+
+  it('用户确认后离开 waitingConfirmation（头像不再停在 listening）', async () => {
+    const provider = {
+      id: 'test',
+      name: 'Test',
+      endpoint: 'https://api.test.com',
+      apiKey: 'key',
+      model: 'gpt-4o',
+      isLocalTrusted: false,
+    };
+    let releaseRun: () => void = () => {};
+    const runGate = new Promise<void>((resolve) => {
+      releaseRun = resolve;
+    });
+    mockRun.mockImplementation(async () => {
+      await runGate;
+      return { finalMessage: '', toolCalls: [] };
+    });
+
+    const { result } = renderHook(() => useAgent());
+
+    let runPromise: Promise<void> = Promise.resolve();
+    await act(async () => {
+      runPromise = result.current.run('conv-1', '你好', provider, 'gpt-4o');
+      // 等 run 完成依赖初始化并构造 adapter / 注册审批回调
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    let approval: Promise<'approve' | 'deny'> = Promise.resolve('approve');
+    act(() => {
+      approval = state.capturedApprovalFn({
+        toolName: 'tabs_query',
+        params: {},
+        affectedObjects: [],
+        warnings: [],
+      });
+    });
+    expect(result.current.status).toBe('waitingConfirmation');
+
+    act(() => {
+      result.current.resolveConfirm(true);
+    });
+    expect(result.current.status).toBe('running');
+    await expect(approval).resolves.toBe('approve');
+
+    releaseRun();
+    await act(async () => {
+      await runPromise;
+    });
   });
 });

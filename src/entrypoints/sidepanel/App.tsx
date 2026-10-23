@@ -7,12 +7,14 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useI18n } from './i18n/useI18n';
+import { useEmbeddedStatusBridge } from './hooks/useEmbeddedStatusBridge';
 import { ConfigStore } from '@/shared/storage';
 import { ProviderCatalog } from '@/provider/provider-catalog';
 import { createLanguageModel } from '@/provider/language-model';
 import { applyTheme } from './theme';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
+import { WIDGET_MESSAGE_SOURCE, type CloseRequestMessage } from '@/shared/widget-protocol';
 
 import { ChatContentContainer } from './components/ChatContentContainer';
 import { EmbeddedHeader } from './components/EmbeddedHeader';
@@ -33,14 +35,19 @@ function ChatLayout() {
   const isEmbedded = new URLSearchParams(location.search).get('embedded') === '1';
 
   const handleEmbeddedClose = useCallback(() => {
-    window.parent.postMessage(
-      { source: 'ba-floating-widget', type: 'close-request' },
-      '*',
-    );
+    const message: CloseRequestMessage = {
+      source: WIDGET_MESSAGE_SOURCE,
+      type: 'close-request',
+    };
+    window.parent.postMessage(message, '*');
   }, []);
 
   const { t } = useI18n();
   const { conversations, agent, messages, messagesLoading, messagesError, tokenUsage, confirmRequest, resolveConfirm, conversationStatuses } = useChat();
+
+  // 嵌入 iframe 时把 agent 状态同步给外层悬浮球（T3 协议，T4 消费）
+  // lastRunOutcome 仅在 idle 时随消息发送，让外层区分完成/出错/中止
+  useEmbeddedStatusBridge(isEmbedded, agent.status, agent.lastRunOutcome ?? undefined);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [providersLoaded, setProvidersLoaded] = useState(false);
