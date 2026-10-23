@@ -175,7 +175,6 @@ export class FloatingWidget {
   private pointerStart = { x: 0, y: 0 };
   private pointerMoved = 0;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  private menuHideTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** 位置变更回调（防抖写入 storage） */
   private onPositionChange: ((pos: ButtonPosition) => void) | null = null;
@@ -255,7 +254,7 @@ export class FloatingWidget {
   /** 销毁：移除 host，清理事件 */
   destroy(): void {
     this.unbindEvents();
-    this.clearTimers();
+    this.clearLongPressTimer();
 
     if (this.chatPanel && typeof (this.chatPanel as Record<string, unknown>).destroy === 'function') {
       ((this.chatPanel as Record<string, unknown>).destroy as () => void)();
@@ -448,7 +447,6 @@ export class FloatingWidget {
 
   private showMenuAtButton(): void {
     if (!this.menu || !this.btn) return;
-    this.clearMenuHideTimer();
 
     const btnRect = this.btn.getBoundingClientRect();
     const menuSide = this.position.side;
@@ -475,14 +473,6 @@ export class FloatingWidget {
     // 点击菜单外部 → 隐藏
     if (this.menu && !this.menu.contains(e.target as Node)) {
       this.hideMenu();
-    }
-  }
-
-  /** 延迟隐藏菜单（给 click 事件处理留时间） */
-  private clearMenuHideTimer(): void {
-    if (this.menuHideTimer) {
-      clearTimeout(this.menuHideTimer);
-      this.menuHideTimer = null;
     }
   }
 
@@ -598,8 +588,4 @@ export class FloatingWidget {
     }
   }
 
-  private clearTimers(): void {
-    this.clearLongPressTimer();
-    this.clearMenuHideTimer();
-  }
 }
