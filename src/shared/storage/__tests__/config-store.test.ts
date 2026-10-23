@@ -184,6 +184,12 @@ describe('ConfigStore', () => {
     expect(result).toEqual({ enabled: true, position: null, blacklist: [] });
   });
 
+  it('should keep Jev disabled and unconfigured by default', async () => {
+    const store = ConfigStore.getInstance();
+    const result = await store.get('jevSettings');
+    expect(result).toEqual({ enabled: false, apiKey: '' });
+  });
+
   // #13 floatingButtonSettings 写入
   it('should set floatingButtonSettings correctly', async () => {
     const store = ConfigStore.getInstance();

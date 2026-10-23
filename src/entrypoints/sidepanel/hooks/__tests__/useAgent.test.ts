@@ -166,6 +166,26 @@ describe('useAgent', () => {
     expect(result.current.status).toBe('idle');
   });
 
+  it('将持久化的 Jev 设置传给工具路由适配器', async () => {
+    const jevSettings = { enabled: true, apiKey: 'ts-test-key' };
+    mockConfigStoreGet.mockImplementation((key: string) => Promise.resolve(
+      key === 'jevSettings' ? jevSettings : { maxToolRounds: 99 },
+    ));
+    const { result } = renderHook(() => useAgent());
+
+    await act(async () => {
+      await result.current.run('conv-1', 'Review my recent activity.', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'chat-key',
+        isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    expect(state.capturedAdapterArgs[0]?.[7]).toEqual(jevSettings);
+  });
+
   it('run 发送 user 和 assistant 消息', async () => {
     const { result } = renderHook(() => useAgent());
     const onMessage = vi.fn();
@@ -389,14 +409,7 @@ describe('useAgent', () => {
         key === 'agentSettings'
           ? {
               maxToolRounds: 7,
-              systemPrompt: 'test',
               contextWindowTokens: 128000,
-              tokenBudgetMargin: 4096,
-              microcompactKeepRecent: 10,
-              microcompactMinChars: 500,
-              microcompactExcludeTools: [],
-              reasoningEffort: 'medium',
-              summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
             }
           : null,
       ),

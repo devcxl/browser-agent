@@ -4,6 +4,13 @@ import {
   LOCAL_CATEGORY_KEYWORDS,
   TOOL_CATEGORY_DESCRIPTIONS,
 } from '@/shared/tool-categories';
+import type { JevSettings } from '@/shared/types/storage';
+import {
+  JEV_NEGATIVE_THRESHOLD,
+  JEV_POSITIVE_THRESHOLD,
+  JevApiClient,
+  type JevDecision,
+} from './jev-api-client';
 
 // ---------------------------------------------------------------------------
 // 分类 prompt
@@ -33,6 +40,8 @@ const CACHE_LIMIT = 100;
 export class ToolClassifier {
   private cache = new Map<string, ToolCategory[]>();
 
+  constructor(private readonly jevClient: Pick<JevApiClient, 'classify'> = new JevApiClient()) {}
+
   /**
    * 工具预分类：优先本地关键词规则（零 LLM 往返），未命中时再用 LLM 兜底。
    * 将用户消息映射到工具类别列表。
@@ -42,18 +51,23 @@ export class ToolClassifier {
   async classify(
     userMessage: string,
     model: LanguageModel,
+    options: { jevSettings?: JevSettings; abortSignal?: AbortSignal } = {},
   ): Promise<ToolCategory[]> {
-    const cached = this.cache.get(userMessage);
-    if (cached) {
-      console.debug('[ToolClassifier] 缓存命中:', cached);
-      return cached;
-    }
-
     const local = classifyByKeywords(userMessage);
     if (local !== null) {
       console.debug('[ToolClassifier] 本地规则命中:', local);
       this.remember(userMessage, local);
       return local;
+    }
+
+    if (options.jevSettings?.enabled && options.jevSettings.apiKey.trim()) {
+      return this.classifyWithJev(userMessage, options.jevSettings.apiKey, options.abortSignal);
+    }
+
+    const cached = this.cache.get(userMessage);
+    if (cached) {
+      console.debug('[ToolClassifier] 缓存命中:', cached);
+      return cached;
     }
 
     try {
@@ -74,7 +88,7 @@ export class ToolClassifier {
         raw.push(...parseCategoryArray(result.reasoningText ?? ''));
       }
       console.debug('[ToolClassifier] generateText 完成', {
-        text: result.text.slice(0, 200),
+        textLength: result.text.length,
         reasoningLength: result.reasoningText?.length ?? 0,
         finishReason: result.finishReason,
         usage: result.usage,
@@ -94,7 +108,22 @@ export class ToolClassifier {
 
       return validCategories;
     } catch (err) {
-      console.warn('[ToolClassifier] classify 失败, 返回空数组', err);
+      console.warn('[ToolClassifier] classify 失败, 返回空数组', {
+        errorType: err instanceof Error ? err.name : 'unknown',
+      });
+      return [];
+    }
+  }
+
+  private async classifyWithJev(
+    userMessage: string,
+    apiKey: string,
+    abortSignal?: AbortSignal,
+  ): Promise<ToolCategory[]> {
+    try {
+      const decision = await this.jevClient.classify(userMessage, apiKey, abortSignal);
+      return selectConfidentCategories(decision);
+    } catch {
       return [];
     }
   }
@@ -112,6 +141,18 @@ export class ToolClassifier {
     }
     this.cache.set(userMessage, categories);
   }
+}
+
+function selectConfidentCategories(decision: JevDecision): ToolCategory[] {
+  const selected: ToolCategory[] = [];
+  for (const category of CATEGORY_NAMES) {
+    const probability = decision.probabilities[category];
+    if (probability > JEV_NEGATIVE_THRESHOLD && probability < JEV_POSITIVE_THRESHOLD) {
+      return [];
+    }
+    if (probability >= JEV_POSITIVE_THRESHOLD) selected.push(category);
+  }
+  return selected;
 }
 
 /**

@@ -8,22 +8,11 @@ import type { ExpertModeSettings } from './storage';
 
 export interface AgentConfig {
   maxToolRounds: number;
-  systemPrompt: string;
   /** 模型上下文窗口 token 上限，默认 128000 */
   contextWindowTokens: number;
   /** 预算截断安全边际（保留给 system prompt + 输出），默认 4096 */
   tokenBudgetMargin: number;
-  /** 工具结果微压缩：保留最近 N 条不压缩，默认 10 */
-  microcompactKeepRecent: number;
-  /** 工具结果微压缩：结果超过此字符数才触发，默认 500 */
-  microcompactMinChars: number;
-  /** 工具结果微压缩：始终不压缩的工具名列表 */
-  microcompactExcludeTools: string[];
   reasoningEffort?: ReasoningEffort;
-  summaryThreshold: {
-    messageCount: number;
-    estimatedTokens: number;
-  };
 }
 
 // ==================== Agent 运行输入/输出 ====================

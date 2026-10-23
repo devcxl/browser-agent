@@ -97,12 +97,6 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof SettingsPanel>
     agentSettings: {
       maxToolRounds: 10,
       contextWindowTokens: 128000,
-      tokenBudgetMargin: 4096,
-      microcompactKeepRecent: 10,
-      microcompactMinChars: 500,
-      microcompactExcludeTools: [],
-      systemPrompt: '',
-      reasoningEffort: 'medium' as const,
     },
     expertMode: { enabled: false, switches: {} },
     onSaveProviders: vi.fn(),

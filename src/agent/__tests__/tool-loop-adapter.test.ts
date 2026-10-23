@@ -32,7 +32,6 @@ vi.mock('ai', async () => {
     ToolLoopAgent: vi.fn().mockImplementation((options) => {
       capturedToolLoopAgentOptions = options;
       return {
-        generate: mockToolLoopAgentStream,
         stream: mockToolLoopAgentStream,
       };
     }),
@@ -226,13 +225,8 @@ describe('ToolLoopAdapter', () => {
   it('使用配置的单次任务最大执行步数', async () => {
     const config: AgentConfig = {
       maxToolRounds: 7,
-      systemPrompt: 'test',
       contextWindowTokens: 128000,
       tokenBudgetMargin: 4096,
-      microcompactKeepRecent: 10,
-      microcompactMinChars: 500,
-      microcompactExcludeTools: [],
-      summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
     };
     const configuredAdapter = new ToolLoopAdapter(
       mockToolRegistry,
@@ -316,13 +310,8 @@ describe('ToolLoopAdapter', () => {
       'test-model',
       {
         maxToolRounds: 99,
-        systemPrompt: 'browser assistant',
         contextWindowTokens: 1_000,
         tokenBudgetMargin: 100,
-        microcompactKeepRecent: 10,
-        microcompactMinChars: 500,
-        microcompactExcludeTools: [],
-        summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
       },
     );
     await compactingAdapter.run(basicInput);
@@ -400,13 +389,8 @@ describe('ToolLoopAdapter', () => {
       'test-model',
       {
         maxToolRounds: 99,
-        systemPrompt: 'browser assistant',
         contextWindowTokens: 10_000,
         tokenBudgetMargin: 100,
-        microcompactKeepRecent: 10,
-        microcompactMinChars: 500,
-        microcompactExcludeTools: [],
-        summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
       },
     );
 
@@ -462,13 +446,8 @@ describe('ToolLoopAdapter', () => {
       'test-model',
       {
         maxToolRounds: 99,
-        systemPrompt: 'browser assistant',
         contextWindowTokens: 10_000,
         tokenBudgetMargin: 100,
-        microcompactKeepRecent: 10,
-        microcompactMinChars: 500,
-        microcompactExcludeTools: [],
-        summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
       },
     );
 
@@ -910,107 +889,6 @@ describe('ToolLoopAdapter', () => {
   });
 });
 
-// ==================== Agent 接口（懒加载路径） ====================
-
-describe('ToolLoopAdapter Agent 接口', () => {
-  let adapter: ToolLoopAdapter;
-  let mockToolRegistry: IToolRegistry;
-  let mockGuardrail: IGuardrail;
-  let mockConversationManager: IConversationManager;
-  let providerConfig: ProviderConfig;
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    capturedToolLoopAgentOptions = null;
-    mockToolRegistry = createMockToolRegistry([createMockTool('tabs_query')]);
-    mockGuardrail = createMockGuardrail();
-    mockConversationManager = createMockConversationManager();
-    providerConfig = createMockProviderConfig();
-    adapter = new ToolLoopAdapter(
-      mockToolRegistry,
-      mockGuardrail,
-      mockConversationManager,
-      providerConfig,
-      'test-model',
-    );
-  });
-
-  it('version 返回 agent-v1，id 为 undefined', () => {
-    expect(adapter.version).toBe('agent-v1');
-    expect(adapter.id).toBeUndefined();
-  });
-
-  it('tools getter 懒加载 buildTools 并缓存', () => {
-    const tools = adapter.tools;
-    expect(Object.keys(tools)).toEqual(['tabs_query']);
-    expect(adapter.tools).toBe(tools);
-  });
-
-  it('generate 通过懒加载 agent 转发', async () => {
-    mockToolLoopAgentStream.mockResolvedValue('gen-result');
-    const result = await adapter.generate({ prompt: 'x' });
-    expect(result).toBe('gen-result');
-    expect(mockToolLoopAgentStream).toHaveBeenCalledWith({ prompt: 'x' });
-  });
-
-  it('stream 通过懒加载 agent 转发', async () => {
-    mockToolLoopAgentStream.mockResolvedValue('stream-result');
-    const result = await adapter.stream({ prompt: 'x' });
-    expect(result).toBe('stream-result');
-    expect(mockToolLoopAgentStream).toHaveBeenCalledWith({ prompt: 'x' });
-  });
-
-  it('lazy 路径（generate）完整执行 prepareStep 与 onStepFinish', async () => {
-    mockToolClassifierClassify.mockResolvedValue(['tabs']);
-    const modelsProviderConfig = createMockProviderConfig();
-    modelsProviderConfig.models = {
-      'test-model': {
-        id: 'test-model',
-        name: 'Test Model',
-        defaults: { maxOutputTokens: 512, temperature: 0.2 },
-      },
-    };
-    const lazy = new ToolLoopAdapter(
-      createMockToolRegistry([createMockTool('tabs_query')]),
-      mockGuardrail,
-      mockConversationManager,
-      modelsProviderConfig,
-      'test-model',
-    );
-    mockToolLoopAgentStream.mockResolvedValue('ok');
-    await lazy.generate({ messages: [] });
-
-    expect(capturedToolLoopAgentOptions?.['maxOutputTokens']).toBe(512);
-    expect(capturedToolLoopAgentOptions?.['temperature']).toBe(0.2);
-
-    const prepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
-      messages: Array<{ role: string; content: string }>;
-      stepNumber: number;
-      model: unknown;
-    }) => Promise<{ activeTools?: string[]; messages?: unknown[] }>;
-    const result = await prepareStep({
-      messages: [{ role: 'user', content: '查询标签页' }],
-      stepNumber: 0,
-      model: {},
-    });
-    expect(result).toBeDefined();
-
-    const onStepFinish = capturedToolLoopAgentOptions?.onStepFinish as (input: unknown) => void;
-    expect(() => onStepFinish({ toolCalls: [] })).not.toThrow();
-  });
-
-  it('abort 中断后懒加载 agent 重建', async () => {
-    mockToolLoopAgentStream.mockResolvedValue('x');
-    await adapter.generate({ prompt: 'a' });
-    await adapter.generate({ prompt: 'b' });
-    expect(vi.mocked((await import('ai')).ToolLoopAgent)).toHaveBeenCalledTimes(1);
-
-    adapter.abort();
-    await adapter.generate({ prompt: 'c' });
-    expect(vi.mocked((await import('ai')).ToolLoopAgent)).toHaveBeenCalledTimes(2);
-  });
-});
-
 // ==================== run()：事件流消费 / 异常路径 ====================
 
 describe('ToolLoopAdapter run() 事件流与异常', () => {
@@ -1354,13 +1232,8 @@ describe('ToolLoopAdapter 上下文压缩', () => {
   function makeConfig(contextWindowTokens: number): AgentConfig {
     return {
       maxToolRounds: 99,
-      systemPrompt: 'browser assistant',
       contextWindowTokens,
       tokenBudgetMargin: 100,
-      microcompactKeepRecent: 10,
-      microcompactMinChars: 500,
-      microcompactExcludeTools: [],
-      summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
     };
   }
 
@@ -1873,14 +1746,9 @@ describe('ToolLoopAdapter reasoningEffort 映射', () => {
   it('reasoningEffort=max 映射为 xhigh', async () => {
     const config: AgentConfig = {
       maxToolRounds: 5,
-      systemPrompt: 'test',
       contextWindowTokens: 128000,
       tokenBudgetMargin: 4096,
-      microcompactKeepRecent: 10,
-      microcompactMinChars: 500,
-      microcompactExcludeTools: [],
       reasoningEffort: 'max',
-      summaryThreshold: { messageCount: 30, estimatedTokens: 12_000 },
     };
     const adapterInstance = new ToolLoopAdapter(
       createMockToolRegistry([]),

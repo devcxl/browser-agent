@@ -102,13 +102,12 @@ export type {
   StorageSchema,
   AgentSettings,
   ExpertModeSettings,
+  JevSettings,
   ExpertApiDomain,
   UserPreferences,
   FloatingButtonSettings,
   DbConversation,
   DbMessage,
-  DbToolCallLog,
-  DbSnapshot,
   IConfigStore,
 } from './storage';
 

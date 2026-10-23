@@ -1,8 +1,6 @@
 import type {
   DbConversation,
   DbMessage,
-  DbToolCallLog,
-  DbSnapshot,
   SkillResource,
 } from '@/shared/types';
 import { DB_NAME, DB_VERSION } from '@/shared/types';
@@ -13,8 +11,6 @@ export { DB_NAME, DB_VERSION };
 export const StoreNames = {
   CONVERSATIONS: 'conversations',
   MESSAGES: 'messages',
-  TOOL_CALL_LOGS: 'toolCallLogs',
-  SNAPSHOTS: 'snapshots',
   SKILL_CONTENTS: 'skillContents',
 } as const;
 
@@ -32,20 +28,6 @@ export interface BrowserAgentDB {
     indexes: {
       byConversation: string;
       byConversationAndTime: [string, number];
-    };
-  };
-  [StoreNames.TOOL_CALL_LOGS]: {
-    key: string;
-    value: DbToolCallLog;
-    indexes: {
-      byConversation: string;
-    };
-  };
-  [StoreNames.SNAPSHOTS]: {
-    key: string;
-    value: DbSnapshot;
-    indexes: {
-      byCapturedAt: number;
     };
   };
   [StoreNames.SKILL_CONTENTS]: {
@@ -70,15 +52,17 @@ export async function openBrowserAgentDB(): Promise<BrowserAgentDatabase> {
         const msgStore = db.createObjectStore(StoreNames.MESSAGES, { keyPath: 'id' });
         msgStore.createIndex('byConversation', 'conversationId');
         msgStore.createIndex('byConversationAndTime', ['conversationId', 'timestamp']);
-
-        const logStore = db.createObjectStore(StoreNames.TOOL_CALL_LOGS, { keyPath: 'id' });
-        logStore.createIndex('byConversation', 'conversationId');
-
-        const snapStore = db.createObjectStore(StoreNames.SNAPSHOTS, { keyPath: 'id' });
-        snapStore.createIndex('byCapturedAt', 'capturedAt');
       }
       if (oldVersion < 3) {
         db.createObjectStore(StoreNames.SKILL_CONTENTS, { keyPath: 'skillId' });
+      }
+      if (oldVersion < 4) {
+        if (db.objectStoreNames.contains('toolCallLogs')) {
+          db.deleteObjectStore('toolCallLogs');
+        }
+        if (db.objectStoreNames.contains('snapshots')) {
+          db.deleteObjectStore('snapshots');
+        }
       }
     },
   });

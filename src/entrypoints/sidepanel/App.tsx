@@ -57,12 +57,6 @@ function ChatLayout() {
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     maxToolRounds: 99,
     contextWindowTokens: 128000,
-    tokenBudgetMargin: 4096,
-    microcompactKeepRecent: 10,
-    microcompactMinChars: 500,
-    microcompactExcludeTools: [],
-    systemPrompt: '',
-    reasoningEffort: 'medium',
   });
   const [expertMode, setExpertMode] = useState<ExpertModeSettings>({
     enabled: false,
@@ -114,12 +108,6 @@ function ChatLayout() {
       setAgentSettings({
         maxToolRounds: saved.maxToolRounds,
         contextWindowTokens: saved.contextWindowTokens ?? 128000,
-        tokenBudgetMargin: saved.tokenBudgetMargin ?? 4096,
-        microcompactKeepRecent: saved.microcompactKeepRecent ?? 10,
-        microcompactMinChars: saved.microcompactMinChars ?? 500,
-        microcompactExcludeTools: saved.microcompactExcludeTools ?? [],
-        systemPrompt: saved.systemPrompt,
-        reasoningEffort: saved.reasoningEffort ?? 'medium',
       });
       setExpertMode(await store.get('expertModeSettings'));
       const prefs = await store.get('preferences');
@@ -159,17 +147,7 @@ function ChatLayout() {
     setAgentSettings(s);
     await store.set('agentSettings', {
       maxToolRounds: s.maxToolRounds,
-      systemPrompt: s.systemPrompt,
       contextWindowTokens: s.contextWindowTokens,
-      tokenBudgetMargin: s.tokenBudgetMargin,
-      microcompactKeepRecent: s.microcompactKeepRecent,
-      microcompactMinChars: s.microcompactMinChars,
-      microcompactExcludeTools: s.microcompactExcludeTools,
-      reasoningEffort: s.reasoningEffort,
-      summaryThreshold: {
-        messageCount: 30,
-        estimatedTokens: 12000,
-      },
     });
   }, []);
   const handleSaveExpertMode = useCallback(async (e: ExpertModeSettings) => {

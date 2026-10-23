@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
-import type { ProviderConfig, ProviderModelConfig } from '@/shared/types';
+import type { JevSettings, ProviderConfig, ProviderModelConfig } from '@/shared/types';
 import type { ToolCallRecord } from '@/shared/types/agent';
 import type { IAgentRuntime, AgentConfig } from '@/shared/types/agent';
 import type { IToolRegistry } from '@/registry/types';
@@ -160,16 +160,12 @@ export function useAgent() {
 
         const { ToolLoopAdapter, registry, guardrail, convManager, LlmClient } = await getDeps();
         const savedAgentSettings = await ConfigStore.getInstance().get('agentSettings');
+        const savedJevSettings = await ConfigStore.getInstance().get<JevSettings>('jevSettings');
         const agentConfig: AgentConfig = {
           maxToolRounds: savedAgentSettings?.maxToolRounds ?? 99,
-          systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
           contextWindowTokens: modelConfig?.limit?.context ?? 128000,
           tokenBudgetMargin: 4096,
-          microcompactKeepRecent: 10,
-          microcompactMinChars: 500,
-          microcompactExcludeTools: [],
           reasoningEffort,
-          summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
         };
         const generateTitle = () => {
           console.debug('[Title] fire-and-forget 启动', { conversationId, model });
@@ -208,6 +204,7 @@ export function useAgent() {
               });
             });
           },
+          savedJevSettings ?? { enabled: false, apiKey: '' },
         );
         loopRef.current = adapter;
         const displayedToolCallIds = new Set<string>();

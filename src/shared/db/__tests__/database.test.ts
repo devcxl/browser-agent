@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Database } from '../database';
-import { openBrowserAgentDB, StoreNames, DB_NAME } from '../schema';
-import type { DbConversation, DbMessage, DbToolCallLog, DbSnapshot } from '@/shared/types';
+import { openBrowserAgentDB, StoreNames, DB_NAME, DB_VERSION } from '../schema';
+import type { DbConversation, DbMessage } from '@/shared/types';
 
 function makeConv(overrides: Partial<DbConversation> = {}): DbConversation {
   const now = Date.now();
@@ -33,36 +33,6 @@ function makeMsg(
   };
 }
 
-function makeLog(
-  conversationId: string,
-  overrides: Partial<DbToolCallLog> = {},
-): DbToolCallLog {
-  const now = Date.now();
-  return {
-    id: `log-${now}-${Math.random()}`,
-    conversationId,
-    toolName: 'testTool',
-    riskLevel: 'low',
-    paramsSummary: '{}',
-    resultSummary: 'success',
-    success: true,
-    confirmedByUser: true,
-    timestamp: now,
-    ...overrides,
-  };
-}
-
-function makeSnapshot(overrides: Partial<DbSnapshot> = {}): DbSnapshot {
-  const now = Date.now();
-  return {
-    id: `snap-${now}-${Math.random()}`,
-    type: 'tab',
-    data: '{}',
-    capturedAt: now,
-    ...overrides,
-  };
-}
-
 describe('Database', () => {
   beforeEach(async () => {
     Database.resetInstance();
@@ -82,13 +52,56 @@ describe('Database', () => {
     expect(a).toBe(b);
   });
 
-  // #2 数据库初始化 - 4 张表存在
-  it('should create database with 4 object stores', async () => {
+  // #2 数据库初始化 - 3 张表存在
+  it('should create database with current object stores', async () => {
     const db = await openBrowserAgentDB();
     expect(db.objectStoreNames).toContain(StoreNames.CONVERSATIONS);
     expect(db.objectStoreNames).toContain(StoreNames.MESSAGES);
-    expect(db.objectStoreNames).toContain(StoreNames.TOOL_CALL_LOGS);
-    expect(db.objectStoreNames).toContain(StoreNames.SNAPSHOTS);
+    expect(db.objectStoreNames).toContain(StoreNames.SKILL_CONTENTS);
+    expect(db.objectStoreNames).toHaveLength(3);
+    db.close();
+  });
+
+  it('removes obsolete stores when upgrading a version 3 database and preserves conversations', async () => {
+    const request = indexedDB.open(DB_NAME, 3);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      const conversations = db.createObjectStore('conversations', { keyPath: 'id' });
+      conversations.createIndex('byUpdatedAt', 'updatedAt');
+      const messages = db.createObjectStore('messages', { keyPath: 'id' });
+      messages.createIndex('byConversation', 'conversationId');
+      messages.createIndex('byConversationAndTime', ['conversationId', 'timestamp']);
+      const logs = db.createObjectStore('toolCallLogs', { keyPath: 'id' });
+      logs.createIndex('byConversation', 'conversationId');
+      const snapshots = db.createObjectStore('snapshots', { keyPath: 'id' });
+      snapshots.createIndex('byCapturedAt', 'capturedAt');
+      db.createObjectStore('skillContents', { keyPath: 'skillId' });
+    };
+    const legacyDb = await new Promise<IDBDatabase>((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+    const conversation = makeConv({ id: 'preserved-conversation' });
+    await new Promise<void>((resolve, reject) => {
+      const tx = legacyDb.transaction(['conversations', 'toolCallLogs', 'snapshots'], 'readwrite');
+      tx.objectStore('conversations').put(conversation);
+      tx.objectStore('toolCallLogs').put({ id: 'legacy-log', conversationId: conversation.id });
+      tx.objectStore('snapshots').put({ id: 'legacy-snapshot', capturedAt: 1 });
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    legacyDb.close();
+
+    const db = await openBrowserAgentDB();
+    expect(db.version).toBe(DB_VERSION);
+    expect(db.objectStoreNames).toContain(StoreNames.CONVERSATIONS);
+    expect(db.objectStoreNames).toContain(StoreNames.MESSAGES);
+    expect(db.objectStoreNames).toContain(StoreNames.SKILL_CONTENTS);
+    expect(db.objectStoreNames).not.toContain('toolCallLogs');
+    expect(db.objectStoreNames).not.toContain('snapshots');
+    await expect(db.get(StoreNames.CONVERSATIONS, conversation.id)).resolves.toEqual(conversation);
     db.close();
   });
 
@@ -148,20 +161,16 @@ describe('Database', () => {
   });
 
   // #7 deleteConversation 级联
-  it('should cascade delete messages and tool call logs', async () => {
+  it('should cascade delete messages', async () => {
     const db = Database.getInstance();
     await db.putConversation(makeConv({ id: 'conv-del' }));
     await db.putMessage(makeMsg('conv-del', { id: 'm1' }));
     await db.putMessage(makeMsg('conv-del', { id: 'm2' }));
     await db.putMessage(makeMsg('conv-del', { id: 'm3' }));
-    await db.putToolCallLog(makeLog('conv-del', { id: 'l1' }));
-    await db.putToolCallLog(makeLog('conv-del', { id: 'l2' }));
-
     await db.deleteConversation('conv-del');
 
     expect(await db.getConversation('conv-del')).toBeUndefined();
     expect(await db.getMessagesByConversation('conv-del')).toHaveLength(0);
-    expect(await db.getToolCallLogsByConversation('conv-del')).toHaveLength(0);
   });
 
   // #8 putMessage
@@ -246,55 +255,6 @@ describe('Database', () => {
     await db.putMessage(makeMsg('conv-del-msg', { id: 'del-msg' }));
     await db.deleteMessage('del-msg');
     expect(await db.getMessage('del-msg')).toBeUndefined();
-  });
-
-  // #13 putToolCallLog
-  it('should put a tool call log', async () => {
-    const db = Database.getInstance();
-    await db.putToolCallLog(makeLog('conv-log', { id: 'log-1' }));
-    const logs = await db.getToolCallLogsByConversation('conv-log');
-    expect(logs).toHaveLength(1);
-  });
-
-  // #14 getToolCallLogsByConversation
-  it('should get tool call logs by conversation', async () => {
-    const db = Database.getInstance();
-    await db.putToolCallLog(makeLog('conv-logs', { id: 'l1' }));
-    await db.putToolCallLog(makeLog('conv-logs', { id: 'l2' }));
-    await db.putToolCallLog(makeLog('conv-logs', { id: 'l3' }));
-    const logs = await db.getToolCallLogsByConversation('conv-logs');
-    expect(logs).toHaveLength(3);
-  });
-
-  // #15 putSnapshot
-  it('should put a snapshot', async () => {
-    const db = Database.getInstance();
-    await db.putSnapshot(makeSnapshot({ id: 'snap-1' }));
-    const snaps = await db.getSnapshotsByTimeRange(0, Date.now());
-    expect(snaps).toHaveLength(1);
-  });
-
-  // #16 getSnapshotsByTimeRange
-  it('should get snapshots by time range', async () => {
-    const db = Database.getInstance();
-    await db.putSnapshot(makeSnapshot({ id: 's1', capturedAt: 100 }));
-    await db.putSnapshot(makeSnapshot({ id: 's2', capturedAt: 200 }));
-    await db.putSnapshot(makeSnapshot({ id: 's3', capturedAt: 300 }));
-    const range = await db.getSnapshotsByTimeRange(150, 250);
-    expect(range).toHaveLength(1);
-    expect(range[0]!.id).toBe('s2');
-  });
-
-  // #17 deleteOldSnapshots
-  it('should delete old snapshots', async () => {
-    const db = Database.getInstance();
-    await db.putSnapshot(makeSnapshot({ id: 's1', capturedAt: 100 }));
-    await db.putSnapshot(makeSnapshot({ id: 's2', capturedAt: 200 }));
-    await db.putSnapshot(makeSnapshot({ id: 's3', capturedAt: 300 }));
-    await db.deleteOldSnapshots(250);
-    const remaining = await db.getSnapshotsByTimeRange(0, Date.now());
-    expect(remaining).toHaveLength(1);
-    expect(remaining[0]!.id).toBe('s3');
   });
 
   // #18 putMessagesBatch

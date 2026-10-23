@@ -1,4 +1,4 @@
-import type { RiskLevel, ToolResult, ReasoningEffort } from '@/shared/types';
+import type { RiskLevel, ToolResult } from '@/shared/types';
 import type { UIMessage as AiUIMessage } from 'ai';
 
 export type AgentStatus = 'idle' | 'running' | 'streaming' | 'waitingConfirmation';
@@ -63,12 +63,6 @@ export interface ConversationSummary {
 export interface AgentSettings {
   maxToolRounds: number;
   contextWindowTokens: number;
-  tokenBudgetMargin: number;
-  microcompactKeepRecent: number;
-  microcompactMinChars: number;
-  microcompactExcludeTools: string[];
-  systemPrompt: string;
-  reasoningEffort: ReasoningEffort;
 }
 
 export interface ExpertModeSettings {

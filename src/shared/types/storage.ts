@@ -1,5 +1,4 @@
 import type { ProviderConfig } from './llm';
-import type { ReasoningEffort } from './llm';
 import type { Skill, SkillSubscription } from './skill';
 
 // ==================== chrome.storage.local 存储 Schema ====================
@@ -22,6 +21,8 @@ export interface StorageSchema {
   agentSettings: AgentSettings;
   /** Expert Mode 设置 */
   expertModeSettings: ExpertModeSettings;
+  /** Jev 结构化决策服务设置 */
+  jevSettings: JevSettings;
   /** 全局偏好 */
   preferences: UserPreferences;
   /** 最近活跃会话 ID */
@@ -37,30 +38,18 @@ export interface StorageSchema {
 export interface AgentSettings {
   /** 单次任务最大执行步数，默认 99 */
   maxToolRounds: number;
-  /** 系统提示词 */
-  systemPrompt: string;
   /** 模型上下文窗口 token 上限，默认 128000 */
   contextWindowTokens: number;
-  /** 预算截断安全边际，默认 4096 */
-  tokenBudgetMargin: number;
-  /** 工具结果微压缩：保留最近 N 条不压缩，默认 10 */
-  microcompactKeepRecent: number;
-  /** 工具结果微压缩：结果超过此字符数才触发，默认 500 */
-  microcompactMinChars: number;
-  /** 工具结果微压缩：始终不压缩的工具名列表 */
-  microcompactExcludeTools: string[];
-  /** 思考强度，默认 medium */
-  reasoningEffort: ReasoningEffort;
-  /** 摘要触发阈值 */
-  summaryThreshold: {
-    messageCount: number;    // 默认 30
-    estimatedTokens: number;  // 默认 12000
-  };
 }
 
 export interface ExpertModeSettings {
   enabled: boolean;
   switches: Record<string, boolean>;
+}
+
+export interface JevSettings {
+  enabled: boolean;
+  apiKey: string;
 }
 
 /** Expert Mode 支持的 API 域列表 */
@@ -89,7 +78,7 @@ export interface UserPreferences {
 
 /** IndexedDB 数据库名 */
 export const DB_NAME = 'browser-agent-db';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 /** conversations 表 */
 export interface DbConversation {
@@ -115,27 +104,6 @@ export interface DbMessage {
   /** 工具调用 ID（仅 tool 消息包含） */
   toolCallId?: string;
   timestamp: number;
-}
-
-/** toolCallLogs 表 */
-export interface DbToolCallLog {
-  id: string;
-  conversationId: string;
-  toolName: string;
-  riskLevel: string;
-  paramsSummary: string;
-  resultSummary: string;
-  success: boolean;
-  confirmedByUser: boolean;
-  timestamp: number;
-}
-
-/** snapshots 表 */
-export interface DbSnapshot {
-  id: string;
-  type: 'tab' | 'window' | 'tabGroup';
-  data: string; // JSON
-  capturedAt: number;
 }
 
 // ==================== ConfigStore 接口 ====================

@@ -4,6 +4,7 @@ import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
 import type { LowSensitivityContext } from '@/shared/types/browser';
+import type { JevSettings } from '@/shared/types/storage';
 import type { ToolResult, RiskLevel } from '@/shared/types/tool';
 import { ToolLoopAgent, generateText, isStepCount, isLoopFinished, pruneMessages } from 'ai';
 import type {
@@ -27,7 +28,7 @@ import {
 import { ToolClassifier } from './tool-classifier';
 import { TOOL_CATEGORY_DESCRIPTIONS } from '@/shared/tool-categories';
 import type { ToolCategory } from '@/shared/types/tool';
-import { DEFAULT_AGENT_CONFIG } from './system-prompt';
+import { DEFAULT_AGENT_CONFIG } from './agent-config';
 
 /** 常驻类别：高频操作不参与懒加载过滤，分类失效时仍有核心能力可用 */
 const CORE_TOOL_CATEGORIES: readonly ToolCategory[] = [
@@ -88,36 +89,17 @@ export class ToolLoopAdapter implements IAgentRuntime {
     private modelId: string,
     private agentConfig: AgentConfig = DEFAULT_AGENT_CONFIG as AgentConfig,
     onRequestApproval?: OnRequestApproval,
+    private jevSettings: JevSettings = { enabled: false, apiKey: '' },
   ) {
     this.onRequestApproval = onRequestApproval;
     this.toolClassifier = new ToolClassifier();
   }
 
-  // ─── Agent 接口 ──────────────────────────────────────
-
-  get version(): 'agent-v1' {
-    return 'agent-v1';
-  }
-
-  get id(): string | undefined {
-    return undefined;
-  }
-
-  get tools(): AdapterTools {
+  private get tools(): AdapterTools {
     if (!this._tools) {
       this._tools = this.buildTools();
     }
     return this._tools;
-  }
-
-  async generate(options: any): Promise<any> {
-    const agent = await this.getOrCreateAgent();
-    return agent.generate(options);
-  }
-
-  async stream(options: any): Promise<any> {
-    const agent = await this.getOrCreateAgent();
-    return agent.stream(options);
   }
 
   // ─── IAgentRuntime 接口 ──────────────────────────────
@@ -129,7 +111,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   async run(input: AgentRunInput): Promise<AgentRunOutput> {
-    console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId, message: input.userMessage.slice(0, 100) });
+    console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId });
     this.abortController = new AbortController();
     const toolCalls: ToolCallRecord[] = [];
     const persistenceTasks: Promise<void>[] = [];
@@ -192,7 +174,6 @@ export class ToolLoopAdapter implements IAgentRuntime {
       const usage = finalStep.usage ?? (await result.usage);
       await Promise.all(persistenceTasks);
       console.debug('[ToolLoopAdapter] 执行完成', {
-        finalText: finalStep.text?.slice(0, 80),
         toolCalls: toolCalls.length,
         usage,
       });
@@ -214,7 +195,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
     } catch (err) {
       await Promise.allSettled(persistenceTasks);
       const message = err instanceof Error ? err.message : String(err);
-      console.error('[ToolLoopAdapter] run() 异常', err);
+      console.error('[ToolLoopAdapter] run() 异常', {
+        errorType: err instanceof Error ? err.name : typeof err,
+      });
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -227,33 +210,6 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   // ─── 私有方法 ──────────────────────────────────────────
-
-  /** 懒加载创建 ToolLoopAgent（仅首次或 abort 后重建） */
-  private async getOrCreateAgent(): Promise<ToolLoopAgent> {
-    if (!this._agent) {
-      this.abortController = new AbortController();
-      this._agent = new ToolLoopAgent({
-        model: await this.createModel(),
-        maxOutputTokens: this.getModelConfig()?.defaults?.maxOutputTokens,
-        temperature: this.getModelConfig()?.defaults?.temperature,
-        reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
-        tools: this.tools,
-        allowSystemInMessages: true,
-        stopWhen: [isStepCount(Math.max(1, this.agentConfig.maxToolRounds)), isLoopFinished()],
-        toolApproval: this.createToolApproval(),
-        prepareStep: async ({ messages, stepNumber, model }) => {
-          // 工具懒加载：step 0 时 LLM 预分类
-          const toolFilter = await this.classifyAndFilterTools(messages, stepNumber, model);
-          const prunedMessages = this.pruneContextIfNeeded(messages);
-          return { ...(prunedMessages ? { messages: prunedMessages } : {}), ...toolFilter };
-        },
-        onStepFinish: () => {
-          // toolCalls 记录由 useChat 框架处理，此处不重复记录
-        },
-      });
-    }
-    return this._agent;
-  }
 
   /** 为 run() 路径创建 agent（带 run() 特有的 onStepFinish 和正确的 guardrail 上下文） */
   private async ensureAgentCreated(input: AgentRunInput): Promise<void> {
@@ -397,12 +353,15 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
 
     try {
-      console.debug('[ToolLoopAdapter] classify: 开始 LLM 分类, message:', lastUserMsg.content.slice(0, 80));
-      const categories = await this.toolClassifier.classify(
-        lastUserMsg.content,
-        model,
-      );
-      console.debug('[ToolLoopAdapter] classify: LLM 返回 categories:', categories);
+      const jevEnabled = this.jevSettings.enabled && this.jevSettings.apiKey.trim().length > 0;
+      console.debug('[ToolLoopAdapter] classify: 开始分类', { usingJev: jevEnabled });
+      const categories = jevEnabled
+        ? await this.toolClassifier.classify(lastUserMsg.content, model, {
+          jevSettings: this.jevSettings,
+          abortSignal: this.abortController?.signal,
+        })
+        : await this.toolClassifier.classify(lastUserMsg.content, model);
+      console.debug('[ToolLoopAdapter] classify: 返回 categories:', categories);
 
       if (categories.length === 0) {
         console.debug('[ToolLoopAdapter] classify: 无匹配类别, 降级到全量工具');
@@ -423,7 +382,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
       return toolNames.length > 0 ? { activeTools: toolNames } : {};
     } catch (err) {
-      console.warn('[ToolLoopAdapter] classify: 分类失败, 降级到全量工具', err);
+      console.warn('[ToolLoopAdapter] classify: 分类失败, 降级到全量工具', {
+        errorType: err instanceof Error ? err.name : typeof err,
+      });
       return {};
     }
   }
@@ -650,7 +611,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
       });
       return true;
     } catch (error) {
-      console.warn('[ToolLoopAdapter] 上下文摘要失败，继续使用原始历史', error);
+      console.warn('[ToolLoopAdapter] 上下文摘要失败，继续使用原始历史', {
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
       return false;
     }
   }

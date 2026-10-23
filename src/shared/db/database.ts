@@ -96,7 +96,6 @@ export class Database {
     const db = await this.getDB();
     await db.delete(StoreNames.CONVERSATIONS, id);
     await this.deleteMessagesByConversation(id);
-    await this.deleteToolCallLogsByConversation(id);
   }
 
   async listConversationsByUpdatedAt(): Promise<BrowserAgentDB['conversations']['value'][]> {
@@ -164,61 +163,6 @@ export class Database {
   async countMessagesByConversation(conversationId: string): Promise<number> {
     const db = await this.getDB();
     return db.countFromIndex(StoreNames.MESSAGES, 'byConversation', conversationId);
-  }
-
-  // ── ToolCallLogs CRUD ───────────────────────────────
-
-  async putToolCallLog(log: BrowserAgentDB['toolCallLogs']['value']): Promise<void> {
-    const db = await this.getDB();
-    await db.put(StoreNames.TOOL_CALL_LOGS, log);
-  }
-
-  async getToolCallLogsByConversation(
-    conversationId: string,
-  ): Promise<BrowserAgentDB['toolCallLogs']['value'][]> {
-    const db = await this.getDB();
-    return db.getAllFromIndex(StoreNames.TOOL_CALL_LOGS, 'byConversation', conversationId);
-  }
-
-  async deleteToolCallLogsByConversation(conversationId: string): Promise<void> {
-    const db = await this.getDB();
-    const tx = db.transaction(StoreNames.TOOL_CALL_LOGS, 'readwrite');
-    const index = tx.store.index('byConversation');
-    let cursor = await index.openCursor(conversationId);
-    while (cursor) {
-      cursor.delete();
-      cursor = await cursor.continue();
-    }
-    await tx.done;
-  }
-
-  // ── Snapshots CRUD ──────────────────────────────────
-
-  async putSnapshot(snapshot: BrowserAgentDB['snapshots']['value']): Promise<void> {
-    const db = await this.getDB();
-    await db.put(StoreNames.SNAPSHOTS, snapshot);
-  }
-
-  async getSnapshotsByTimeRange(
-    startTime: number,
-    endTime: number,
-  ): Promise<BrowserAgentDB['snapshots']['value'][]> {
-    const db = await this.getDB();
-    const tx = db.transaction(StoreNames.SNAPSHOTS);
-    const index = tx.store.index('byCapturedAt');
-    return index.getAll(IDBKeyRange.bound(startTime, endTime));
-  }
-
-  async deleteOldSnapshots(beforeTime: number): Promise<void> {
-    const db = await this.getDB();
-    const tx = db.transaction(StoreNames.SNAPSHOTS, 'readwrite');
-    const index = tx.store.index('byCapturedAt');
-    let cursor = await index.openCursor(IDBKeyRange.upperBound(beforeTime, true));
-    while (cursor) {
-      cursor.delete();
-      cursor = await cursor.continue();
-    }
-    await tx.done;
   }
 
   // ── 事务操作 ────────────────────────────────────────
