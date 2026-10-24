@@ -10,7 +10,8 @@ import { useI18n } from './i18n/useI18n';
 import { useEmbeddedStatusBridge } from './hooks/useEmbeddedStatusBridge';
 import { ConfigStore } from '@/shared/storage';
 import { ProviderCatalog } from '@/provider/provider-catalog';
-import { createLanguageModel } from '@/provider/language-model';
+import { pickConnectionTestModelId, testProviderConnection } from '@/provider/connection-test';
+import type { ConnectionTestResult } from '@/provider/connection-test';
 import { applyTheme } from './theme';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
@@ -225,18 +226,11 @@ function ChatLayout() {
   );
 
   const handleTestConnection = useCallback(
-    async (provider: ProviderConfig): Promise<boolean> => {
-      try {
-        const models = await ProviderCatalog.getInstance().getModels(provider);
-        if (models.length === 0) return false;
-        // 能构造出模型即视为配置可用（真实连通性验证不在本次范围）
-        await createLanguageModel(provider, models[0]!.id);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    [],
+    (provider: ProviderConfig): Promise<ConnectionTestResult> => testProviderConnection(
+      provider,
+      pickConnectionTestModelId(provider, activeProvider?.id, selectedModelId),
+    ),
+    [activeProvider?.id, selectedModelId],
   );
 
   const handleCloseOnboarding = useCallback(() => {

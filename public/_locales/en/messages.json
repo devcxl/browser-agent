@@ -248,6 +248,27 @@
   "settings_provider_testing": {
     "message": "Testing..."
   },
+  "settings_provider_testSuccess": {
+    "message": "Connection verified"
+  },
+  "settings_provider_testFailed": {
+    "message": "Connection failed"
+  },
+  "settings_provider_testReasonMissingModel": {
+    "message": "No available model configured"
+  },
+  "settings_provider_testReasonAuth": {
+    "message": "Authentication failed. Check API key"
+  },
+  "settings_provider_testReasonTimeout": {
+    "message": "Connection timed out"
+  },
+  "settings_provider_testReasonEmptyResponse": {
+    "message": "Empty response from model"
+  },
+  "settings_provider_testReasonRequestFailed": {
+    "message": "Request failed (check Base URL or version path like /v1)"
+  },
   "settings_provider_trusted": {
     "message": "Trusted"
   },

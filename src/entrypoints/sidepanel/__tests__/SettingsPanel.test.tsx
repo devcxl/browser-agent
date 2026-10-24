@@ -1,9 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SettingsPanel } from '../components/SettingsPanel';
 import type { ProviderConfig } from '@/shared/types';
+import type { ConnectionTestResult } from '@/provider/connection-test';
 import { ConfigStore } from '@/shared/storage';
 import { createI18nMock } from '@/test/i18n-mock';
 
@@ -102,7 +103,7 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof SettingsPanel>
     onSaveProviders: vi.fn(),
     onSaveAgentSettings: vi.fn(),
     onSaveExpertMode: vi.fn(),
-    onTestConnection: vi.fn().mockResolvedValue(true),
+    onTestConnection: vi.fn().mockResolvedValue({ ok: true }),
     onClose: vi.fn(),
     ...overrides,
   };
@@ -311,6 +312,248 @@ describe('SettingsPanel', () => {
     await waitFor(() => {
       expect(mockBrowser.local.set).toHaveBeenLastCalledWith({
         preferences: expect.objectContaining({ theme: 'dark', accentColor: '#2563eb' }),
+      });
+    });
+  });
+
+  // ==================== 连通性测试 ====================
+
+  describe('连通性测试 (Connection Test)', () => {
+    it('正确区分 ConnectionTestResult 失败，绝不将 failure 对象误判为通过', async () => {
+      const provider = makeProvider({ id: 'p1', name: 'OpenAI Provider' });
+      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockResolvedValue({
+        ok: false,
+        reason: 'request-failed',
+      });
+      const props = makeProps({
+        providers: [provider],
+        onTestConnection,
+      });
+
+      renderWithI18n(<SettingsPanel {...props} />);
+      await openProviderSettings();
+
+      const testBtn = screen.getByRole('button', { name: /测试|test/i });
+      await userEvent.click(testBtn);
+
+      await waitFor(() => {
+        expect(onTestConnection).toHaveBeenCalledWith(provider);
+      });
+
+      // 绝不能显示通过
+      expect(screen.queryByText(/连接验证成功|Connection verified/)).toBeNull();
+
+      // 必须显示失败并包含针对 request-failed 的排查提示（如 Base URL / /v1）
+      const errorEl = await screen.findByRole('alert');
+      expect(errorEl).toBeTruthy();
+      expect(errorEl.textContent).toMatch(/连接失败|Connection failed/);
+      expect(errorEl.textContent).toMatch(/Base URL|\/v1/);
+    });
+
+    it('连通性测试通过时显示成功状态与无障碍 live 属性', async () => {
+      const provider = makeProvider({ id: 'p1', name: 'OpenAI Provider' });
+      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockResolvedValue({ ok: true });
+      const props = makeProps({
+        providers: [provider],
+        onTestConnection,
+      });
+
+      renderWithI18n(<SettingsPanel {...props} />);
+      await openProviderSettings();
+
+      const testBtn = screen.getByRole('button', { name: /测试|test/i });
+      await userEvent.click(testBtn);
+
+      const statusEl = await screen.findByRole('status');
+      expect(statusEl).toBeTruthy();
+      expect(statusEl.textContent).toMatch(/连接验证成功|Connection verified/);
+    });
+
+    it('测试状态按 provider.id 索引，删除前面的 provider 不导致状态错位', async () => {
+      const p1 = makeProvider({ id: 'p1', name: 'Provider 1' });
+      const p2 = makeProvider({ id: 'p2', name: 'Provider 2' });
+      const onSaveProviders = vi.fn();
+      const onTestConnection = vi.fn(async (p: ProviderConfig): Promise<ConnectionTestResult> => {
+        if (p.id === 'p2') return { ok: true };
+        return { ok: false, reason: 'auth' };
+      });
+
+      const { rerender } = renderWithI18n(
+        <SettingsPanel
+          {...makeProps({
+            providers: [p1, p2],
+            onSaveProviders,
+            onTestConnection,
+          })}
+        />,
+      );
+      await openProviderSettings();
+
+      const testButtons = screen.getAllByRole('button', { name: /测试|test/i });
+      // 测试第二个 provider (p2)
+      await userEvent.click(testButtons[1]!);
+
+      await screen.findByText(/连接验证成功|Connection verified/);
+
+      // 删除第一个 provider (p1)
+      const deleteButtons = screen.getAllByRole('button', { name: '删除' });
+      await userEvent.click(deleteButtons[0]!);
+
+      expect(onSaveProviders).toHaveBeenCalledWith([p2]);
+
+      // 重新渲染为仅剩 p2
+      rerender(
+        <SettingsPanel
+          {...makeProps({
+            providers: [p2],
+            onSaveProviders,
+            onTestConnection,
+          })}
+        />,
+      );
+
+      // p2 仍应保留其通过状态，不会因为下标由 1 变成 0 导致丢失或错位
+      expect(screen.getByText(/连接验证成功|Connection verified/)).toBeTruthy();
+    });
+
+    it('provider endpoint 变更后丢弃在途的过期测试结果', async () => {
+      let resolveTest!: (result: ConnectionTestResult) => void;
+      const testPromise = new Promise<ConnectionTestResult>((resolve) => {
+        resolveTest = resolve;
+      });
+      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
+      const onSaveProviders = vi.fn();
+      const p1 = makeProvider({ id: 'p1', name: 'Provider 1', endpoint: 'https://old.endpoint/v1' });
+
+      const { rerender } = renderWithI18n(
+        <SettingsPanel
+          {...makeProps({
+            providers: [p1],
+            onSaveProviders,
+            onTestConnection,
+          })}
+        />,
+      );
+      await openProviderSettings();
+
+      const testBtn = screen.getByRole('button', { name: /测试|test/i });
+      await userEvent.click(testBtn);
+
+      // 在测试还在 in-flight 时，provider endpoint 发生更新
+      const updatedP1 = { ...p1, endpoint: 'https://new.endpoint/v1' };
+      rerender(
+        <SettingsPanel
+          {...makeProps({
+            providers: [updatedP1],
+            onSaveProviders,
+            onTestConnection,
+          })}
+        />,
+      );
+
+      // 慢请求返回（针对旧 endpoint 的测试成功）
+      await act(async () => {
+        resolveTest({ ok: true });
+      });
+
+      // 绝不能将旧配置的通过结果展示到更新后的 provider 上
+      await waitFor(() => {
+        expect(screen.queryByText(/连接验证成功|Connection verified/)).toBeNull();
+      });
+    });
+
+    it('provider defaultModelId 或 models 变更后丢弃在途的过期测试结果', async () => {
+      let resolveTest!: (result: ConnectionTestResult) => void;
+      const testPromise = new Promise<ConnectionTestResult>((resolve) => {
+        resolveTest = resolve;
+      });
+      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
+      const onSaveProviders = vi.fn();
+      const p1 = makeProvider({
+        id: 'p1',
+        name: 'Provider 1',
+        defaultModelId: 'gpt-old',
+        models: {
+          'gpt-old': { id: 'gpt-old', name: 'GPT Old' },
+        },
+      });
+
+      const { rerender } = renderWithI18n(
+        <SettingsPanel
+          {...makeProps({
+            providers: [p1],
+            onSaveProviders,
+            onTestConnection,
+          })}
+        />,
+      );
+      await openProviderSettings();
+
+      const testBtn = screen.getByRole('button', { name: /测试|test/i });
+      await userEvent.click(testBtn);
+
+      // 在测试还在 in-flight 时，修改默认模型与模型列表
+      const updatedP1 = {
+        ...p1,
+        defaultModelId: 'gpt-new',
+        models: {
+          'gpt-new': { id: 'gpt-new', name: 'GPT New' },
+        },
+      };
+      rerender(
+        <SettingsPanel
+          {...makeProps({
+            providers: [updatedP1],
+            onSaveProviders,
+            onTestConnection,
+          })}
+        />,
+      );
+
+      // 慢请求返回（针对旧模型的测试成功）
+      await act(async () => {
+        resolveTest({ ok: true });
+      });
+
+      // 绝不能将旧模型配置的通过结果展示到更新后的 provider 上
+      await waitFor(() => {
+        expect(screen.queryByText(/连接验证成功|Connection verified/)).toBeNull();
+      });
+    });
+
+    it('测试过程中按钮具有 loading 态与 aria-busy 属性', async () => {
+      let resolveTest!: (result: ConnectionTestResult) => void;
+      const testPromise = new Promise<ConnectionTestResult>((resolve) => {
+        resolveTest = resolve;
+      });
+      const p1 = makeProvider({ id: 'p1', name: 'Provider 1' });
+      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
+
+      renderWithI18n(
+        <SettingsPanel
+          {...makeProps({
+            providers: [p1],
+            onTestConnection,
+          })}
+        />,
+      );
+      await openProviderSettings();
+
+      const testBtn = screen.getByRole('button', { name: /测试|test/i });
+      await userEvent.click(testBtn);
+
+      // 测试中：禁用且 aria-busy 为 true，文案为测试中
+      expect(testBtn).toBeDisabled();
+      expect(testBtn).toHaveAttribute('aria-busy', 'true');
+      expect(testBtn.textContent).toMatch(/测试中|Testing/);
+
+      // 完成后恢复
+      await act(async () => {
+        resolveTest({ ok: true });
+      });
+      await waitFor(() => {
+        expect(testBtn).not.toBeDisabled();
+        expect(testBtn).toHaveAttribute('aria-busy', 'false');
       });
     });
   });

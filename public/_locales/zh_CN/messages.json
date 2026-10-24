@@ -248,6 +248,27 @@
   "settings_provider_testing": {
     "message": "测试中..."
   },
+  "settings_provider_testSuccess": {
+    "message": "连接验证成功"
+  },
+  "settings_provider_testFailed": {
+    "message": "连接失败"
+  },
+  "settings_provider_testReasonMissingModel": {
+    "message": "未配置可用模型"
+  },
+  "settings_provider_testReasonAuth": {
+    "message": "认证失败，请检查 API Key"
+  },
+  "settings_provider_testReasonTimeout": {
+    "message": "连接超时"
+  },
+  "settings_provider_testReasonEmptyResponse": {
+    "message": "模型返回内容为空"
+  },
+  "settings_provider_testReasonRequestFailed": {
+    "message": "请求失败（请检查 Base URL 或版本路径如 /v1）"
+  },
   "settings_provider_trusted": {
     "message": "Trusted"
   },
