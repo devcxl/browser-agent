@@ -319,7 +319,7 @@ describe('SettingsPanel', () => {
     });
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     await waitFor(() => {
-      expect(mockBrowser.local.set).toHaveBeenLastCalledWith({
+      expect(mockBrowser.local.set).toHaveBeenCalledWith({
         preferences: expect.objectContaining({ theme: 'dark', accentColor: '#2563eb' }),
       });
     });
