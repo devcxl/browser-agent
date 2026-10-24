@@ -1,6 +1,7 @@
 import type { JsonRpcResponse } from '@/shared/types';
 
 interface PendingRequest {
+  tabId: number;
   resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -40,7 +41,7 @@ export class ContentBridge {
         reject(new Error(`Content script request timeout: ${method} (${this.timeout}ms)`));
       }, this.timeout);
 
-      this.pending.set(id, { resolve, reject, timer });
+      this.pending.set(id, { tabId, resolve, reject, timer });
 
       port.postMessage({ id, method, params });
     });
@@ -59,9 +60,11 @@ export class ContentBridge {
     port.onDisconnect.addListener(() => {
       this.ports.delete(tabId);
       for (const [id, pending] of this.pending) {
-        clearTimeout(pending.timer);
-        pending.reject(new Error('Port disconnected'));
-        this.pending.delete(id);
+        if (pending.tabId === tabId) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error('Port disconnected'));
+          this.pending.delete(id);
+        }
       }
     });
 
@@ -101,16 +104,25 @@ export class ContentBridge {
         }
         this.ports.delete(tabId);
       }
-    } else {
-      for (const [, port] of this.ports) {
-        try {
-          port.disconnect();
-        } catch {
-          /* ignore */
+
+      for (const [id, pending] of this.pending) {
+        if (pending.tabId === tabId) {
+          clearTimeout(pending.timer);
+          pending.reject(new Error('Port disconnected'));
+          this.pending.delete(id);
         }
       }
-      this.ports.clear();
+      return;
     }
+
+    for (const [, port] of this.ports) {
+      try {
+        port.disconnect();
+      } catch {
+        /* ignore */
+      }
+    }
+    this.ports.clear();
 
     for (const [, pending] of this.pending) {
       clearTimeout(pending.timer);
