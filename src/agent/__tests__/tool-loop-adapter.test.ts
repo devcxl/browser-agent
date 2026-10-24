@@ -1159,11 +1159,17 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     expect(result.toolCalls).toHaveLength(2);
     // 带 toolResult 的工具记录输出（output 本身即 ToolResult，原样透传）
     expect(result.toolCalls[0]!.result).toEqual({ success: true, tabs: 1 });
-    // 缺失 toolResult 的工具记录失败，绝不伪造成功
-    expect(result.toolCalls[1]!.result).toEqual({ success: false, error: '工具执行未返回结果' });
+    // 缺失 toolResult 时不伪造失败：记录无 result，交由历史重建在内存中标记未知
+    expect(result.toolCalls[1]).not.toHaveProperty('result');
 
     const persisted = persistedMessages(mockConversationManager);
-    expect(persisted.filter((message) => message.role === 'tool')).toHaveLength(2);
+    const persistedToolRows = persisted.filter((message) => message.role === 'tool');
+    // 只有真实的 call-1 结果落库；缺失结果的 call-2 不写假结果行
+    expect(persistedToolRows).toHaveLength(1);
+    expect(persistedToolRows[0]!.toolCallId).toBe('call-1');
+    // 调用行仍整批写入，包含同一步骤的两个调用
+    const persistedCallRow = persisted.find((message) => message.role === 'assistant' && message.toolCalls);
+    expect(persistedCallRow!.toolCalls?.map((call) => call.id)).toEqual(['call-1', 'call-2']);
 
     // 第二次 run：历史含完整 tool-call/tool-result，回填后消息协议正确
     await adapter.run({ ...basicInput, userMessage: '继续' });
@@ -1181,7 +1187,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
       expect.objectContaining({ type: 'tool-call', toolCallId: 'call-1', toolName: 'tabs_query', input: { tabIds: [1] } }),
       expect.objectContaining({ type: 'tool-call', toolCallId: 'call-2', toolName: 'tabs_remove', input: { tabIds: [2] } }),
     ]));
-    // 每个 tool-result 独立成一条消息，缺失输出的 call-2 记录为失败原因
+    // 每个 tool-result 独立成一条消息；缺失输出的 call-2 由内存合成未知占位
     expect(toolMsgs).toHaveLength(2);
     expect(toolMsgs[0]!.content).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'tool-result', toolCallId: 'call-1', toolName: 'tabs_query' }),
@@ -1189,6 +1195,69 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     expect(toolMsgs[1]!.content).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'tool-result', toolCallId: 'call-2', toolName: 'tabs_remove' }),
     ]));
+    const unknownText = String(
+      (toolMsgs[1]!.content as Array<{ output?: { value?: unknown } }>)[0]?.output?.value ?? '',
+    );
+    expect(unknownText).toContain('状态未知');
+    expect(unknownText).toContain('不要自动重试');
+    expect(unknownText).not.toContain('工具执行未返回结果');
+  });
+
+  it('同一步骤内缺失结果与显式 tool-error 区分：缺失无 result 且不落库，tool-error 保留真实失败', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [
+          { toolCallId: 'missing-1', toolName: 'tabs_query', input: {} },
+          { toolCallId: 'failed-1', toolName: 'tabs_remove', input: { tabIds: [1] } },
+        ],
+        toolResults: [],
+        content: [
+          { type: 'tool-error', toolCallId: 'failed-1', error: new Error('标签页不存在') },
+        ],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '完成', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.toolCalls).toHaveLength(2);
+    expect(result.toolCalls[0]).not.toHaveProperty('result');
+    expect(result.toolCalls[1]!.result).toEqual({ success: false, error: '标签页不存在' });
+
+    const persisted = persistedMessages(mockConversationManager);
+    const toolRows = persisted.filter((message) => message.role === 'tool');
+    expect(toolRows).toHaveLength(1);
+    expect(toolRows[0]!.toolCallId).toBe('failed-1');
+    expect(JSON.parse(toolRows[0]!.content)).toEqual({ success: false, error: '标签页不存在' });
+    const callRow = persisted.find((message) => message.role === 'assistant' && message.toolCalls);
+    expect(callRow!.toolCalls?.map((call) => call.id)).toEqual(['missing-1', 'failed-1']);
+  });
+
+  it('tool-error part 存在但 error 为空时仍记录真实失败，不降级为未知', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'err-empty', toolName: 'tabs_query', input: {} }],
+        toolResults: [],
+        content: [{ type: 'tool-error', toolCallId: 'err-empty' }],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '失败', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.toolCalls[0]!.result).toEqual(expect.objectContaining({ success: false }));
+    expect(result.toolCalls[0]!.result?.error).toBeTruthy();
+    expect(result.toolCalls[0]!.result?.error).not.toBe('工具执行未返回结果');
+    const persisted = persistedMessages(mockConversationManager);
+    expect(persisted.filter((message) => message.role === 'tool')).toHaveLength(1);
   });
 
   it('#232 连续 onStepFinish 不等待返回值时步骤落库仍串行且整步一批写入', async () => {

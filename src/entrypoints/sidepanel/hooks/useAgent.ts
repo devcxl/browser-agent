@@ -116,12 +116,13 @@ async function getDeps(): Promise<AgentDeps> {
 }
 
 function recordToDisplay(record: ToolCallRecord): ToolCallDisplay {
+  const result = record.result;
   return {
     id: uid(),
     name: record.toolName,
     params: record.params,
-    result: record.result,
-    status: record.result.success ? 'success' : 'error',
+    result,
+    status: result ? (result.success ? 'success' : 'error') : 'unknown',
     riskLevel: record.riskLevel,
     confirmed: record.confirmed,
   };

@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { generateText } from 'ai';
 import type { ModelMessage } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { ToolLoopAdapter } from '../tool-loop-adapter';
@@ -157,7 +156,9 @@ async function validateWithAiSdk(messages: ModelMessage[]): Promise<void> {
   });
 
   await expect(
-    generateText({ model, messages, allowSystemInMessages: true }),
+    // 直接调用真实实现：压缩用例会把 mock 改成 mockResolvedValue，
+    // 协议校验必须始终经过 AI SDK 的真实生成路径。
+    realGenerateText.current({ model, messages, allowSystemInMessages: true }),
   ).resolves.toBeDefined();
 }
 
@@ -465,6 +466,74 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
       toolResultParts(secondRunMessages[repeatCallIndex + 2]!)[0]!.output?.value ?? '',
     );
     expect(repeatUnknown).toBe(unknownText);
+  });
+
+  it('#234 两轮真实运行：缺失结果不写伪造结果行，下一轮仅内存合成未知且不自动重试', async () => {
+    streamMock.mockImplementationOnce(async (options: {
+      onStepFinish: (step: unknown) => void;
+    }) => {
+      options.onStepFinish({
+        toolCalls: [{
+          toolCallId: 'missing-live',
+          toolName: 'tabs_query',
+          input: { id: 'tab-1' },
+        }],
+        toolResults: [],
+        content: [],
+      });
+      return {
+        stream: emptyStream(),
+        finalStep: Promise.resolve({ text: '已尝试。', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    const firstRun = await adapter.run(makeInput('查一下这个标签页'));
+    expect(firstRun.toolCalls).toHaveLength(1);
+    // 缺失结果不得伪造成失败
+    expect(firstRun.toolCalls[0]).not.toHaveProperty('result');
+
+    const storedAfterFirst = await db.getMessagesByConversation(conversationId);
+    const callRows = storedAfterFirst.filter((message) => message.role === 'assistant'
+      && parseToolCalls(message.toolCalls).some((call) => call.id === 'missing-live'));
+    expect(callRows).toHaveLength(1);
+    // 调用行仍然落库，但没有对应的假结果行
+    expect(storedAfterFirst.filter(
+      (message) => message.role === 'tool' && message.toolCallId === 'missing-live',
+    )).toHaveLength(0);
+
+    nowValue += 10_000;
+    mockFinalText('收到。');
+    await adapter.run(makeInput('继续'));
+
+    const secondMessages = streamMock.mock.calls[1]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(secondMessages);
+
+    // 不自动重试：历史里只保留一次原始调用
+    expect(secondMessages.flatMap(assistantToolCalls).filter(
+      (part) => part.toolCallId === 'missing-live',
+    )).toHaveLength(1);
+
+    const callIndex = secondMessages.findIndex((message) => assistantToolCalls(message)
+      .some((part) => part.toolCallId === 'missing-live'));
+    expect(callIndex).toBeGreaterThanOrEqual(0);
+    const unknownParts = toolResultParts(secondMessages[callIndex + 1]!);
+    expect(unknownParts).toHaveLength(1);
+    expect(unknownParts[0]).toMatchObject({
+      type: 'tool-result',
+      toolCallId: 'missing-live',
+      toolName: 'tabs_query',
+    });
+    const unknownText = String(unknownParts[0]!.output?.value ?? '');
+    expect(unknownText).toContain('状态未知');
+    expect(unknownText).toContain('不要自动重试');
+    expect(unknownText).not.toContain('工具执行未返回结果');
+
+    // 合成的未知占位绝不写回数据库
+    const storedAfterSecond = await db.getMessagesByConversation(conversationId);
+    expect(storedAfterSecond.filter(
+      (message) => message.role === 'tool' && message.toolCallId === 'missing-live',
+    )).toHaveLength(0);
   });
 
   it('原始尾部是孤立 tool 结果时，上一条同文用户消息不能被误当作当前输入', async () => {

@@ -508,6 +508,47 @@ describe('useAgent', () => {
     expect(onTokenUsage).toHaveBeenCalledWith({ prompt: 50, completion: 30 });
   });
 
+  it('结果缺失的工具记录映射为 unknown，不伪造成功或失败', async () => {
+    mockRun.mockResolvedValue({
+      finalMessage: '操作完成',
+      toolCalls: [
+        {
+          toolName: 'tabs_remove',
+          params: { tabIds: [1] },
+          riskLevel: 'low' as const,
+          confirmed: true,
+          timestamp: Date.now(),
+          toolCallId: 'call-unknown',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+    result.current.setCallbacks({ onMessage });
+
+    await act(async () => {
+      await result.current.run('conv-1', '删除这个标签页', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'key',
+        model: 'gpt-4o',
+        isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    const toolMessages = onMessage.mock.calls.filter(
+      (c: [UIMessage]) => c[0].role === 'tool',
+    );
+    expect(toolMessages).toHaveLength(1);
+    expect(toolMessages[0][0].toolCallDisplay).toEqual(expect.objectContaining({
+      name: 'tabs_remove',
+      status: 'unknown',
+      result: undefined,
+    }));
+  });
+
   it('页面工具在 content.execute 失败时返回结构化错误而不抛出', async () => {
     const provider = {
       id: 'test',

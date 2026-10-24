@@ -56,7 +56,11 @@ export interface AgentRunOutput {
 export interface ToolCallRecord {
   toolName: string;
   params: Record<string, unknown>;
-  result: ToolResult;
+  /**
+   * 工具的真实结果；`undefined` 表示本次运行没有拿到结果（未知），
+   * 不得用 `{ success: false }` 之类占位伪造。显式 tool-error 仍是真实失败。
+   */
+  result?: ToolResult;
   riskLevel: RiskLevel;
   confirmed: boolean;
   timestamp: number;

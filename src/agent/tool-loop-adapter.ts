@@ -544,7 +544,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
   /** 构建初始 messages */
   private async buildMessages(
     input: AgentRunInput,
-    currentUserMessageId?: string,
+    currentUserMessageId: string,
   ): Promise<ModelMessage[]> {
     const messages: ModelMessage[] = [];
 
@@ -580,9 +580,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     // 按本次输入的唯一 ID 排除，再统一在末尾追加一次。排除发生在窗口裁剪之后，
     // 不改动 visibleFrom 对原始下标的解释。不能按文本比较——上一条同文用户消息
     // 是真实历史。
-    const history = currentUserMessageId
-      ? rebuiltHistory.filter((message) => message.id !== currentUserMessageId)
-      : rebuiltHistory;
+    const history = rebuiltHistory.filter((message) => message.id !== currentUserMessageId);
     const toolNames = new Map<string, string>();
     for (const msg of history) {
       if (msg.role !== 'assistant') continue;
@@ -819,12 +817,13 @@ export class ToolLoopAdapter implements IAgentRuntime {
    * - 工具正常返回时，output 本身就是 ToolResult（executeTool 已归一化），直接透传，
    *   避免把 `{ success: false, error }` 二次包装成 `{ success: true, data: ... }`；
    * - 工具抛错时 AI SDK 不产出 toolResults，而是在 content 中给出 tool-error part，
-   *   必须转成失败结果，绝不能伪造成功。
+   *   必须转成失败结果，绝不能伪造成功；
+   * - 两者都不存在时返回 undefined：结果缺失是「未知」，不能伪造失败或成功。
    */
   private resolveToolResult(
     tc: { toolCallId: string; toolName: string },
     stepResult: StepToolData,
-  ): ToolResult {
+  ): ToolResult | undefined {
     const tr = stepResult.toolResults?.find((r) => r.toolCallId === tc.toolCallId);
     if (tr?.output !== undefined) {
       if (tr.output !== null && typeof tr.output === 'object' && 'success' in (tr.output as Record<string, unknown>)) {
@@ -832,17 +831,22 @@ export class ToolLoopAdapter implements IAgentRuntime {
       }
       return { success: true, data: tr.output };
     }
+    // 以 part 存在为准：error 为空/假值仍代表工具执行失败，不能降级为未知。
     const errPart = stepResult.content?.find(
       (p) => p?.type === 'tool-error' && p?.toolCallId === tc.toolCallId,
     );
-    if (errPart?.error) {
-      const errMsg = errPart.error instanceof Error ? errPart.error.message : String(errPart.error);
-      return { success: false, error: errMsg };
+    if (errPart) {
+      return { success: false, error: this.formatToolError(errPart.error) };
     }
-    return { success: false, error: '工具执行未返回结果' };
+    return undefined;
   }
 
-  /** 从 StepResult 中提取并记录工具调用 */
+  private formatToolError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return message.trim() || '工具执行失败（未提供错误信息）';
+  }
+
+  /** 从 StepResult 中提取并记录工具调用；缺失结果时不写 result 字段 */
   private recordStepToolCalls(
     stepResult: StepToolData,
     toolCalls: ToolCallRecord[],
@@ -854,7 +858,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
       const record: ToolCallRecord = {
         toolName: tc.toolName,
         params: (tc.input as Record<string, unknown>) ?? {},
-        result,
+        ...(result ? { result } : {}),
         riskLevel: 'low' as RiskLevel,
         confirmed: true,
         timestamp: Date.now(),
@@ -865,7 +869,10 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
   }
 
-  /** 把同一工具步骤的调用行与结果行作为一批原子写入，保持步骤内顺序。 */
+  /**
+   * 把同一工具步骤的调用行与（存在的）结果行作为一批原子写入，保持步骤内顺序。
+   * 结果缺失时只写调用行——绝不伪造结果行。
+   */
   private async persistStepMessages(
     conversationId: string,
     stepResult: StepToolData,
@@ -889,6 +896,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
     for (const tc of stepToolCalls) {
       const result = this.resolveToolResult(tc, stepResult);
+      if (!result) continue;
       rows.push({
         // 独立 UUID 作主键；原始 toolCallId 保留在字段里，不参与主键
         id: crypto.randomUUID(),
