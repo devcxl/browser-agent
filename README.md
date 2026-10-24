@@ -17,7 +17,7 @@
   <a href="https://github.com/devcxl/browser-agent/releases"><img src="https://img.shields.io/github/v/release/devcxl/browser-agent" alt="Release"></a>
   <a href="https://github.com/devcxl/browser-agent/actions"><img src="https://img.shields.io/github/actions/workflow/status/devcxl/browser-agent/build.yml" alt="Build"></a>
   <a href="https://chromewebstore.google.com/detail/browser-agent/ocdmppclkippfbdhephcacmpmomkmdip"><img src="https://img.shields.io/badge/Chrome-MV3-blue" alt="Chrome"></a>
-  <a href="https://addons.mozilla.org/zh-CN/firefox/addon/browser-agent/"><img src="https://img.shields.io/badge/Firefox-MV2-orange" alt="Firefox"></a>
+  <a href="https://addons.mozilla.org/zh-CN/firefox/addon/browser-agent/"><img src="https://img.shields.io/badge/Firefox-orange" alt="Firefox"></a>
 </p>
 
 ## Features
@@ -104,8 +104,13 @@ src/
 
 | Browser | Manifest | Output |
 |---------|----------|--------|
-| Chrome | MV3 | `.output/chrome-mv3/` |
-| Firefox | MV2 | `.output/firefox-mv2/` |
+| Chrome | MV3 | `dist/chrome-mv3/` |
+| Firefox | MV3 | `dist/firefox-mv3/` |
+
+To test the latest Firefox build locally, run `npm run build:firefox`, then use
+`about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** and select
+`dist/firefox-mv3/manifest.json`. Reloading an older installed add-on does not
+replace it with this build. Temporary add-ons must be loaded again after restarting Firefox.
 
 ```bash
 # Package as zip

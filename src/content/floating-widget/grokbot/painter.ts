@@ -6,6 +6,8 @@ import {
   VIEW_BOX_INSET,
   VIEW_BOX_SIZE,
   bodyBoxFor,
+  calculateTargetPitch,
+  clampSafePitch,
   mapNormalizedGaze,
   projectEye,
   ringCentroid,
@@ -171,19 +173,36 @@ export function paintGrokBot(
   const radius = 105 * Math.min(shape.faceScaleX, shape.faceScaleY);
   const projectedCenters: Vec2[] = [];
 
-  ctx.fillStyle = theme.eyeColor;
+  const correctedRings: number[][] = [];
   for (const ring of frame.rings) {
     const corrected = new Array<number>(ring.length);
     for (let i = 0; i < ring.length; i += 2) {
       corrected[i] = origin.x + (ring[i] - FACE_CENTER) * shape.faceScaleX;
       corrected[i + 1] = origin.y + (ring[i + 1] - FACE_CENTER) * shape.faceScaleY;
     }
+    correctedRings.push(corrected);
+  }
+
+  const targetPitch = calculateTargetPitch(frame.gaze.y);
+  const safePitch = clampSafePitch({
+    rings: correctedRings,
+    origin,
+    radius,
+    turn: frame.turn,
+    gaze: mappedGaze,
+    scale: baseScale,
+    targetPitch,
+  });
+
+  ctx.fillStyle = theme.eyeColor;
+  for (const corrected of correctedRings) {
     const center = ringCentroid(corrected);
     const projection = projectEye({
       centroid: center,
       origin,
       radius,
       turn: frame.turn,
+      pitch: safePitch,
       gaze: mappedGaze,
       scale: baseScale,
       blinkScale: frame.blinkScale,
