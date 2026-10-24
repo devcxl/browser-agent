@@ -6,7 +6,7 @@ import type { ProviderConfig } from '@/shared/types/llm';
 import type { LowSensitivityContext } from '@/shared/types/browser';
 import type { JevSettings } from '@/shared/types/storage';
 import type { ToolResult, RiskLevel } from '@/shared/types/tool';
-import { ToolLoopAgent, generateText, isStepCount, isLoopFinished, pruneMessages } from 'ai';
+import { ToolLoopAgent, generateText, isLoopFinished, pruneMessages } from 'ai';
 import type {
   ModelMessage,
   ToolModelMessage,
@@ -26,6 +26,8 @@ import {
   selectSummaryCutoff,
 } from './conversation-compaction';
 import { ToolClassifier } from './tool-classifier';
+import { CircuitBreaker, formatInterruptionMessage } from './circuit-breaker';
+import type { AgentRunInterruption } from './circuit-breaker';
 import { TOOL_CATEGORY_DESCRIPTIONS } from '@/shared/tool-categories';
 import type { ToolCategory } from '@/shared/types/tool';
 import { DEFAULT_AGENT_CONFIG } from './agent-config';
@@ -69,6 +71,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
   private _agent: ToolLoopAgent | null = null;
   private _tools: AdapterTools | null = null;
   private toolClassifier: ToolClassifier;
+  /** 本次运行（run）的熔断状态；每次 run 前重置 */
+  private circuitBreaker = new CircuitBreaker();
   private onRequestApproval?: OnRequestApproval;
   /** 缓存的 LanguageModel；provider 或模型变化时由调用方重建 adapter */
   private _model: Promise<LanguageModelV4> | null = null;
@@ -110,9 +114,10 @@ export class ToolLoopAdapter implements IAgentRuntime {
     this._agent = null;
   }
 
-  async run(input: AgentRunInput): Promise<AgentRunOutput> {
+  async run(input: AgentRunInput): Promise<AgentRunOutput & AgentRunInterruption> {
     console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId });
     this.abortController = new AbortController();
+    this.circuitBreaker.reset();
     const toolCalls: ToolCallRecord[] = [];
     const persistenceTasks: Promise<void>[] = [];
 
@@ -172,26 +177,40 @@ export class ToolLoopAdapter implements IAgentRuntime {
       // 取最后一步的单步 usage —— 最后一步的 inputTokens 即最近一次请求
       // 发送给 LLM 的完整上下文（系统提示+历史+工具结果）。
       const usage = finalStep.usage ?? (await result.usage);
+      // 熔断：loop 已由 stopWhen 提前结束，这里补齐面向用户的停止原因
+      const interruption = this.circuitBreaker.tripReason;
+      const assistantContent = interruption
+        ? formatInterruptionMessage(interruption, finalStep.text || accumulatedText)
+        : finalStep.text || accumulatedText;
+      if (interruption) {
+        input.callbacks?.onStreamChunk?.(accumulatedText ? `\n\n${interruption.message}` : interruption.message);
+      }
       await Promise.all(persistenceTasks);
       console.debug('[ToolLoopAdapter] 执行完成', {
         toolCalls: toolCalls.length,
         usage,
+        interrupted: interruption?.reason,
       });
 
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: finalStep.text || accumulatedText,
+        content: assistantContent,
         reasoningContent: finalStep.reasoningText || accumulatedReasoning || undefined,
       });
 
-      return {
-        finalMessage: finalStep.text,
+      const output: AgentRunOutput & AgentRunInterruption = {
+        finalMessage: interruption ? assistantContent : finalStep.text,
         toolCalls,
         tokenUsage: usage
           ? { prompt: usage.inputTokens ?? 0, completion: usage.outputTokens ?? 0 }
           : undefined,
       };
+      if (interruption) {
+        output.stopReason = 'interrupted';
+        output.interruption = interruption;
+      }
+      return output;
     } catch (err) {
       await Promise.allSettled(persistenceTasks);
       const message = err instanceof Error ? err.message : String(err);
@@ -233,7 +252,29 @@ export class ToolLoopAdapter implements IAgentRuntime {
       reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
       tools: this.tools,
       allowSystemInMessages: true,
-      stopWhen: [isStepCount(Math.max(1, this.agentConfig.maxToolRounds)), isLoopFinished()],
+      stopWhen: [
+        // 不设固定步数上限：循环何时结束由模型是否继续调用工具决定。
+        // isLoopFinished() 永不返回 true，显式声明「让循环自然收敛」——
+        // 省略 stopWhen 时 ToolLoopAgent 会默认在 20 步后停止。
+        isLoopFinished(),
+        // 熔断条件：重扫全部 steps，CircuitBreaker 按 toolCallId 去重不会重复计数
+        ({ steps }) => {
+          for (const step of steps) {
+            this.circuitBreaker.recordStep({
+              toolCalls: step.toolCalls,
+              toolResults: step.toolResults,
+              toolErrors: step.content.flatMap((part) => (
+                part.type === 'tool-error' ? [{ toolCallId: part.toolCallId }] : []
+              )),
+            });
+          }
+          const trip = this.circuitBreaker.tripReason;
+          if (trip) {
+            console.warn('[ToolLoopAdapter] 熔断触发', { reason: trip.reason, toolName: trip.toolName });
+          }
+          return trip !== null;
+        },
+      ],
       toolApproval: this.createToolApproval(),
       prepareStep: async ({ messages, stepNumber, model }) => {
         console.debug('[ToolLoopAdapter] prepareStep step:', stepNumber, 'totalTools:', Object.keys(this.tools).length);

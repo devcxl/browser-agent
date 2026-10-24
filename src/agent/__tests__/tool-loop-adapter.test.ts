@@ -222,7 +222,7 @@ describe('ToolLoopAdapter', () => {
     expect(result.tokenUsage?.prompt).not.toBe(3000000);
   });
 
-  it('使用配置的单次任务最大执行步数', async () => {
+  it('不再按 maxToolRounds 设置固定步数上限（长任务不会被步数截断）', async () => {
     const config: AgentConfig = {
       maxToolRounds: 7,
       contextWindowTokens: 128000,
@@ -239,7 +239,131 @@ describe('ToolLoopAdapter', () => {
 
     await configuredAdapter.run(basicInput);
 
-    expect(mockIsStepCount).toHaveBeenCalledWith(7);
+    // 固定步数上限已由循环层熔断取代
+    expect(mockIsStepCount).not.toHaveBeenCalled();
+    const stopWhen = capturedToolLoopAgentOptions?.['stopWhen'];
+    expect(Array.isArray(stopWhen)).toBe(true);
+    expect((stopWhen as unknown[]).every((condition) => typeof condition === 'function')).toBe(true);
+  });
+
+  it('stopWhen 熔断条件在无异常调用时保持 false（循环自然收敛）', async () => {
+    await adapter.run(basicInput);
+    const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
+      input: { steps: unknown[] },
+    ) => boolean>;
+    const circuitCondition = stopConditions[stopConditions.length - 1]!;
+
+    expect(circuitCondition({ steps: [] })).toBe(false);
+    expect(circuitCondition({
+      steps: [{
+        toolCalls: [{ toolCallId: 'c1', toolName: 'tabs_query', input: { id: 1 } }],
+        toolResults: [{ toolCallId: 'c1', output: { success: true } }],
+        content: [],
+      }],
+    })).toBe(false);
+  });
+
+  it('stopWhen 熔断条件在连续 3 次相同工具调用时返回 true', async () => {
+    await adapter.run(basicInput);
+    const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
+      input: { steps: unknown[] },
+    ) => boolean>;
+    const circuitCondition = stopConditions[stopConditions.length - 1]!;
+    const steps = ['c1', 'c2', 'c3'].map((id) => ({
+      toolCalls: [{ toolCallId: id, toolName: 'tabs_query', input: { id: 1 } }],
+      toolResults: [{ toolCallId: id, output: { success: true } }],
+      content: [],
+    }));
+
+    expect(circuitCondition({ steps: steps.slice(0, 2) })).toBe(false);
+    // 同一批 steps 反复扫描不会重复计数
+    expect(circuitCondition({ steps: steps.slice(0, 2) })).toBe(false);
+    expect(circuitCondition({ steps })).toBe(true);
+  });
+
+  it('stopWhen 熔断条件在连续 3 次工具失败（含抛错 tool-error）时返回 true', async () => {
+    await adapter.run(basicInput);
+    const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
+      input: { steps: unknown[] },
+    ) => boolean>;
+    const circuitCondition = stopConditions[stopConditions.length - 1]!;
+    const failedStep = (id: string, toolError = false) => ({
+      toolCalls: [{ toolCallId: id, toolName: 'tabs_query', input: { id } }],
+      toolResults: toolError ? [] : [{ toolCallId: id, output: { success: false, error: '失败' } }],
+      content: toolError ? [{ type: 'tool-error', toolCallId: id, error: new Error('boom') }] : [],
+    });
+
+    expect(circuitCondition({ steps: [failedStep('c1'), failedStep('c2')] })).toBe(false);
+    expect(circuitCondition({ steps: [failedStep('c1'), failedStep('c2'), failedStep('c3', true)] })).toBe(true);
+  });
+
+  it('熔断后合成终止说明并标记 stopReason=interrupted', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async () => {
+      // 模拟 AI SDK 每步结束后调用 stopWhen，第 3 次相同调用触发熔断
+      const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
+        input: { steps: unknown[] },
+      ) => boolean>;
+      stopConditions[stopConditions.length - 1]!({
+        steps: ['c1', 'c2', 'c3'].map((id) => ({
+          toolCalls: [{ toolCallId: id, toolName: 'tabs_query', input: { id: 1 } }],
+          toolResults: [{ toolCallId: id, output: { success: true } }],
+          content: [],
+        })),
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+    const onStreamChunk = vi.fn();
+
+    const result = await adapter.run({ ...basicInput, callbacks: { onStreamChunk } });
+
+    expect(result.stopReason).toBe('interrupted');
+    expect(result.interruption?.reason).toBe('duplicate-tool-call');
+    expect(result.finalMessage).toContain('检测到连续 3 次相同参数调用同一个工具');
+    expect(onStreamChunk).toHaveBeenCalledWith(
+      expect.stringContaining('检测到连续 3 次相同参数调用同一个工具'),
+    );
+    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const assistantMsg = [...persisted].reverse().find((message) => message.role === 'assistant');
+    expect(assistantMsg!.content).toContain('触发死循环熔断保护');
+  });
+
+  it('熔断前已有文本时把说明追加为独立段落', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async () => {
+      const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
+        input: { steps: unknown[] },
+      ) => boolean>;
+      stopConditions[stopConditions.length - 1]!({
+        steps: ['c1', 'c2', 'c3'].map((id) => ({
+          toolCalls: [{ toolCallId: id, toolName: 'tabs_query', input: { id } }],
+          toolResults: [{ toolCallId: id, output: { success: false, error: '失败' } }],
+          content: [],
+        })),
+      });
+      return {
+        stream: (async function* () {
+          yield { type: 'text-delta', text: '正在操作' };
+        })(),
+        finalStep: Promise.resolve({ text: '正在操作' }),
+        usage: Promise.resolve(undefined),
+      };
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.stopReason).toBe('interrupted');
+    expect(result.interruption?.reason).toBe('consecutive-tool-errors');
+    expect(result.finalMessage).toBe('正在操作\n\n检测到连续工具执行失败，触发熔断保护');
+  });
+
+  it('未熔断时 stopReason 为 undefined（保持既有输出形状）', async () => {
+    const result = await adapter.run(basicInput);
+
+    expect(result.stopReason).toBeUndefined();
+    expect(result.interruption).toBeUndefined();
   });
 
   it('应该将 toolRegistry 中的所有工具转换为 AI SDK tools', async () => {
