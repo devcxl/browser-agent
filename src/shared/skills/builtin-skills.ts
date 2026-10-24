@@ -288,7 +288,7 @@ const bookmarkValidator: SkillDef = {
 
 ### 步骤 3：分批检测
 1. 用 \`tabs_create\` 在后台打开书签 URL
-2. 等待几秒后，用 \`tabs_get\` 检查状态（title 不为空、不是错误页）
+2. 等待几秒后，用 \`tabs_query\`（传入 tabId）检查状态（title 不为空、不是错误页）
 3. 用 \`page_getMetadata\` 辅助判断
 4. 用 \`tabs_remove\` 关闭检测标签页
 5. 记录：✅ 正常 / ❌ 无法访问 / ⚠️ 跳转
