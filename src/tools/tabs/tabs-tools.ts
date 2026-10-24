@@ -45,7 +45,7 @@ export function createTabsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
           return { success: true, data: tab };
         }
         const tabs = await rpc.request("tabs.query", {
-          queryInfo: params.queryInfo ?? {},
+          queryInfo: params.queryInfo ?? { currentWindow: true },
         });
         return { success: true, data: tabs };
       } catch (err) {

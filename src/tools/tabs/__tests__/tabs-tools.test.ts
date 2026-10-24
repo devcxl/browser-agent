@@ -73,13 +73,13 @@ describe('Tabs tools', () => {
       });
     });
 
-    it('should return success result with tabs data', async () => {
+    it('should return success result with tabs data, defaulting to currentWindow', async () => {
       const rpc = createMockRpc();
       const mockTabs = [{ id: 1, title: 'Test' }];
       vi.mocked(rpc.request).mockResolvedValue(mockTabs);
       const tool = createTabsQueryTool(rpc);
       const result = await tool.execute({});
-      expect(rpc.request).toHaveBeenCalledWith('tabs.query', { queryInfo: {} });
+      expect(rpc.request).toHaveBeenCalledWith('tabs.query', { queryInfo: { currentWindow: true } });
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockTabs);
     });

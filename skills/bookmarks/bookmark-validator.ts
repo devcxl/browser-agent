@@ -25,9 +25,9 @@ export const bookmarkValidatorSkill: Omit<Skill, 'id' | 'createdAt' | 'updatedAt
 
 ### 步骤 3：分批检测
 对每批书签：
-1. 使用 \`tabs_create\` 在新标签页中打开书签 URL（可在后台打开，不激活）
+1. 使用 \`tabs_manage({ action: "create", url, active: false })\` 在新标签页中打开书签 URL（可在后台打开，不激活）
 2. 等待几秒让页面加载
-3. 使用 \`tabs_get\` 获取标签页状态，检查：
+3. 使用 \`tabs_query({ tabId })\` 获取标签页状态，检查：
    - 页面是否正常加载（title 不为空、不是错误页）
    - HTTP 状态码（通过 page_getMetadata 等方法检测）
 4. 使用 \`tabs_remove\` 关闭检测标签页

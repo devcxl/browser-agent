@@ -438,10 +438,10 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
   }
 
-  /** 本次运行可用的工具：非 Expert Mode 下排除 expert 类别 */
+  /** 本次运行可用的工具：非 Expert Mode 下排除 expertOnly 与 expert 类别工具 */
   private getBaseTools(): ToolDefinition[] {
     return this.toolRegistry.getAllTools().filter(
-      (t) => t.category !== 'expert' || this.guardrailContext.expertModeEnabled,
+      (t) => (!t.expertOnly && t.category !== 'expert') || this.guardrailContext.expertModeEnabled,
     );
   }
 

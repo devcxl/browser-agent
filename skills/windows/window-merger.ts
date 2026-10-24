@@ -32,10 +32,10 @@ export const windowMergerSkill: Omit<Skill, 'id' | 'createdAt' | 'updatedAt' | '
 
 ### 步骤 3：执行合并
 1. 对每个源窗口的标签页：
-   - 使用 \`tabs_move\` 将标签页移动到目标窗口
+   - 使用 \`tabs_manage({ action: "move", tabIds, windowId, index })\` 将标签页移动到目标窗口
    - 记录原始窗口来源
 2. 源窗口标签页移空后，自动关闭源窗口（使用 \`windows_remove\`）
-3. 在目标窗口中，使用 \`tabs_group\` 按原始窗口来源创建标签组：
+3. 在目标窗口中，使用 \`tabs_manage({ action: "group", tabIds })\` 按原始窗口来源创建标签组：
    - 组名如“从窗口 2 移入”
    - 不同颜色区分
 

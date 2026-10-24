@@ -63,7 +63,7 @@ export const focusModeSkill: Omit<Skill, 'id' | 'createdAt' | 'updatedAt' | 'ena
 
 ### 步骤 5：整理剩余标签页
 对保留的标签页：
-- 用 \`tabs_group\` 按主题分组
+- 用 \`tabs_manage({ action: "group", tabIds })\` 按主题分组
 - 按工作流排序（概览 → 文档 → 参考 → 工具）
 
 ### 退出专注模式

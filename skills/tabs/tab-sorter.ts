@@ -27,7 +27,7 @@ export const tabSorterSkill: Omit<Skill, 'id' | 'createdAt' | 'updatedAt' | 'ena
 - **同一产品线**（如 github.com + github.io）可以合并为一个分组
 
 ### 步骤 4：创建标签组
-使用 \`tabs_group\` 为每组标签页创建一个标签组。为每个组设置：
+使用 \`tabs_manage({ action: "group", tabIds })\` 为每组标签页创建一个标签组。为每个组设置：
 - 一个有意义的标题（如“GitHub”、“文档”、“AI 工具”）
 - 一个颜色（每个组不同颜色）
 

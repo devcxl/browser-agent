@@ -35,7 +35,7 @@ export const tabRescueSkill: Omit<Skill, 'id' | 'createdAt' | 'updatedAt' | 'ena
 建议一次性处理不超过 20 个，分批确认。
 
 ### 步骤 4：分组整理剩余标签页 — 低优先级
-对剩余标签页使用 \`tabs_group\` 按域名分组，减少视觉混乱：
+对剩余标签页使用 \`tabs_manage({ action: "group", tabIds })\` 按域名分组，减少视觉混乱：
 - 同域名 ≥ 2 个即可成组
 - 组名简短：GitHub、文档、视频、AI 工具 等
 

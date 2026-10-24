@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
 import type {
+  ExpertModeSettings,
   JevSettings,
   ProviderConfig,
   ProviderModelConfig,
@@ -167,6 +168,7 @@ export function useAgent() {
         const { ToolLoopAdapter, registry, guardrail, convManager, LlmClient } = await getDeps();
         const savedAgentSettings = await ConfigStore.getInstance().get('agentSettings');
         const savedJevSettings = await ConfigStore.getInstance().get<JevSettings>('jevSettings');
+        const savedExpertModeSettings = await ConfigStore.getInstance().get<ExpertModeSettings>('expertModeSettings');
         const agentConfig: AgentConfig = {
           maxToolRounds: savedAgentSettings?.maxToolRounds ?? 99,
           contextWindowTokens: modelConfig?.limit?.context ?? 128000,
@@ -224,6 +226,7 @@ export function useAgent() {
           model,
           modelConfig,
           reasoningEffort,
+          expertModeSettings: savedExpertModeSettings ?? { enabled: false, switches: {} },
           browserContext: {
             currentWindow: { tabs: [] },
             allWindows: [],
