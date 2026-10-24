@@ -1194,7 +1194,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     expect(() => onStepFinish({ toolCalls: [] })).not.toThrow();
   });
 
-  it('无工具可用时 stream 参数不包含 activeTools（全量工具路径）', async () => {
+  it('分类结果为空时降级到 baseTools（绝不回退全量工具）', async () => {
     const lazyAdapter = new ToolLoopAdapter(
       createMockToolRegistry([createMockTool('tabs_query')]),
       createMockGuardrail(),
@@ -1211,10 +1211,10 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
       model: unknown;
     }) => Promise<{ activeTools?: string[] }>;
     const result = await prepareStep({ messages: [{ role: 'user', content: '随便聊聊' }], stepNumber: 0, model: {} });
-    expect(result.activeTools).toBeUndefined();
+    expect(result.activeTools).toEqual(['tabs_query']);
   });
 
-  it('prepareStep 在非 step0 时跳过分类直接全量工具', async () => {
+  it('prepareStep 在非 step0 时跳过分类并沿用可用工具集', async () => {
     const lazyAdapter = new ToolLoopAdapter(
       createMockToolRegistry([createMockTool('tabs_query')]),
       createMockGuardrail(),
@@ -1230,11 +1230,11 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
       model: unknown;
     }) => Promise<{ activeTools?: string[] }>;
     const result = await prepareStep({ messages: [{ role: 'user', content: '查询标签页' }], stepNumber: 1, model: {} });
-    expect(result.activeTools).toBeUndefined();
+    expect(result.activeTools).toEqual(['tabs_query']);
     expect(mockToolClassifierClassify).not.toHaveBeenCalled();
   });
 
-  it('prepareStep 无法定位 user 消息时跳过分类', async () => {
+  it('prepareStep 无法定位 user 消息时降级到 baseTools', async () => {
     const lazyAdapter = new ToolLoopAdapter(
       createMockToolRegistry([createMockTool('tabs_query')]),
       createMockGuardrail(),
@@ -1250,11 +1250,11 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
       model: unknown;
     }) => Promise<{ activeTools?: string[] }>;
     const result = await prepareStep({ messages: [{ role: 'assistant', content: 'hi' }], stepNumber: 0, model: {} });
-    expect(result.activeTools).toBeUndefined();
+    expect(result.activeTools).toEqual(['tabs_query']);
     expect(mockToolClassifierClassify).not.toHaveBeenCalled();
   });
 
-  it('分类器抛错时降级到全量工具且不影响后续流程', async () => {
+  it('分类器抛错时降级到 baseTools 且不影响后续流程', async () => {
     const lazyAdapter = new ToolLoopAdapter(
       createMockToolRegistry([createMockTool('tabs_query')]),
       createMockGuardrail(),
@@ -1271,10 +1271,10 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
       model: unknown;
     }) => Promise<{ activeTools?: string[] }>;
     const result = await prepareStep({ messages: [{ role: 'user', content: '关闭标签页' }], stepNumber: 0, model: {} });
-    expect(result.activeTools).toBeUndefined();
+    expect(result.activeTools).toEqual(['tabs_query']);
   });
 
-  it('分类结果只命中非核心类别且无该类别工具时返回空 activeTools', async () => {
+  it('分类结果只命中非核心类别且无该类别工具时降级到 baseTools', async () => {
     const proxyTool = { ...createMockTool('proxy_set'), category: 'proxy' as const };
     const lazyAdapter = new ToolLoopAdapter(
       createMockToolRegistry([proxyTool]),
@@ -1292,7 +1292,170 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
       model: unknown;
     }) => Promise<{ activeTools?: string[] }>;
     const result = await prepareStep({ messages: [{ role: 'user', content: '读取 cookie' }], stepNumber: 0, model: {} });
-    expect(result.activeTools).toBeUndefined();
+    expect(result.activeTools).toEqual(['proxy_set']);
+  });
+
+  // ── 多步活跃工具继承（#222）────────────────────────
+
+  it('prepareStep 在 stepNumber > 0 时继承 step 0 的 activeTools（不回退全量工具）', async () => {
+    const registry = createMockToolRegistry([
+      createMockTool('tabs_query'),
+      { ...createMockTool('proxy_set'), category: 'proxy' as const },
+      { ...createMockTool('debugger_attach'), category: 'debugger' },
+    ]);
+    mockToolClassifierClassify.mockResolvedValue(['tabs']);
+    const lazyAdapter = new ToolLoopAdapter(
+      registry,
+      createMockGuardrail(),
+      mockConversationManager,
+      createMockProviderConfig(),
+      'test-model',
+    );
+    await lazyAdapter.run(basicInput);
+
+    const prepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
+      messages: Array<{ role: string; content: string }>;
+      stepNumber: number;
+      model: unknown;
+    }) => Promise<{ activeTools?: string[] }>;
+    const step0 = await prepareStep({
+      messages: [{ role: 'user', content: '查询标签页' }],
+      stepNumber: 0,
+      model: {},
+    });
+    expect(step0.activeTools).toEqual(['tabs_query']);
+
+    // 第 1、2 步沿用第 0 步的子集，而不是回退到全部工具
+    const step1 = await prepareStep({
+      messages: [{ role: 'user', content: '查询标签页' }],
+      stepNumber: 1,
+      model: {},
+    });
+    const step2 = await prepareStep({
+      messages: [{ role: 'user', content: '查询标签页' }],
+      stepNumber: 2,
+      model: {},
+    });
+    expect(step1.activeTools).toEqual(['tabs_query']);
+    expect(step2.activeTools).toEqual(['tabs_query']);
+    expect(mockToolClassifierClassify).toHaveBeenCalledTimes(1);
+  });
+
+  it('每次 run() 都重置活跃工具继承状态', async () => {
+    const registry = createMockToolRegistry([
+      createMockTool('tabs_query'),
+      { ...createMockTool('debugger_attach'), category: 'debugger' },
+    ]);
+    const lazyAdapter = new ToolLoopAdapter(
+      registry,
+      createMockGuardrail(),
+      mockConversationManager,
+      createMockProviderConfig(),
+      'test-model',
+    );
+    mockToolClassifierClassify.mockResolvedValueOnce(['tabs']);
+    await lazyAdapter.run(basicInput);
+
+    const firstPrepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
+      messages: Array<{ role: string; content: string }>;
+      stepNumber: number;
+      model: unknown;
+    }) => Promise<{ activeTools?: string[] }>;
+    await firstPrepareStep({ messages: [{ role: 'user', content: '查询标签页' }], stepNumber: 0, model: {} });
+
+    // 新一轮 run 后，分类命中 debugger，不应残留上一轮的 tabs 子集
+    mockToolClassifierClassify.mockResolvedValueOnce(['debugger']);
+    await lazyAdapter.run({ ...basicInput, userMessage: '调试页面' });
+    const secondPrepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
+      messages: Array<{ role: string; content: string }>;
+      stepNumber: number;
+      model: unknown;
+    }) => Promise<{ activeTools?: string[] }>;
+    const result = await secondPrepareStep({
+      messages: [{ role: 'user', content: '调试页面' }],
+      stepNumber: 0,
+      model: {},
+    });
+
+    expect(result.activeTools).toEqual(['tabs_query', 'debugger_attach']);
+  });
+
+  // ── Expert 工具按 Expert Mode 过滤（#222）───────────
+
+  it('expertModeEnabled=false 时 expert 类别工具不出现在 activeTools（分类命中与降级路径）', async () => {
+    const registry = createMockToolRegistry([
+      createMockTool('tabs_query'),
+      { ...createMockTool('skill_execute'), category: 'expert' as const },
+    ]);
+    const lazyAdapter = new ToolLoopAdapter(
+      registry,
+      createMockGuardrail(),
+      mockConversationManager,
+      createMockProviderConfig(),
+      'test-model',
+    );
+    mockToolClassifierClassify.mockResolvedValue(['expert']);
+    await lazyAdapter.run(basicInput);
+
+    const prepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
+      messages: Array<{ role: string; content: string }>;
+      stepNumber: number;
+      model: unknown;
+    }) => Promise<{ activeTools?: string[] }>;
+    const classified = await prepareStep({
+      messages: [{ role: 'user', content: '使用高级功能' }],
+      stepNumber: 0,
+      model: {},
+    });
+    expect(classified.activeTools).toEqual(['tabs_query']);
+
+    // 分类失败的降级路径同样排除 expert 工具
+    mockToolClassifierClassify.mockRejectedValue(new Error('classify error'));
+    const fallback = await prepareStep({
+      messages: [{ role: 'user', content: '使用高级功能' }],
+      stepNumber: 0,
+      model: {},
+    });
+    expect(fallback.activeTools).toEqual(['tabs_query']);
+
+    // 后续步骤继承的子集也不含 expert 工具
+    const nextStep = await prepareStep({
+      messages: [{ role: 'user', content: '使用高级功能' }],
+      stepNumber: 1,
+      model: {},
+    });
+    expect(nextStep.activeTools).toEqual(['tabs_query']);
+  });
+
+  it('expertModeEnabled=true 时 expert 类别工具可进入 activeTools', async () => {
+    const registry = createMockToolRegistry([
+      createMockTool('tabs_query'),
+      { ...createMockTool('skill_execute'), category: 'expert' as const },
+    ]);
+    const lazyAdapter = new ToolLoopAdapter(
+      registry,
+      createMockGuardrail(),
+      mockConversationManager,
+      createMockProviderConfig(),
+      'test-model',
+    );
+    mockToolClassifierClassify.mockResolvedValue(['expert']);
+    await lazyAdapter.run({
+      ...basicInput,
+      expertModeSettings: { enabled: true, switches: {} },
+    });
+
+    const prepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
+      messages: Array<{ role: string; content: string }>;
+      stepNumber: number;
+      model: unknown;
+    }) => Promise<{ activeTools?: string[] }>;
+    const result = await prepareStep({
+      messages: [{ role: 'user', content: '使用高级功能' }],
+      stepNumber: 0,
+      model: {},
+    });
+    expect(result.activeTools).toEqual(['tabs_query', 'skill_execute']);
   });
 
   it('buildMessages 末尾已是同内容 user 消息时不重复追加', async () => {

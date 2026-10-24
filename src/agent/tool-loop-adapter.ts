@@ -84,6 +84,11 @@ export class ToolLoopAdapter implements IAgentRuntime {
     grantedPermissions: [],
     sessionGrants: { sensitiveDataAllowed: false },
   };
+  /**
+   * 本次 run 第 0 步确定的活跃工具子集，供后续步骤继承。
+   * 不继承时 SDK 会在每个新步骤回退到全部工具，上下文随步数反复膨胀。
+   */
+  private lastActiveTools?: string[];
 
   constructor(
     private toolRegistry: IToolRegistry,
@@ -118,6 +123,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId });
     this.abortController = new AbortController();
     this.circuitBreaker.reset();
+    this.lastActiveTools = undefined;
     const toolCalls: ToolCallRecord[] = [];
     const persistenceTasks: Promise<void>[] = [];
 
@@ -380,8 +386,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
     stepNumber: number,
     model: LanguageModel,
   ): Promise<{ activeTools?: string[] }> {
+    // 后续步骤沿用第 0 步确定的子集；返回 {} 会让 SDK 回退到全部工具
     if (stepNumber !== 0) {
-      return {};
+      return { activeTools: this.lastActiveTools ?? this.getAvailableToolNames() };
     }
 
     const lastUserMsg = [...messages].reverse().find(
@@ -390,7 +397,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     );
     if (!lastUserMsg) {
       console.debug('[ToolLoopAdapter] classify: 未找到用户消息');
-      return {};
+      return this.fallbackToAvailableTools();
     }
 
     try {
@@ -405,29 +412,47 @@ export class ToolLoopAdapter implements IAgentRuntime {
       console.debug('[ToolLoopAdapter] classify: 返回 categories:', categories);
 
       if (categories.length === 0) {
-        console.debug('[ToolLoopAdapter] classify: 无匹配类别, 降级到全量工具');
-        return {};
+        console.debug('[ToolLoopAdapter] classify: 无匹配类别, 降级到可用工具');
+        return this.fallbackToAvailableTools();
       }
 
-      const allTools = this.toolRegistry.getAllTools();
-      const toolNames = allTools
+      const baseTools = this.getBaseTools();
+      const activeTools = baseTools
         .filter((t) => CORE_TOOL_CATEGORIES.includes(t.category) || categories.includes(t.category))
         .map((t) => t.name);
 
       console.debug('[ToolLoopAdapter] classify: 过滤结果', {
-        totalTools: allTools.length,
+        totalTools: baseTools.length,
         matchedCategories: categories,
         coreCategories: CORE_TOOL_CATEGORIES,
-        activeTools: toolNames,
+        activeTools,
       });
 
-      return toolNames.length > 0 ? { activeTools: toolNames } : {};
+      this.lastActiveTools = activeTools.length > 0 ? activeTools : baseTools.map((t) => t.name);
+      return { activeTools: this.lastActiveTools };
     } catch (err) {
-      console.warn('[ToolLoopAdapter] classify: 分类失败, 降级到全量工具', {
+      console.warn('[ToolLoopAdapter] classify: 分类失败, 降级到可用工具', {
         errorType: err instanceof Error ? err.name : typeof err,
       });
-      return {};
+      return this.fallbackToAvailableTools();
     }
+  }
+
+  /** 本次运行可用的工具：非 Expert Mode 下排除 expert 类别 */
+  private getBaseTools(): ToolDefinition[] {
+    return this.toolRegistry.getAllTools().filter(
+      (t) => t.category !== 'expert' || this.guardrailContext.expertModeEnabled,
+    );
+  }
+
+  private getAvailableToolNames(): string[] {
+    return this.getBaseTools().map((t) => t.name);
+  }
+
+  /** 分类不可用时的降级：保留可用工具集合并记录，供后续步骤继承 */
+  private fallbackToAvailableTools(): { activeTools: string[] } {
+    this.lastActiveTools = this.getAvailableToolNames();
+    return { activeTools: this.lastActiveTools };
   }
 
   /** 将 ToolDefinition[] 转换为 AI SDK ToolSet */
