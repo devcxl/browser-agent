@@ -107,6 +107,11 @@ export interface DbMessage {
   toolCalls?: string;  // JSON string: Array<{id: string, name: string, arguments: string, result?: string}>
   /** 工具调用 ID（仅 tool 消息包含） */
   toolCallId?: string;
+  /**
+   * 关联的 assistant 消息 ID（仅 tool 消息包含）。
+   * 可选字段，不涉及索引/版本迁移；旧行缺省时按 toolCallId 兼容配对。
+   */
+  parentMessageId?: string;
   timestamp: number;
 }
 

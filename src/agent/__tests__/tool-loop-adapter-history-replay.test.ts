@@ -13,6 +13,7 @@ import type { ProviderConfig } from '@/shared/types/llm';
 import { Database } from '@/shared/db/database';
 import { ConversationManager } from '@/conversation/conversation-manager';
 import { DB_NAME } from '@/shared/db/schema';
+import { reconstructToolProtocol } from '@/shared/tool-protocol';
 
 /**
  * #229 回归：真实 IndexedDB + ConversationManager + AI SDK 协议校验。
@@ -25,6 +26,9 @@ import { DB_NAME } from '@/shared/db/schema';
  *
  * 这里只 mock ToolLoopAgent（隔离模型网络），DB、ConversationManager、
  * generateText 与 MockLanguageModelV4 都是真实实现，由 AI SDK 做协议校验。
+ *
+ * #230 起新工具结果行使用独立 UUID + parentMessageId 关联调用行；本文件同时
+ * 覆盖重复 toolCallId、跨会话同名结果、旧数据归属不明等场景。
  */
 
 interface CapturedAgentOptions {
@@ -100,6 +104,37 @@ function mockFinalText(text: string): void {
     finalStep: Promise.resolve({ text, usage: { inputTokens: 10, outputTokens: 5 } }),
     usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
   }));
+}
+
+interface MockToolStep {
+  toolCallId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  result: ToolResult;
+}
+
+/** 模拟一次含若干工具步骤的 run：同一次 run 内所有落库时间戳相同 */
+function mockToolSteps(steps: MockToolStep[], finalText = '完成'): void {
+  streamMock.mockImplementationOnce(async (options: {
+    onStepFinish: (step: unknown) => void;
+  }) => {
+    for (const step of steps) {
+      options.onStepFinish({
+        toolCalls: [{
+          toolCallId: step.toolCallId,
+          toolName: step.toolName,
+          input: step.input,
+        }],
+        toolResults: [{ toolCallId: step.toolCallId, output: step.result }],
+        content: [],
+      });
+    }
+    return {
+      stream: emptyStream(),
+      finalStep: Promise.resolve({ text: finalText, usage: { inputTokens: 10, outputTokens: 5 } }),
+      usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+    };
+  });
 }
 
 /** 用真实 AI SDK 校验消息序列可被 provider 接受（缺失/重复结果会抛错） */
@@ -196,7 +231,7 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
     };
   }
 
-  it('熔断后的下一轮：同毫秒倒序的 assistant/tool 行仍紧邻配对并通过协议校验', async () => {
+  it('熔断后的下一轮：同毫秒 assistant/tool 行按 parent 关联紧邻配对并通过协议校验', async () => {
     const failures = [1, 2, 3].map((index) => ({
       // 以 '0-' 开头保证工具结果主键字典序小于任意随机 UUID 的 assistant id
       toolCallId: `0-fail-${index}`,
@@ -246,20 +281,25 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
       formatInterruptionMessage(firstRun.interruption!),
     );
 
-    // 真实 DB 索引语义：同毫秒，工具结果主键排在 assistant 主键之前
+    // #230：新工具行使用独立 UUID，并通过 parentMessageId 关联调用行；
+    // 读取顺序不再依赖随机 UUID 与 toolCallId 的字典序。
     const stored = await db.getMessagesByConversation(conversationId);
-    const storedIndex = new Map(stored.map((message, index) => [message.id, index]));
     for (const failure of failures) {
       const toolRow = stored.find((message) => message.role === 'tool'
-        && message.toolCallId === failure.toolCallId);
+        && message.toolCallId === failure.toolCallId
+        && message.content === JSON.stringify(failure.result));
       const callRow = stored.find((message) => message.role === 'assistant'
         && parseToolCalls(message.toolCalls).some((call) => call.id === failure.toolCallId));
       expect(toolRow).toBeDefined();
       expect(callRow).toBeDefined();
       expect(toolRow!.timestamp).toBe(callRow!.timestamp);
-      expect(toolRow!.id < callRow!.id).toBe(true);
-      expect(storedIndex.get(toolRow!.id)!).toBeLessThan(storedIndex.get(callRow!.id)!);
+      expect(toolRow!.parentMessageId).toBe(callRow!.id);
+      // 原始 toolCallId 与结果内容保持独立，不被新主键改写
+      expect(toolRow!.id).not.toBe(failure.toolCallId);
     }
+
+    // 提升时间戳，保证第二轮的用户消息排在首轮历史之后（不受同毫秒 UUID 排序影响）
+    nowValue += 10_000;
 
     // 第二轮：真实 ConversationManager 读回同样乱序的历史
     const secondInput = makeInput('继续');
@@ -444,5 +484,388 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
     expect(messages.flatMap(toolResultParts).some(
       (part) => part.toolCallId === 'ghost-call',
     )).toBe(false);
+  });
+
+  it('#230 同一 toolCallId 跨两步同毫秒落库：两行都保留、各自关联正确调用、模型侧 ID 与结果唯一', async () => {
+    const firstResult: ToolResult = { success: true, data: { step: 1 } };
+    const secondResult: ToolResult = { success: true, data: { step: 2 } };
+
+    mockToolSteps([
+      {
+        toolCallId: 'dup-call',
+        toolName: 'tabs_query',
+        input: { id: 'step-1' },
+        result: firstResult,
+      },
+      {
+        toolCallId: 'dup-call',
+        toolName: 'tabs_query',
+        input: { id: 'step-2' },
+        result: secondResult,
+      },
+    ]);
+
+    await adapter.run(makeInput('跑两步同名调用'));
+    nowValue += 10_000;
+
+    const stored = await db.getMessagesByConversation(conversationId);
+    const callRows = stored.filter((message) => message.role === 'assistant'
+      && parseToolCalls(message.toolCalls).some((call) => call.id === 'dup-call'));
+    const toolRows = stored.filter((message) => message.role === 'tool'
+      && message.toolCallId === 'dup-call');
+
+    expect(callRows).toHaveLength(2);
+    expect(toolRows).toHaveLength(2);
+    expect(new Set(toolRows.map((row) => row.id)).size).toBe(2);
+    expect(toolRows.every((row) => row.id !== 'dup-call')).toBe(true);
+
+    const parentInputById = new Map(callRows.map((row) => {
+      const call = parseToolCalls(row.toolCalls).find((candidate) => candidate.id === 'dup-call');
+      return [row.id, call?.params.id] as const;
+    }));
+    const expectedResultByInput = new Map<string, ToolResult>([
+      ['step-1', firstResult],
+      ['step-2', secondResult],
+    ]);
+    for (const row of toolRows) {
+      const parentInput = parentInputById.get(row.parentMessageId ?? '');
+      expect(parentInput).toBeDefined();
+      expect(row.content).toBe(JSON.stringify(expectedResultByInput.get(String(parentInput))));
+    }
+    // 持久化的 toolCallId / 参数不被模型侧重命名影响
+    for (const row of callRows) {
+      const call = parseToolCalls(row.toolCalls)[0]!;
+      expect(call.id).toBe('dup-call');
+    }
+
+    mockFinalText('继续。');
+    await adapter.run(makeInput('继续'));
+    const messages = streamMock.mock.calls[1]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(messages);
+
+    const callParts = messages.flatMap(assistantToolCalls);
+    const dupCalls = callParts.filter((part) => (
+      part.toolName === 'tabs_query'
+      && part.input !== undefined
+      && ['step-1', 'step-2'].includes((part.input as { id: string }).id)
+    ));
+    expect(dupCalls).toHaveLength(2);
+    expect(new Set(dupCalls.map((part) => part.toolCallId)).size).toBe(2);
+    // 模型侧 ID 只使用 provider 常规安全字符（原 ID 安全时不引入 # 等标点）
+    for (const part of dupCalls) {
+      expect(part.toolCallId).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(part.toolCallId).not.toContain('#');
+    }
+
+    for (const inputId of ['step-1', 'step-2']) {
+      const callIndex = messages.findIndex((message) => assistantToolCalls(message)
+        .some((part) => (part.input as { id?: string } | undefined)?.id === inputId));
+      expect(callIndex).toBeGreaterThanOrEqual(0);
+      const callPart = assistantToolCalls(messages[callIndex]!).find(
+        (part) => (part.input as { id?: string } | undefined)?.id === inputId,
+      )!;
+      const resultParts = toolResultParts(messages[callIndex + 1]!);
+      expect(resultParts).toHaveLength(1);
+      expect(resultParts[0]).toMatchObject({
+        type: 'tool-result',
+        toolCallId: callPart.toolCallId,
+        toolName: 'tabs_query',
+      });
+      expect(resultParts[0]!.output?.value).toBe(JSON.stringify(expectedResultByInput.get(inputId)));
+    }
+  });
+
+  it('#230 跨会话相同 toolCallId：两行独立保留并各自关联所在会话的调用', async () => {
+    const otherConversationId = (await conversationManager.create('另一个会话')).id;
+    const resultA: ToolResult = { success: true, data: { conversation: 'a' } };
+    const resultB: ToolResult = { success: true, data: { conversation: 'b' } };
+
+    mockToolSteps([{
+      toolCallId: 'shared-call',
+      toolName: 'tabs_query',
+      input: { id: 'conv-a' },
+      result: resultA,
+    }]);
+    await adapter.run(makeInput('会话 A 的请求'));
+    nowValue += 10_000;
+
+    mockToolSteps([{
+      toolCallId: 'shared-call',
+      toolName: 'tabs_query',
+      input: { id: 'conv-b' },
+      result: resultB,
+    }]);
+    await adapter.run({ ...makeInput('会话 B 的请求'), conversationId: otherConversationId });
+    nowValue += 10_000;
+
+    const storedA = await db.getMessagesByConversation(conversationId);
+    const storedB = await db.getMessagesByConversation(otherConversationId);
+    const toolRowsA = storedA.filter((message) => message.role === 'tool'
+      && message.toolCallId === 'shared-call');
+    const toolRowsB = storedB.filter((message) => message.role === 'tool'
+      && message.toolCallId === 'shared-call');
+
+    expect(toolRowsA).toHaveLength(1);
+    expect(toolRowsB).toHaveLength(1);
+    expect(toolRowsA[0]!.id).not.toBe(toolRowsB[0]!.id);
+    expect(toolRowsA[0]!.content).toBe(JSON.stringify(resultA));
+    expect(toolRowsB[0]!.content).toBe(JSON.stringify(resultB));
+
+    const callRowA = storedA.find((message) => message.role === 'assistant'
+      && parseToolCalls(message.toolCalls).some((call) => call.id === 'shared-call'));
+    const callRowB = storedB.find((message) => message.role === 'assistant'
+      && parseToolCalls(message.toolCalls).some((call) => call.id === 'shared-call'));
+    expect(toolRowsA[0]!.parentMessageId).toBe(callRowA!.id);
+    expect(toolRowsB[0]!.parentMessageId).toBe(callRowB!.id);
+
+    mockFinalText('继续 A。');
+    await adapter.run(makeInput('继续 A'));
+    mockFinalText('继续 B。');
+    await adapter.run({ ...makeInput('继续 B'), conversationId: otherConversationId });
+
+    const messagesA = streamMock.mock.calls[2]?.[0]?.messages as ModelMessage[];
+    const messagesB = streamMock.mock.calls[3]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(messagesA);
+    await validateWithAiSdk(messagesB);
+
+    expect(messagesA.flatMap(toolResultParts).map((part) => part.output?.value))
+      .toContain(JSON.stringify(resultA));
+    expect(messagesA.flatMap(toolResultParts).map((part) => part.output?.value))
+      .not.toContain(JSON.stringify(resultB));
+    expect(messagesB.flatMap(toolResultParts).map((part) => part.output?.value))
+      .toContain(JSON.stringify(resultB));
+    expect(messagesB.flatMap(toolResultParts).map((part) => part.output?.value))
+      .not.toContain(JSON.stringify(resultA));
+  });
+
+  it('#230 旧数据同 toolCallId 多次调用只剩一行结果：归属不明，全部标记未知', async () => {
+    const base = Date.now() - 30_000;
+    const legacyResult: ToolResult = { success: true, data: { applied: 'destructive' } };
+
+    await conversationManager.addMessage(conversationId, {
+      id: 'user-ambiguous',
+      role: 'user',
+      content: '执行两步',
+      timestamp: base,
+    });
+    await conversationManager.addMessage(conversationId, {
+      id: 'f0000000-0000-4000-8000-000000000010',
+      role: 'assistant',
+      content: '',
+      timestamp: base + 1,
+      toolCalls: [{ id: 'legacy-dup', name: 'tabs_query', params: { id: 'step-1' } }],
+    });
+    await conversationManager.addMessage(conversationId, {
+      id: 'f0000000-0000-4000-8000-000000000011',
+      role: 'assistant',
+      content: '',
+      timestamp: base + 1,
+      toolCalls: [{ id: 'legacy-dup', name: 'tabs_query', params: { id: 'step-2' } }],
+    });
+    // 旧实现用 toolCallId 作主键，第二步覆盖了第一步，只剩这一行且无法确定归属
+    await conversationManager.addMessage(conversationId, {
+      id: '0-legacy-dup',
+      role: 'tool',
+      content: JSON.stringify(legacyResult),
+      toolCallId: 'legacy-dup',
+      timestamp: base + 1,
+    });
+
+    mockFinalText('已核实。');
+    await adapter.run(makeInput('继续'));
+    const messages = streamMock.mock.calls[0]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(messages);
+
+    const callParts = messages.flatMap(assistantToolCalls)
+      .filter((part) => ['step-1', 'step-2'].includes(
+        (part.input as { id?: string } | undefined)?.id ?? '',
+      ));
+    expect(callParts).toHaveLength(2);
+    expect(new Set(callParts.map((part) => part.toolCallId)).size).toBe(2);
+
+    const toolValues = messages.flatMap(toolResultParts).map((part) => String(part.output?.value ?? ''));
+    expect(toolValues).not.toContain(JSON.stringify(legacyResult));
+    for (const part of callParts) {
+      const callIndex = messages.findIndex((message) => assistantToolCalls(message)
+        .some((candidate) => candidate.toolCallId === part.toolCallId));
+      const result = toolResultParts(messages[callIndex + 1]!)[0];
+      expect(result).toMatchObject({ type: 'tool-result', toolCallId: part.toolCallId });
+      expect(String(result!.output?.value ?? '')).toContain('状态未知');
+    }
+  });
+
+  it('#230 同一 parent 内重复 toolCallId：无索引可区分，宁可未知也不误配成功', async () => {
+    const base = Date.now() - 30_000;
+    const assistantId = 'f0000000-0000-4000-8000-000000000020';
+    const realResult: ToolResult = { success: true, data: { applied: true } };
+
+    await conversationManager.addMessage(conversationId, {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      timestamp: base,
+      toolCalls: [
+        { id: 'same-parent-dup', name: 'tabs_query', params: { id: 'step-1' } },
+        { id: 'same-parent-dup', name: 'tabs_query', params: { id: 'step-2' } },
+      ],
+    });
+    await conversationManager.addMessage(conversationId, {
+      id: 'tool-same-parent',
+      role: 'tool',
+      content: JSON.stringify(realResult),
+      toolCallId: 'same-parent-dup',
+      parentMessageId: assistantId,
+      timestamp: base,
+    });
+
+    mockFinalText('已核实。');
+    await adapter.run(makeInput('继续'));
+    const messages = streamMock.mock.calls[0]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(messages);
+
+    const callParts = assistantToolCalls(messages.find((message) => assistantToolCalls(message)
+      .some((part) => ['step-1', 'step-2'].includes(
+        (part.input as { id?: string } | undefined)?.id ?? '',
+      )))!);
+    expect(callParts).toHaveLength(2);
+    expect(new Set(callParts.map((part) => part.toolCallId)).size).toBe(2);
+
+    const toolValues = messages.flatMap(toolResultParts).map((part) => String(part.output?.value ?? ''));
+    expect(toolValues).not.toContain(JSON.stringify(realResult));
+    for (const part of callParts) {
+      const callIndex = messages.findIndex((message) => assistantToolCalls(message)
+        .some((candidate) => candidate.toolCallId === part.toolCallId));
+      expect(String(toolResultParts(messages[callIndex + 1]!)[0]!.output?.value ?? ''))
+        .toContain('状态未知');
+    }
+  });
+
+  it('#230 新旧行混合：linked 结果跟随其 parent，legacy 唯一结果按 toolCallId 配对', async () => {
+    const base = Date.now() - 30_000;
+    const legacyResult: ToolResult = { success: true, data: { source: 'legacy' } };
+    const linkedResult: ToolResult = { success: true, data: { source: 'linked' } };
+    const linkedAssistantId = 'f0000000-0000-4000-8000-000000000030';
+
+    await conversationManager.addMessage(conversationId, {
+      id: 'f0000000-0000-4000-8000-000000000029',
+      role: 'assistant',
+      content: '',
+      timestamp: base,
+      toolCalls: [{ id: 'legacy-mixed', name: 'tabs_query', params: { id: 'legacy-step' } }],
+    });
+    await conversationManager.addMessage(conversationId, {
+      id: '0-legacy-mixed',
+      role: 'tool',
+      content: JSON.stringify(legacyResult),
+      toolCallId: 'legacy-mixed',
+      timestamp: base,
+    });
+    await conversationManager.addMessage(conversationId, {
+      id: linkedAssistantId,
+      role: 'assistant',
+      content: '',
+      timestamp: base,
+      toolCalls: [{ id: 'linked-mixed', name: 'tabs_query', params: { id: 'linked-step' } }],
+    });
+    await conversationManager.addMessage(conversationId, {
+      id: 'tool-linked-mixed',
+      role: 'tool',
+      content: JSON.stringify(linkedResult),
+      toolCallId: 'linked-mixed',
+      parentMessageId: linkedAssistantId,
+      timestamp: base,
+    });
+
+    mockFinalText('继续');
+    await adapter.run(makeInput('继续'));
+    const messages = streamMock.mock.calls[0]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(messages);
+
+    const expectations = new Map([
+      ['legacy-step', legacyResult],
+      ['linked-step', linkedResult],
+    ]);
+    for (const [inputId, expected] of expectations) {
+      const callIndex = messages.findIndex((message) => assistantToolCalls(message)
+        .some((part) => (part.input as { id?: string } | undefined)?.id === inputId));
+      expect(callIndex).toBeGreaterThanOrEqual(0);
+      const result = toolResultParts(messages[callIndex + 1]!)[0];
+      expect(result?.output?.value).toBe(JSON.stringify(expected));
+    }
+  });
+
+  it('#230 parentMessageId 写入/读回往返，旧行缺省仍为 undefined', async () => {
+    const parentId = 'f0000000-0000-4000-8000-000000000040';
+    await conversationManager.addMessage(conversationId, {
+      id: 'tool-linked-roundtrip',
+      role: 'tool',
+      content: '{"success":true}',
+      toolCallId: 'call-linked',
+      parentMessageId: parentId,
+      timestamp: Date.now() - 20_000,
+    });
+    await conversationManager.addMessage(conversationId, {
+      id: 'tool-legacy-roundtrip',
+      role: 'tool',
+      content: '{"success":true}',
+      toolCallId: 'call-legacy',
+      timestamp: Date.now() - 19_000,
+    });
+
+    const conversation = await conversationManager.get(conversationId);
+    const linked = conversation!.messages.find((message) => message.id === 'tool-linked-roundtrip');
+    const legacy = conversation!.messages.find((message) => message.id === 'tool-legacy-roundtrip');
+    expect(linked?.parentMessageId).toBe(parentId);
+    expect(legacy?.parentMessageId).toBeUndefined();
+
+    const stored = await db.getMessagesByConversation(conversationId);
+    expect(stored.find((message) => message.id === 'tool-linked-roundtrip')?.parentMessageId)
+      .toBe(parentId);
+  });
+
+  it('#230 模型侧重命名使用 provider 安全字符，且与已有原始 ID 冲突时仍唯一', () => {
+    const messages: StoredMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'call_dup', name: 'tabs_query', params: { id: 'first' } }],
+      },
+      {
+        id: 'a2',
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'call_dup_replay_2', name: 'tabs_query', params: { id: 'reserved' } }],
+      },
+      {
+        id: 'a3',
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'call_dup', name: 'tabs_query', params: { id: 'second' } }],
+      },
+    ];
+
+    const { messages: rebuilt } = reconstructToolProtocol(messages);
+    const callIds = rebuilt
+      .filter((message) => message.role === 'assistant')
+      .flatMap((message) => message.toolCalls?.map((call) => call.id) ?? []);
+
+    expect(callIds).toHaveLength(3);
+    expect(new Set(callIds).size).toBe(3);
+    for (const callId of callIds) {
+      expect(callId).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(callId).not.toContain('#');
+    }
+    // 首选候选 call_dup_replay_2 与已有原始 ID 冲突时必须继续避让
+    expect(callIds[0]).toBe('call_dup');
+    expect(callIds[1]).toBe('call_dup_replay_2');
+    expect(callIds[2]).not.toBe('call_dup_replay_2');
+    expect(callIds[2]).toContain('call_dup_replay_2');
+
+    // 原始持久化 ID 与参数不被改写
+    expect(messages[2]!.toolCalls?.[0]).toMatchObject({
+      id: 'call_dup',
+      params: { id: 'second' },
+    });
   });
 });

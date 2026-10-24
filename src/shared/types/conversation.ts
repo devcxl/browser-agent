@@ -15,6 +15,12 @@ export interface StoredMessage {
   }>;
   /** 工具调用 ID（仅 tool 消息） */
   toolCallId?: string;
+  /**
+   * 关联的 assistant 消息 ID（仅 tool 消息）。
+   * #230 起新工具结果行以独立 UUID 为主键，通过该字段定位所属调用行；
+   * 旧数据没有此字段，只能按 toolCallId 兼容配对。
+   */
+  parentMessageId?: string;
   /** 推理/思考内容（仅 assistant 消息） */
   reasoningContent?: string;
   /** 消息时间戳，缺省时由 ConversationManager 写入 Date.now() */

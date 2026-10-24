@@ -21,6 +21,7 @@ function dbMsgToStored(msg: {
   content: string;
   toolCalls?: string | null;
   toolCallId?: string | null;
+  parentMessageId?: string | null;
   timestamp: number;
 }): StoredMessage {
   return {
@@ -31,6 +32,7 @@ function dbMsgToStored(msg: {
       ? (JSON.parse(msg.toolCalls) as StoredMessage['toolCalls'])
       : undefined,
     toolCallId: msg.toolCallId ?? undefined,
+    parentMessageId: msg.parentMessageId ?? undefined,
     timestamp: msg.timestamp,
   };
 }
@@ -135,6 +137,7 @@ export class ConversationManager implements IConversationManager {
         ? JSON.stringify(message.toolCalls)
         : undefined,
       toolCallId: message.toolCallId,
+      parentMessageId: message.parentMessageId,
       timestamp: message.timestamp ?? Date.now(),
     });
 
