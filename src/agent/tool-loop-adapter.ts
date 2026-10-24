@@ -1,7 +1,7 @@
 import type { IAgentRuntime, AgentRunInput, AgentRunOutput, AgentConfig, ToolCallRecord } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition } from '@/registry/types';
 import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
-import type { IConversationManager } from '@/shared/types/conversation';
+import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
 import type { LowSensitivityContext } from '@/shared/types/browser';
 import type { JevSettings } from '@/shared/types/storage';
@@ -45,6 +45,71 @@ const MAX_TOOL_RESULT_CHARS = 8_000;
 
 const RECENT_TURNS_TO_KEEP = 4;
 const conversationCompactions = new Map<string, Promise<boolean>>();
+
+/**
+ * 结果真实缺失时给模型看的唯一状态说明。
+ *
+ * 不臆测成功/失败（可能已产生副作用），也不暗示可以直接重试；
+ * 只用于本次请求的消息上下文，绝不写回会话历史。
+ */
+const UNKNOWN_TOOL_RESULT_CONTENT =
+  '执行状态未知：这次工具调用的结果没有保存，无法确认是否已执行。'
+  + '它可能已经执行并对浏览器产生了副作用；请先核实当前页面或标签页状态，不要自动重试。';
+
+/**
+ * 按 toolCallId 重排历史中的工具调用与结果，使其满足模型协议。
+ *
+ * IndexedDB 的 [conversationId, timestamp] 索引在时间戳相同时按主键升序返回，
+ * 而工具结果曾以自己的 toolCallId 作为主键，可能与 assistant 消息同毫秒且排序在前。
+ * 直接按行序遍历会把这类真实结果当作「尚无对应调用」丢弃，留下悬空的 tool-call，
+ * 下一轮请求被 AI SDK 以 MissingToolResultsError 拒绝。因此这里只按 ID 配对：
+ * - assistant 的每个 tool-call 后紧跟其真实结果（内容、顺序保真）；
+ * - 结果确实缺失时插入仅模型可见的「状态未知」占位，不伪造成功/失败；
+ * - 找不到任何调用的孤立结果保持排除。
+ */
+function reconstructToolProtocol(messages: readonly StoredMessage[]): StoredMessage[] {
+  const declaredCallIds = new Set<string>();
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    for (const call of message.toolCalls ?? []) declaredCallIds.add(call.id);
+  }
+
+  const resultsByCallId = new Map<string, StoredMessage[]>();
+  for (const message of messages) {
+    if (message.role !== 'tool' || !message.toolCallId) continue;
+    if (!declaredCallIds.has(message.toolCallId)) continue;
+    const bucket = resultsByCallId.get(message.toolCallId);
+    if (bucket) bucket.push(message);
+    else resultsByCallId.set(message.toolCallId, [message]);
+  }
+
+  const consumedResultIds = new Set<string>();
+  const rebuilt: StoredMessage[] = [];
+  for (const message of messages) {
+    // 工具结果统一跟随其调用输出，避免结果行出现在调用之前
+    if (message.role === 'tool') continue;
+    rebuilt.push(message);
+    if (message.role !== 'assistant' || !message.toolCalls?.length) continue;
+
+    for (const call of message.toolCalls) {
+      const result = resultsByCallId
+        .get(call.id)
+        ?.find((candidate) => !consumedResultIds.has(candidate.id));
+      if (result) {
+        consumedResultIds.add(result.id);
+        rebuilt.push(result);
+        continue;
+      }
+      rebuilt.push({
+        id: `unknown-result-${call.id}`,
+        role: 'tool',
+        content: UNKNOWN_TOOL_RESULT_CONTENT,
+        toolCallId: call.id,
+      });
+    }
+  }
+  return rebuilt;
+}
 
 function mapReasoningEffort(effort?: AgentConfig['reasoningEffort']): 'low' | 'medium' | 'high' | 'xhigh' | undefined {
   if (!effort) return undefined;
@@ -550,22 +615,22 @@ export class ToolLoopAdapter implements IAgentRuntime {
         input.conversationId,
         Number.MAX_SAFE_INTEGER,
       );
+    // 存储顺序不可信（同毫秒按主键排序），先按 ID 重建调用/结果配对
+    const history = reconstructToolProtocol(recentMessages);
     const toolNames = new Map<string, string>();
-    const pendingToolCallIds = new Set<string>();
-    for (const msg of recentMessages) {
-      if (msg.role === 'assistant') {
-        for (const toolCall of msg.toolCalls ?? []) {
-          toolNames.set(toolCall.id, toolCall.name);
-          pendingToolCallIds.add(toolCall.id);
-        }
+    for (const msg of history) {
+      if (msg.role !== 'assistant') continue;
+      for (const toolCall of msg.toolCalls ?? []) {
+        toolNames.set(toolCall.id, toolCall.name);
       }
-      if (msg.role === 'tool') {
-        if (!msg.toolCallId || !pendingToolCallIds.delete(msg.toolCallId)) continue;
-      }
+    }
+    for (const msg of history) {
       messages.push(this.convertToModelMessage(msg, toolNames.get(msg.toolCallId ?? '')));
     }
 
     // 4. Current user message (if not already in history)
+    // 去重必须看原始存储尾部：重建会移除孤立 tool 行，若改用重建结果，
+    // 上一条同文用户消息会被误判为当前输入，导致新的用户消息被吞掉。
     const lastMsg = recentMessages[recentMessages.length - 1];
     if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== input.userMessage) {
       messages.push({
