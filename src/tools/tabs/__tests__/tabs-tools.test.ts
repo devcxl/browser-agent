@@ -3,7 +3,6 @@ import type { IJsonRpcClient } from '@/shared/types';
 import { createTabsTools } from '../index';
 import {
   createTabsQueryTool,
-  createTabsGetTool,
   createTabsCreateTool,
   createTabsUpdateTool,
   createTabsRemoveTool,
@@ -27,20 +26,60 @@ function createMockRpc(): IJsonRpcClient {
 
 describe('Tabs tools', () => {
   describe('createTabsTools', () => {
-    it('should return 8 tools', () => {
+    it('should return 7 tools', () => {
       const rpc = createMockRpc();
       const tools = createTabsTools(rpc);
-      expect(tools).toHaveLength(8);
+      expect(tools).toHaveLength(7);
+    });
+
+    it('should no longer expose tabs_get (merged into tabs_query)', () => {
+      const rpc = createMockRpc();
+      const names = createTabsTools(rpc).map((tool) => tool.name);
+      expect(names).not.toContain('tabs_get');
+      expect(names).toEqual([
+        'tabs_query',
+        'tabs_create',
+        'tabs_update',
+        'tabs_remove',
+        'tabs_move',
+        'tabs_group',
+        'tabs_ungroup',
+      ]);
     });
   });
 
   describe('tabs_query', () => {
-    it('should call rpc.request("tabs.query", params)', async () => {
+    it('should call rpc.request("tabs.get", { tabId }) when tabId is provided', async () => {
       const rpc = createMockRpc();
       const tool = createTabsQueryTool(rpc);
-      const params = { queryInfo: { active: true, currentWindow: true } };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.query', params);
+      await tool.execute({ tabId: 5 });
+      expect(rpc.request).toHaveBeenCalledWith('tabs.get', { tabId: 5 });
+    });
+
+    it('should return the full tab object when tabId is provided', async () => {
+      const rpc = createMockRpc();
+      const mockTab = { id: 5, title: 'Test', url: 'https://example.com', active: true, pinned: false };
+      vi.mocked(rpc.request).mockResolvedValue(mockTab);
+      const tool = createTabsQueryTool(rpc);
+      const result = await tool.execute({ tabId: 5 });
+      expect(result).toEqual({ success: true, data: mockTab });
+    });
+
+    it('should prefer tabId over queryInfo when both are provided', async () => {
+      const rpc = createMockRpc();
+      const tool = createTabsQueryTool(rpc);
+      await tool.execute({ tabId: 3, queryInfo: { active: true } });
+      expect(rpc.request).toHaveBeenCalledWith('tabs.get', { tabId: 3 });
+      expect(rpc.request).not.toHaveBeenCalledWith('tabs.query', expect.anything());
+    });
+
+    it('should call rpc.request("tabs.query", { queryInfo }) when queryInfo is provided', async () => {
+      const rpc = createMockRpc();
+      const tool = createTabsQueryTool(rpc);
+      await tool.execute({ queryInfo: { active: true, currentWindow: true } });
+      expect(rpc.request).toHaveBeenCalledWith('tabs.query', {
+        queryInfo: { active: true, currentWindow: true },
+      });
     });
 
     it('should return success result with tabs data', async () => {
@@ -54,6 +93,14 @@ describe('Tabs tools', () => {
       expect(result.data).toEqual(mockTabs);
     });
 
+    it('should return error result when rpc fails', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockRejectedValue(new Error('RPC failed'));
+      const tool = createTabsQueryTool(rpc);
+      const result = await tool.execute({ tabId: 1 });
+      expect(result).toEqual({ success: false, error: 'RPC failed' });
+    });
+
     it('should have correct metadata', () => {
       const rpc = createMockRpc();
       const tool = createTabsQueryTool(rpc);
@@ -64,31 +111,13 @@ describe('Tabs tools', () => {
       expect(tool.resultSensitivity).toBe('sensitive');
       expect(tool.requireBackground).toBe(true);
     });
-  });
 
-  describe('tabs_get', () => {
-    it('should call rpc.request("tabs.get", params)', async () => {
+    it('should expose optional tabId and queryInfo in schema', () => {
       const rpc = createMockRpc();
-      const tool = createTabsGetTool(rpc);
-      const params = { tabId: 5 };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.get', params);
-    });
-
-    it('should require tabId in schema', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsGetTool(rpc);
-      expect(tool.schema.required).toContain('tabId');
-    });
-
-    it('should have correct metadata', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsGetTool(rpc);
-      expect(tool.name).toBe('tabs_get');
-      expect(tool.category).toBe('tabs');
-      expect(tool.riskLevel).toBe('low');
-      expect(tool.confirmationRequired).toBe(false);
-      expect(tool.requireBackground).toBe(true);
+      const tool = createTabsQueryTool(rpc);
+      expect(tool.schema.properties).toHaveProperty('tabId');
+      expect(tool.schema.properties).toHaveProperty('queryInfo');
+      expect(tool.schema.required).toBeUndefined();
     });
   });
 

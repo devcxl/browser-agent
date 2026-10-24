@@ -4,7 +4,8 @@ import type { IJsonRpcClient } from "../../shared/types";
 export function createTabsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
     name: "tabs_query",
-    description: "查询当前浏览器中所有匹配条件的标签页。",
+    description:
+      "查询标签页。提供 tabId 时返回该标签页的详细信息；提供 queryInfo 或都不提供时返回匹配条件的标签页列表。",
     category: "tabs",
     riskLevel: "low",
     confirmationRequired: false,
@@ -12,8 +13,13 @@ export function createTabsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
     schema: {
       type: "object",
       properties: {
+        tabId: {
+          type: "number",
+          description: "要查询的单个标签页 ID，提供时直接获取该标签页详细信息",
+        },
         queryInfo: {
           type: "object",
+          description: "标签页过滤条件，不提供 tabId 时生效",
           properties: {
             active: { type: "boolean" },
             pinned: { type: "boolean" },
@@ -33,33 +39,18 @@ export function createTabsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      const tabs = await rpc.request("tabs.query", {
-        queryInfo: params.queryInfo ?? {},
-      });
-      return { success: true, data: tabs };
-    },
-  };
-}
-
-export function createTabsGetTool(rpc: IJsonRpcClient): ToolDefinition {
-  return {
-    name: "tabs_get",
-    description: "获取单个标签页的详细信息。",
-    category: "tabs",
-    riskLevel: "low",
-    confirmationRequired: false,
-    resultSensitivity: "low",
-    schema: {
-      type: "object",
-      properties: {
-        tabId: { type: "number", description: "要查询的标签页 ID" },
-      },
-      required: ["tabId"],
-    },
-    requireBackground: true,
-    execute: async (params) => {
-      const tab = await rpc.request("tabs.get", params);
-      return { success: true, data: tab };
+      try {
+        if (typeof params.tabId === "number") {
+          const tab = await rpc.request("tabs.get", { tabId: params.tabId });
+          return { success: true, data: tab };
+        }
+        const tabs = await rpc.request("tabs.query", {
+          queryInfo: params.queryInfo ?? {},
+        });
+        return { success: true, data: tabs };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+      }
     },
   };
 }
