@@ -88,8 +88,17 @@ async function getDeps(): Promise<AgentDeps> {
     registry.registerAll(
       createPageTools(
         async (params) => {
-          const result = await rpc.request('content.execute', params as Record<string, unknown>);
-          return { success: true, data: result };
+          try {
+            const result = await rpc.request('content.execute', params as Record<string, unknown>);
+            return { success: true, data: result };
+          } catch (err) {
+            // 内容脚本缺失、受限页面（about:blank / chrome:// 设置页）、端口断开等都会在此抛出，
+            // 统一转成结构化失败结果，避免未捕获拒绝导致整轮工具执行崩溃。
+            return {
+              success: false,
+              error: err instanceof Error ? err.message : '页面脚本不可达或通信失败',
+            };
+          }
         },
         rpc,
       ),
