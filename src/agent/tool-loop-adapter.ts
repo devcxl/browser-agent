@@ -54,6 +54,13 @@ function mapReasoningEffort(effort?: AgentConfig['reasoningEffort']): 'low' | 'm
 /** Agent 接口所需的工具集类型 */
 type AdapterTools = Record<string, AISdkTool>;
 
+/** StepResult 中本模块使用的字段：工具调用/结果，以及识别 tool-error 所需的 content */
+type StepToolData = {
+  toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>;
+  toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>>;
+  content?: ReadonlyArray<{ type: string; toolCallId?: string; error?: unknown }>;
+};
+
 /** toolApproval 回调请求参数 */
 export interface ToolApprovalRequest {
   toolName: string;
@@ -774,19 +781,44 @@ export class ToolLoopAdapter implements IAgentRuntime {
     return this.providerConfig.models?.[this.modelId];
   }
 
+  /**
+   * 把 StepResult 还原成真实的 ToolResult。
+   *
+   * - 工具正常返回时，output 本身就是 ToolResult（executeTool 已归一化），直接透传，
+   *   避免把 `{ success: false, error }` 二次包装成 `{ success: true, data: ... }`；
+   * - 工具抛错时 AI SDK 不产出 toolResults，而是在 content 中给出 tool-error part，
+   *   必须转成失败结果，绝不能伪造成功。
+   */
+  private resolveToolResult(
+    tc: { toolCallId: string; toolName: string },
+    stepResult: StepToolData,
+  ): ToolResult {
+    const tr = stepResult.toolResults?.find((r) => r.toolCallId === tc.toolCallId);
+    if (tr?.output !== undefined) {
+      if (tr.output !== null && typeof tr.output === 'object' && 'success' in (tr.output as Record<string, unknown>)) {
+        return tr.output as ToolResult;
+      }
+      return { success: true, data: tr.output };
+    }
+    const errPart = stepResult.content?.find(
+      (p) => p?.type === 'tool-error' && p?.toolCallId === tc.toolCallId,
+    );
+    if (errPart?.error) {
+      const errMsg = errPart.error instanceof Error ? errPart.error.message : String(errPart.error);
+      return { success: false, error: errMsg };
+    }
+    return { success: false, error: '工具执行未返回结果' };
+  }
+
   /** 从 StepResult 中提取并记录工具调用 */
   private recordStepToolCalls(
-    stepResult: { toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>; toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>> },
+    stepResult: StepToolData,
     toolCalls: ToolCallRecord[],
     onToolCall?: (record: ToolCallRecord) => void,
   ) {
     const stepToolCalls = stepResult.toolCalls ?? [];
-    const stepToolResults = stepResult.toolResults ?? [];
     for (const tc of stepToolCalls) {
-      const tr = stepToolResults.find((r) => r.toolCallId === tc.toolCallId);
-      const result: ToolResult = tr?.output
-        ? { success: true, data: tr.output }
-        : { success: true };
+      const result = this.resolveToolResult(tc, stepResult);
       const record: ToolCallRecord = {
         toolName: tc.toolName,
         params: (tc.input as Record<string, unknown>) ?? {},
@@ -804,10 +836,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
   /** 按 assistant tool-call → tool-result 顺序持久化，保证下一轮历史符合协议。 */
   private async persistStepMessages(
     conversationId: string,
-    stepResult: { toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>; toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>> },
+    stepResult: StepToolData,
   ) {
     const stepToolCalls = stepResult.toolCalls ?? [];
-    const stepToolResults = stepResult.toolResults ?? [];
     if (stepToolCalls.length === 0) return;
 
     await this.conversationManager.addMessage(conversationId, {
@@ -822,11 +853,11 @@ export class ToolLoopAdapter implements IAgentRuntime {
     });
 
     for (const tc of stepToolCalls) {
-      const tr = stepToolResults.find((r) => r.toolCallId === tc.toolCallId);
+      const result = this.resolveToolResult(tc, stepResult);
       await this.conversationManager.addMessage(conversationId, {
         id: tc.toolCallId,
         role: 'tool',
-        content: JSON.stringify(tr?.output ?? { success: true }),
+        content: JSON.stringify(result),
         toolCallId: tc.toolCallId,
       });
     }

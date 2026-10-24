@@ -1147,10 +1147,10 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
 
     const result = await adapter.run(basicInput);
     expect(result.toolCalls).toHaveLength(2);
-    // 带 toolResult 的工具记录输出
-    expect(result.toolCalls[0]!.result).toEqual({ success: true, data: { success: true, tabs: 1 } });
-    // 缺失 toolResult 的工具回退 success:true
-    expect(result.toolCalls[1]!.result).toEqual({ success: true });
+    // 带 toolResult 的工具记录输出（output 本身即 ToolResult，原样透传）
+    expect(result.toolCalls[0]!.result).toEqual({ success: true, tabs: 1 });
+    // 缺失 toolResult 的工具记录失败，绝不伪造成功
+    expect(result.toolCalls[1]!.result).toEqual({ success: false, error: '工具执行未返回结果' });
 
     const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
     expect(persisted.filter((message) => message.role === 'tool')).toHaveLength(2);
@@ -1171,7 +1171,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
       expect.objectContaining({ type: 'tool-call', toolCallId: 'call-1', toolName: 'tabs_query', input: { tabIds: [1] } }),
       expect.objectContaining({ type: 'tool-call', toolCallId: 'call-2', toolName: 'tabs_remove', input: { tabIds: [2] } }),
     ]));
-    // 每个 tool-result 独立成一条消息，且缺失输出的 call-2 回退 { success: true }
+    // 每个 tool-result 独立成一条消息，缺失输出的 call-2 记录为失败原因
     expect(toolMsgs).toHaveLength(2);
     expect(toolMsgs[0]!.content).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'tool-result', toolCallId: 'call-1', toolName: 'tabs_query' }),
@@ -1179,6 +1179,111 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     expect(toolMsgs[1]!.content).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'tool-result', toolCallId: 'call-2', toolName: 'tabs_remove' }),
     ]));
+  });
+
+  it('工具抛错（tool-error part）时记录并持久化真实失败，不伪造成功', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'err-1', toolName: 'tabs_remove', input: { tabIds: [1] } }],
+        toolResults: [],
+        content: [
+          { type: 'tool-error', toolCallId: 'err-1', toolName: 'tabs_remove', input: { tabIds: [1] }, error: new Error('标签页不存在') },
+        ],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '失败', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0]!.result).toEqual({ success: false, error: '标签页不存在' });
+
+    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const toolMsg = persisted.find((message) => message.role === 'tool');
+    expect(JSON.parse(toolMsg!.content)).toEqual({ success: false, error: '标签页不存在' });
+  });
+
+  it('tool-error 的 error 非 Error 对象时按字符串记录失败', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'err-2', toolName: 'tabs_query', input: {} }],
+        toolResults: [],
+        content: [{ type: 'tool-error', toolCallId: 'err-2', error: 'RPC 超时' }],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '失败', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.toolCalls[0]!.result).toEqual({ success: false, error: 'RPC 超时' });
+  });
+
+  it('工具返回失败结果时原样记录，不做二次包装', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'fail-1', toolName: 'tabs_remove', input: {} }],
+        toolResults: [{ toolCallId: 'fail-1', toolName: 'tabs_remove', input: {}, output: { success: false, error: '权限不足' } }],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '失败', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.toolCalls[0]!.result).toEqual({ success: false, error: '权限不足' });
+    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const toolMsg = persisted.find((message) => message.role === 'tool');
+    expect(JSON.parse(toolMsg!.content)).toEqual({ success: false, error: '权限不足' });
+  });
+
+  it('工具返回成功结果时原样记录，不做二次包装', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'ok-1', toolName: 'tabs_query', input: {} }],
+        toolResults: [{ toolCallId: 'ok-1', toolName: 'tabs_query', input: {}, output: { success: true, data: { tabs: 3 } } }],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '完成', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.toolCalls[0]!.result).toEqual({ success: true, data: { tabs: 3 } });
+    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const toolMsg = persisted.find((message) => message.role === 'tool');
+    expect(JSON.parse(toolMsg!.content)).toEqual({ success: true, data: { tabs: 3 } });
+  });
+
+  it('工具输出为裸数据（无 success 字段）时包装为成功结果', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'raw-1', toolName: 'tabs_query', input: {} }],
+        toolResults: [{ toolCallId: 'raw-1', toolName: 'tabs_query', input: {}, output: '原始文本' }],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '完成', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    const result = await adapter.run(basicInput);
+
+    expect(result.toolCalls[0]!.result).toEqual({ success: true, data: '原始文本' });
   });
 
   it('run() 路径创建的 agent 其 onStepFinish 记录工具调用（ensureAgentCreated 闭包）', async () => {
