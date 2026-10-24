@@ -152,13 +152,22 @@ describe('SettingsPanel', () => {
     expect(screen.getByRole('listbox', { name: '主题' })).toBeTruthy();
   });
 
-  it('Agent 设置使用执行步数并移除消息数上限', async () => {
+  it('Agent 设置展示智能执行保护且不再暴露固定步数输入', async () => {
     const props = makeProps();
     renderWithI18n(<SettingsPanel {...props} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
 
-    expect(screen.getByText('单次任务最大执行步数')).toBeTruthy();
+    // 展示熔断保护说明
+    expect(screen.getByText('智能执行保护')).toBeTruthy();
+    expect(
+      screen.getByText('已启用任务死循环与连续失败自动熔断保护，长任务不再受固定步数上限限制。'),
+    ).toBeTruthy();
+    expect(screen.getByTestId('agent-circuit-breaker-info')).toBeTruthy();
+
+    // 不再渲染 maxToolRounds 数字输入，也不再有旧的消息数上限
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    expect(screen.queryByText('单次任务最大执行步数')).toBeNull();
     expect(screen.queryByText('上下文最大消息数')).toBeNull();
   });
 

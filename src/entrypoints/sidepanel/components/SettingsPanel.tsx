@@ -79,10 +79,8 @@ interface Props {
 
 export function SettingsPanel({
   providers,
-  agentSettings,
   expertMode,
   onSaveProviders,
-  onSaveAgentSettings,
   onSaveExpertMode,
   onTestConnection,
   onClose,
@@ -478,20 +476,15 @@ export function SettingsPanel({
           ))}
 
           {tab === 'agent' && (
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.maxToolRounds')}</span>
-                <SettingsInput
-                  type="number"
-                  value={agentSettings.maxToolRounds}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, maxToolRounds: Number(e.target.value) })
-                  }
-                  containerClassName="mt-1"
-                  min={1}
-                  max={100}
-                />
-              </label>
+            <div
+              data-testid="agent-circuit-breaker-info"
+              className="space-y-2 rounded-xl border border-hairline p-3"
+            >
+              <h3 className="text-sm font-medium text-ink">{t('settings.agent.circuitBreakerTitle')}</h3>
+              <p className="text-xs leading-relaxed text-mute">{t('settings.agent.circuitBreakerDesc')}</p>
+              <p className="rounded-lg bg-surface-soft px-3 py-2 text-xs leading-relaxed text-mute">
+                {t('settings.agent.circuitBreakerHint')}
+              </p>
             </div>
           )}
 

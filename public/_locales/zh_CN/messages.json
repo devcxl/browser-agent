@@ -476,6 +476,15 @@
   "settings_agent_maxToolRounds": {
     "message": "单次任务最大执行步数"
   },
+  "settings_agent_circuitBreakerTitle": {
+    "message": "智能执行保护"
+  },
+  "settings_agent_circuitBreakerDesc": {
+    "message": "已启用任务死循环与连续失败自动熔断保护，长任务不再受固定步数上限限制。"
+  },
+  "settings_agent_circuitBreakerHint": {
+    "message": "检测到连续重复操作或工具连续失败时会自动中断并说明原因；正常的长任务会持续执行直到完成。"
+  },
   "settings_agent_reasoningOptions_low": {
     "message": "Low（低）"
   },

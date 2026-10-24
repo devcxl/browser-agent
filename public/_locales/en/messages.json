@@ -476,6 +476,15 @@
   "settings_agent_maxToolRounds": {
     "message": "Max Steps per Task"
   },
+  "settings_agent_circuitBreakerTitle": {
+    "message": "Intelligent Task Protection"
+  },
+  "settings_agent_circuitBreakerDesc": {
+    "message": "Infinite loop and failure circuit breakers are enabled. Tasks run without rigid step caps."
+  },
+  "settings_agent_circuitBreakerHint": {
+    "message": "Repeated identical steps or consecutive tool failures interrupt the task with a reason. Legitimate long tasks keep running until they finish."
+  },
   "settings_agent_reasoningOptions_low": {
     "message": "Low"
   },
