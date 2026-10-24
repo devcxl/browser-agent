@@ -563,19 +563,26 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
 
     // 3. 摘要之后的完整历史；上下文裁剪交给 AI SDK prepareStep。
-    const recentMessages = conversation
-      ? conversation.messages.slice(conversation.summaryUpToIndex ?? 0)
+    // #233：配对与歧义判定必须在完整 conversation.messages 上完成，窗口只裁剪
+    // 输出。先按 summaryUpToIndex 切片会让边界处的调用/结果彼此丢失，重复 ID
+    // 的旧结果也会因为看不到窗口外的调用而被误配。
+    const allMessages = conversation
+      ? conversation.messages
       : await this.conversationManager.getRecentMessages(
         input.conversationId,
         Number.MAX_SAFE_INTEGER,
       );
-    // 压缩后重建时本轮输入可能已落库：按本次输入的唯一 ID 排除，
-    // 再统一在末尾追加一次。不能按文本比较——上一条同文用户消息是真实历史。
-    const historyMessages = currentUserMessageId
-      ? recentMessages.filter((message) => message.id !== currentUserMessageId)
-      : recentMessages;
-    // 存储顺序不可信（同毫秒按主键排序），先按显式关联重建调用/结果配对
-    const { messages: history } = reconstructToolProtocol(historyMessages);
+    // summaryUpToIndex 始终按原始 messages 下标解释（与写入时一致）；
+    // 没有会话时（备用读取路径）从 0 开始。
+    const visibleFrom = conversation?.summaryUpToIndex ?? 0;
+    const { messages: rebuiltHistory } = reconstructToolProtocol(allMessages, { visibleFrom });
+    // 压缩后重建时本轮输入可能已落库（#232 保证它总是最后一行，且在窗口内）：
+    // 按本次输入的唯一 ID 排除，再统一在末尾追加一次。排除发生在窗口裁剪之后，
+    // 不改动 visibleFrom 对原始下标的解释。不能按文本比较——上一条同文用户消息
+    // 是真实历史。
+    const history = currentUserMessageId
+      ? rebuiltHistory.filter((message) => message.id !== currentUserMessageId)
+      : rebuiltHistory;
     const toolNames = new Map<string, string>();
     for (const msg of history) {
       if (msg.role !== 'assistant') continue;
@@ -685,13 +692,19 @@ export class ToolLoopAdapter implements IAgentRuntime {
     );
     if (cutoff === null) return false;
 
+    // #233：摘要输入同样在完整历史上配对，再按调用方 parent 的原始下标
+    // [startIndex, cutoff) 选取逻辑消息。这样边界两侧的调用与结果不会被拆开：
+    // 父调用可见时结果跟随进入摘要（即使物理位置在 cutoff 之后），父调用不可见
+    // 时结果也不会作为孤立行出现在保留侧。
+    const { messages: summaryInput } = reconstructToolProtocol(conversation.messages, {
+      visibleFrom: startIndex,
+      visibleUntil: cutoff,
+    });
+
     try {
       const result = await generateText({
         model: await this.createModel(),
-        prompt: buildSummaryPrompt(
-          conversation.messages.slice(startIndex, cutoff),
-          conversation.summary,
-        ),
+        prompt: buildSummaryPrompt(summaryInput, conversation.summary),
         temperature: 0.2,
         maxOutputTokens: summaryOutputTokens,
       });

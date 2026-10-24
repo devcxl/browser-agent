@@ -9,6 +9,7 @@ import type { IToolRegistry, ToolDefinition, ToolResult } from '@/registry/types
 import { ToolRegistry } from '@/registry/tool-registry';
 import type { IGuardrail, GuardrailCheck } from '@/shared/types/guardrail';
 import type { StoredMessage } from '@/shared/types/conversation';
+import type { DbMessage } from '@/shared/types/storage';
 import type { ProviderConfig } from '@/shared/types/llm';
 import { Database } from '@/shared/db/database';
 import { ConversationManager } from '@/conversation/conversation-manager';
@@ -1036,5 +1037,234 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
     ]);
     expect(messages.at(-1)).toEqual({ role: 'user', content: '继续' });
     expect(messages.some((message) => message.content === `历史问题-0-${padding}`)).toBe(false);
+  });
+
+  // ── #233：摘要可见窗口在完整历史配对之后裁剪 ──────────
+
+  it('#233-B1 摘要边界切裂调用/结果：保留侧复用真实结果而非合成未知', async () => {
+    const base = Date.now() - 30_000;
+    const savedResult: ToolResult = { success: true, data: { tabs: ['tab-9'] } };
+
+    // 旧数据夹具：同毫秒 + 主键排序让结果行排在摘要边界之前，父调用行在边界之后。
+    // addMessage 自 #232 起会给同批写入分配递增时间戳，这里必须用 putMessage
+    // 保留旧的同毫秒存储顺序。
+    await db.putMessage({
+      id: 'a-result',
+      conversationId,
+      role: 'tool',
+      content: JSON.stringify(savedResult),
+      toolCallId: 'split-call',
+      parentMessageId: 'c-assistant',
+      timestamp: base,
+    });
+    await db.putMessage({
+      id: 'b-user',
+      conversationId,
+      role: 'user',
+      content: '查看标签页',
+      timestamp: base,
+    });
+    await db.putMessage({
+      id: 'c-assistant',
+      conversationId,
+      role: 'assistant',
+      content: '',
+      timestamp: base,
+      toolCalls: JSON.stringify([
+        { id: 'split-call', name: 'tabs_query', params: { id: 'tab-9' } },
+      ]),
+    });
+
+    const stored = await db.getMessagesByConversation(conversationId);
+    expect(stored.map((message) => message.id)).toEqual(['a-result', 'b-user', 'c-assistant']);
+
+    await conversationManager.update(conversationId, {
+      summary: '之前已查询过标签页。',
+      summaryUpToIndex: 1,
+    });
+
+    mockFinalText('继续。');
+    await adapter.run(makeInput('下一步'));
+    const messages = streamMock.mock.calls[0]?.[0]?.messages as ModelMessage[];
+
+    await validateWithAiSdk(messages);
+
+    const callIndex = messages.findIndex((message) => assistantToolCalls(message)
+      .some((part) => part.toolCallId === 'split-call'));
+    expect(callIndex).toBeGreaterThanOrEqual(0);
+    const resultPart = toolResultParts(messages[callIndex + 1]!)[0];
+    expect(resultPart).toMatchObject({
+      type: 'tool-result',
+      toolCallId: 'split-call',
+      toolName: 'tabs_query',
+    });
+    // 真实结果物理位置在边界之前，但归属由完整历史配对确定，不能合成「状态未知」
+    expect(resultPart!.output?.value).toBe(JSON.stringify(savedResult));
+    expect(String(resultPart!.output?.value)).not.toContain('状态未知');
+  });
+
+  it('#233-B2 摘要边界切裂重复调用：保留侧唯一旧结果归属不明时必须未知', async () => {
+    const base = Date.now() - 30_000;
+    const legacyResult: ToolResult = { success: true, data: { applied: 'destructive' } };
+
+    // 两次同 ID 调用被摘要边界切开：一次在切点前、一次在切点后；
+    // 旧数据只剩一行未关联结果，落在保留侧。
+    await db.putMessage({
+      id: '0-call-before',
+      conversationId,
+      role: 'assistant',
+      content: '',
+      timestamp: base,
+      toolCalls: JSON.stringify([
+        { id: 'legacy-dup', name: 'tabs_query', params: { id: 'step-1' } },
+      ]),
+    });
+    await db.putMessage({
+      id: '1-user-cutoff',
+      conversationId,
+      role: 'user',
+      content: '执行两步',
+      timestamp: base,
+    });
+    await db.putMessage({
+      id: '2-call-after',
+      conversationId,
+      role: 'assistant',
+      content: '',
+      timestamp: base,
+      toolCalls: JSON.stringify([
+        { id: 'legacy-dup', name: 'tabs_query', params: { id: 'step-2' } },
+      ]),
+    });
+    await db.putMessage({
+      id: '3-legacy-result',
+      conversationId,
+      role: 'tool',
+      content: JSON.stringify(legacyResult),
+      toolCallId: 'legacy-dup',
+      timestamp: base,
+    });
+
+    const stored = await db.getMessagesByConversation(conversationId);
+    expect(stored.map((message) => message.id)).toEqual([
+      '0-call-before',
+      '1-user-cutoff',
+      '2-call-after',
+      '3-legacy-result',
+    ]);
+
+    await conversationManager.update(conversationId, {
+      summary: '用户要求执行两步操作。',
+      summaryUpToIndex: 1,
+    });
+
+    mockFinalText('已核实。');
+    await adapter.run(makeInput('继续'));
+    const messages = streamMock.mock.calls[0]?.[0]?.messages as ModelMessage[];
+
+    await validateWithAiSdk(messages);
+
+    // 切点前的同 ID 调用只能通过完整历史才能发现，保留侧必须据此判定归属不明
+    const retainedCalls = messages.flatMap(assistantToolCalls).filter(
+      (part) => (part.input as { id?: string } | undefined)?.id === 'step-2',
+    );
+    expect(retainedCalls).toHaveLength(1);
+    const callIndex = messages.findIndex((message) => assistantToolCalls(message)
+      .some((part) => part.toolCallId === retainedCalls[0]!.toolCallId));
+    const resultValue = String(
+      toolResultParts(messages[callIndex + 1]!)[0]!.output?.value ?? '',
+    );
+    expect(resultValue).not.toBe(JSON.stringify(legacyResult));
+    expect(resultValue).toContain('状态未知');
+  });
+
+  it('#233 反向边界：父调用在切点前、结果在切点后，摘要含结果而重放不含', async () => {
+    const padding = 'x'.repeat(2_000);
+    const reverseResult: ToolResult = { success: true, data: { restored: 'reverse-boundary' } };
+
+    // 6 个完整轮次，每个 user 行都足够大：保留最近 4 轮时 cutoff 必然落在
+    // user-2（原始下标 4），且所有候选剩余都超预算，回退 latestCutoff。
+    const timestamps = Date.now() - 60_000;
+    const rows: DbMessage[] = [];
+    const push = (
+      row: Omit<DbMessage, 'conversationId' | 'timestamp'>,
+      timestamp: number,
+    ) => {
+      rows.push({ conversationId, timestamp, ...row });
+    };
+
+    push({ id: 'r-user-0', role: 'user', content: `问题-0-${padding}` }, timestamps);
+    push({ id: 'r-assistant-0', role: 'assistant', content: `回答-0-${padding}` }, timestamps + 1);
+    push({ id: 'r-user-1', role: 'user', content: `问题-1-${padding}` }, timestamps + 2);
+    // 父调用在保留侧之外，其结果物理位置却在保留侧之内
+    push({
+      id: 'r-assistant-1',
+      role: 'assistant',
+      content: '',
+      toolCalls: JSON.stringify([
+        { id: 'reverse-call', name: 'tabs_query', params: { id: 'tab-reverse' } },
+      ]),
+    }, timestamps + 3);
+    push({ id: 'r-user-2', role: 'user', content: `问题-2-${padding}` }, timestamps + 4);
+    push({
+      id: 'r-result-1',
+      role: 'tool',
+      content: JSON.stringify(reverseResult),
+      toolCallId: 'reverse-call',
+      parentMessageId: 'r-assistant-1',
+    }, timestamps + 5);
+    push({ id: 'r-assistant-2', role: 'assistant', content: `回答-2-${padding}` }, timestamps + 6);
+    push({ id: 'r-user-3', role: 'user', content: `问题-3-${padding}` }, timestamps + 7);
+    push({ id: 'r-assistant-3', role: 'assistant', content: `回答-3-${padding}` }, timestamps + 8);
+    push({ id: 'r-user-4', role: 'user', content: `问题-4-${padding}` }, timestamps + 9);
+    push({ id: 'r-assistant-4', role: 'assistant', content: `回答-4-${padding}` }, timestamps + 10);
+    // 与本次输入同文的上一轮用户消息必须在场，本轮输入只在末尾追加一次
+    push({ id: 'r-user-5', role: 'user', content: '下一步' }, timestamps + 11);
+    push({ id: 'r-assistant-5', role: 'assistant', content: `回答-5-${padding}` }, timestamps + 12);
+    await db.putMessagesBatch(rows);
+
+    generateTextMock.mockResolvedValue({ text: '压缩摘要' });
+    const compactingAdapter = new ToolLoopAdapter(
+      registry,
+      GUARDRAIL,
+      conversationManager,
+      PROVIDER_CONFIG,
+      'test-model',
+      { maxToolRounds: 99, contextWindowTokens: 10_000, tokenBudgetMargin: 100 },
+    );
+    mockFinalText('继续完成。');
+    await compactingAdapter.run(makeInput('下一步'));
+
+    expect(generateTextMock).toHaveBeenCalledTimes(1);
+    const summaryPrompt = String(
+      (generateTextMock.mock.calls[0]?.[0] as { prompt?: string } | undefined)?.prompt ?? '',
+    );
+    // 父调用可见 → 结果即使物理位置在窗口外也必须跟随进入摘要输入
+    expect(summaryPrompt).toContain('reverse-call');
+    expect(summaryPrompt).toContain(JSON.stringify(reverseResult));
+
+    const conversation = await conversationManager.get(conversationId);
+    expect(conversation!.summary).toBe('压缩摘要');
+
+    const messages = streamMock.mock.calls[0]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(messages);
+
+    // 保留侧父调用不可见 → 该结果也不能出现，且不能留下孤立结果
+    expect(messages.flatMap(assistantToolCalls).some(
+      (part) => part.toolCallId === 'reverse-call',
+    )).toBe(false);
+    expect(messages.flatMap(toolResultParts).some(
+      (part) => part.output?.value === JSON.stringify(reverseResult),
+    )).toBe(false);
+
+    // 上一轮同文用户文本保留，本轮输入在末尾且只追加一次
+    const repeatedUsers = messages.filter(
+      (message) => message.role === 'user' && message.content === '下一步',
+    );
+    expect(repeatedUsers).toEqual([
+      { role: 'user', content: '下一步' },
+      { role: 'user', content: '下一步' },
+    ]);
+    expect(messages.at(-1)).toEqual({ role: 'user', content: '下一步' });
   });
 });
