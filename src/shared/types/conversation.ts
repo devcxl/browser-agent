@@ -54,6 +54,11 @@ export interface IConversationManager {
   update(id: string, patch: Partial<Conversation>): Promise<void>;
   delete(id: string): Promise<void>;
   addMessage(conversationId: string, message: StoredMessage): Promise<void>;
+  /**
+   * 原子追加一批消息（同一会话）：按给定顺序分配严格递增时间戳，
+   * 要么全部写入、要么全部不写入，且只更新一次会话 updatedAt。
+   */
+  addMessages(conversationId: string, messages: StoredMessage[]): Promise<void>;
   getRecentMessages(conversationId: string, count: number): Promise<StoredMessage[]>;
   /** 根据首轮问答生成标题，无法生成时返回 undefined */
   generateTitle(conversationId: string, llmClient: ILlmClient, model: string): Promise<string | undefined>;

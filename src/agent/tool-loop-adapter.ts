@@ -1,7 +1,7 @@
 import type { IAgentRuntime, AgentRunInput, AgentRunOutput, AgentConfig, ToolCallRecord } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition } from '@/registry/types';
 import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
-import type { IConversationManager } from '@/shared/types/conversation';
+import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
 import type { LowSensitivityContext } from '@/shared/types/browser';
 import type { JevSettings } from '@/shared/types/storage';
@@ -134,19 +134,34 @@ export class ToolLoopAdapter implements IAgentRuntime {
     this.lastActiveTools = undefined;
     const toolCalls: ToolCallRecord[] = [];
     const persistenceTasks: Promise<void>[] = [];
+    // 本次输入的唯一身份：用于重建历史时排除「已落库的本轮输入」，
+    // 而不是按文本比较（相同文本的上一条用户消息必须保留）。
+    const currentUserMessageId = crypto.randomUUID();
+    // 步骤落库串行链：onStepFinish 可能连续触发且不等待返回的 Promise，
+    // 必须保证前一步整批写完再写下一步，否则时间戳与步骤顺序会交错。
+    let persistenceChain: Promise<void> = Promise.resolve();
+    const persistStep = (stepResult: StepResult<Record<string, AISdkTool>>) => {
+      const task = persistenceChain.then(
+        () => this.persistStepMessages(input.conversationId, stepResult),
+      );
+      // 单独挂一个消费分支，避免失败在 await 之前变成未处理的 rejection；
+      // persistenceTasks 保留原始 Promise，让 run() 最终感知失败。
+      persistenceChain = task.catch(() => {});
+      persistenceTasks.push(task);
+    };
 
     try {
       console.debug('[ToolLoopAdapter] buildMessages 开始');
-      let messages = await this.buildMessages(input);
+      let messages = await this.buildMessages(input, currentUserMessageId);
       const compacted = await this.compactConversationIfNeeded(input, messages);
 
       await this.conversationManager.addMessage(input.conversationId, {
-        id: crypto.randomUUID(),
+        id: currentUserMessageId,
         role: 'user',
         content: input.userMessage,
       });
       if (compacted) {
-        messages = await this.buildMessages(input);
+        messages = await this.buildMessages(input, currentUserMessageId);
       }
       console.debug('[ToolLoopAdapter] buildMessages 完成, count:', messages.length);
 
@@ -167,7 +182,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
             toolCount: stepResult.toolCalls?.length ?? 0,
           });
           this.recordStepToolCalls(stepResult, toolCalls, input.callbacks?.onToolCall);
-          persistenceTasks.push(this.persistStepMessages(input.conversationId, stepResult));
+          persistStep(stepResult);
         },
       });
 
@@ -527,7 +542,10 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   /** 构建初始 messages */
-  private async buildMessages(input: AgentRunInput): Promise<ModelMessage[]> {
+  private async buildMessages(
+    input: AgentRunInput,
+    currentUserMessageId?: string,
+  ): Promise<ModelMessage[]> {
     const messages: ModelMessage[] = [];
 
     // 1. 静态 system prompt（保持前缀稳定以命中 provider prompt cache）
@@ -551,8 +569,13 @@ export class ToolLoopAdapter implements IAgentRuntime {
         input.conversationId,
         Number.MAX_SAFE_INTEGER,
       );
+    // 压缩后重建时本轮输入可能已落库：按本次输入的唯一 ID 排除，
+    // 再统一在末尾追加一次。不能按文本比较——上一条同文用户消息是真实历史。
+    const historyMessages = currentUserMessageId
+      ? recentMessages.filter((message) => message.id !== currentUserMessageId)
+      : recentMessages;
     // 存储顺序不可信（同毫秒按主键排序），先按显式关联重建调用/结果配对
-    const { messages: history } = reconstructToolProtocol(recentMessages);
+    const { messages: history } = reconstructToolProtocol(historyMessages);
     const toolNames = new Map<string, string>();
     for (const msg of history) {
       if (msg.role !== 'assistant') continue;
@@ -564,16 +587,11 @@ export class ToolLoopAdapter implements IAgentRuntime {
       messages.push(this.convertToModelMessage(msg, toolNames.get(msg.toolCallId ?? '')));
     }
 
-    // 4. Current user message (if not already in history)
-    // 去重必须看原始存储尾部：重建会移除孤立 tool 行，若改用重建结果，
-    // 上一条同文用户消息会被误判为当前输入，导致新的用户消息被吞掉。
-    const lastMsg = recentMessages[recentMessages.length - 1];
-    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== input.userMessage) {
-      messages.push({
-        role: 'user',
-        content: input.userMessage,
-      });
-    }
+    // 4. 本轮输入始终追加且只追加一次
+    messages.push({
+      role: 'user',
+      content: input.userMessage,
+    });
 
     return messages;
   }
@@ -834,7 +852,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
   }
 
-  /** 按 assistant tool-call → tool-result 顺序持久化，保证下一轮历史符合协议。 */
+  /** 把同一工具步骤的调用行与结果行作为一批原子写入，保持步骤内顺序。 */
   private async persistStepMessages(
     conversationId: string,
     stepResult: StepToolData,
@@ -845,7 +863,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     // 同一步骤的 assistant 行 ID 预先确定：每个结果行通过 parentMessageId
     // 指回它，避免重复 toolCallId 或同毫秒写入时靠时间戳猜归属。
     const assistantMessageId = crypto.randomUUID();
-    await this.conversationManager.addMessage(conversationId, {
+    const rows: StoredMessage[] = [{
       id: assistantMessageId,
       role: 'assistant',
       content: '',
@@ -854,11 +872,11 @@ export class ToolLoopAdapter implements IAgentRuntime {
         name: toolCall.toolName,
         params: (toolCall.input as Record<string, unknown>) ?? {},
       })),
-    });
+    }];
 
     for (const tc of stepToolCalls) {
       const result = this.resolveToolResult(tc, stepResult);
-      await this.conversationManager.addMessage(conversationId, {
+      rows.push({
         // 独立 UUID 作主键；原始 toolCallId 保留在字段里，不参与主键
         id: crypto.randomUUID(),
         role: 'tool',
@@ -867,5 +885,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
         parentMessageId: assistantMessageId,
       });
     }
+
+    await this.conversationManager.addMessages(conversationId, rows);
   }
 }

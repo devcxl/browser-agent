@@ -92,11 +92,21 @@ function createMockConversationManager(): IConversationManager {
     addMessage: vi.fn().mockImplementation((_convId: string, msg: StoredMessage) => {
       storedMessages.push(msg);
     }),
+    addMessages: vi.fn().mockImplementation((_convId: string, messages: StoredMessage[]) => {
+      storedMessages.push(...messages);
+    }),
     getRecentMessages: vi.fn().mockImplementation(() => {
       return Promise.resolve([...storedMessages]);
     }),
     generateTitle: vi.fn(),
   };
+}
+
+/** 汇总单条与批量写入的消息，便于断言持久化内容 */
+function persistedMessages(manager: IConversationManager): StoredMessage[] {
+  const single = vi.mocked(manager.addMessage).mock.calls.map(([, message]) => message);
+  const batched = vi.mocked(manager.addMessages).mock.calls.flatMap(([, messages]) => messages);
+  return [...single, ...batched];
 }
 
 function createMockProviderConfig(): ProviderConfig {
@@ -326,7 +336,7 @@ describe('ToolLoopAdapter', () => {
     expect(onStreamChunk).toHaveBeenCalledWith(
       expect.stringContaining('检测到连续 3 次相同参数调用同一个工具'),
     );
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const assistantMsg = [...persisted].reverse().find((message) => message.role === 'assistant');
     expect(assistantMsg!.content).toContain('触发死循环熔断保护');
   });
@@ -629,8 +639,8 @@ describe('ToolLoopAdapter', () => {
       toolName: 'tabs_query',
       params: { id: 'tab-1' },
     }));
-    const persistedMessages = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
-    expect(persistedMessages).toEqual(expect.arrayContaining([
+    const persisted = persistedMessages(mockConversationManager);
+    expect(persisted).toEqual(expect.arrayContaining([
       expect.objectContaining({
         role: 'assistant',
         toolCalls: [expect.objectContaining({ id: 'tool-1', name: 'tabs_query', params: { id: 'tab-1' } })],
@@ -1063,7 +1073,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     expect(reasoningChunks).toEqual(['想一想']);
     // finalStep.text 为空时回退到累计的 stream 文本
     expect(result.finalMessage).toBe('');
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const assistantMsg = persisted.find((message) => message.role === 'assistant' && message.reasoningContent);
     expect(assistantMsg).toBeDefined();
     expect(assistantMsg!.content).toBe('你好，世界');
@@ -1082,7 +1092,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
 
     await expect(adapter.run(basicInput)).rejects.toThrow('boom');
 
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const assistantErr = persisted.find((message) => message.role === 'assistant');
     expect(assistantErr).toBeDefined();
     expect(assistantErr!.content).toBe('Error: boom');
@@ -1093,7 +1103,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
 
     await expect(adapter.run(basicInput)).rejects.toThrow('stream failure');
 
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const assistantErr = persisted.find((message) => message.role === 'assistant');
     expect(assistantErr!.content).toBe('Error: stream failure');
   });
@@ -1103,7 +1113,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
 
     await expect(adapter.run(basicInput)).rejects.toThrow('already prefixed');
 
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const assistantErr = persisted.find((message) => message.role === 'assistant');
     expect(assistantErr!.content).toBe('Error: already prefixed');
   });
@@ -1113,7 +1123,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
 
     await expect(adapter.run(basicInput)).rejects.toBe('plain string rejection');
 
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const assistantErr = persisted.find((message) => message.role === 'assistant');
     expect(assistantErr!.content).toBe('Error: plain string rejection');
   });
@@ -1152,7 +1162,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     // 缺失 toolResult 的工具记录失败，绝不伪造成功
     expect(result.toolCalls[1]!.result).toEqual({ success: false, error: '工具执行未返回结果' });
 
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     expect(persisted.filter((message) => message.role === 'tool')).toHaveLength(2);
 
     // 第二次 run：历史含完整 tool-call/tool-result，回填后消息协议正确
@@ -1181,6 +1191,77 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     ]));
   });
 
+  it('#232 连续 onStepFinish 不等待返回值时步骤落库仍串行且整步一批写入', async () => {
+    const events: string[] = [];
+    let active = 0;
+    vi.mocked(mockConversationManager.addMessages).mockImplementation(
+      async (_convId: string, rows: StoredMessage[]) => {
+        active += 1;
+        expect(active).toBe(1);
+        events.push(`start-${rows[1]?.toolCallId}`);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        events.push(`end-${rows[1]?.toolCallId}`);
+        active -= 1;
+      },
+    );
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      // 模拟 AI SDK 快速连续触发且不等待返回的 Promise
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'serial-1', toolName: 'tabs_query', input: {} }],
+        toolResults: [{ toolCallId: 'serial-1', output: { success: true } }],
+      });
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'serial-2', toolName: 'tabs_query', input: {} }],
+        toolResults: [{ toolCallId: 'serial-2', output: { success: true } }],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '完成', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+
+    await adapter.run(basicInput);
+
+    expect(events).toEqual([
+      'start-serial-1',
+      'end-serial-1',
+      'start-serial-2',
+      'end-serial-2',
+    ]);
+    // 调用行与结果行作为同一批写入
+    const batches = vi.mocked(mockConversationManager.addMessages).mock.calls;
+    expect(batches).toHaveLength(2);
+    expect(batches[0]![1].map((row) => row.role)).toEqual(['assistant', 'tool']);
+    expect(batches[0]![1][1]!.parentMessageId).toBe(batches[0]![1][0]!.id);
+    expect(batches[1]![1].map((row) => row.role)).toEqual(['assistant', 'tool']);
+  });
+
+  it('#232 步骤持久化失败时 run() 抛错并记录 Error 行，不静默继续', async () => {
+    mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
+      options.onStepFinish({
+        toolCalls: [{ toolCallId: 'fail-persist', toolName: 'tabs_query', input: {} }],
+        toolResults: [{ toolCallId: 'fail-persist', output: { success: true } }],
+      });
+      return {
+        stream: (async function* () {})(),
+        finalStep: Promise.resolve({ text: '完成', usage: { inputTokens: 10, outputTokens: 5 } }),
+        usage: Promise.resolve({ inputTokens: 10, outputTokens: 5 }),
+      };
+    });
+    vi.mocked(mockConversationManager.addMessages).mockRejectedValueOnce(
+      new Error('db write failed'),
+    );
+
+    await expect(adapter.run(basicInput)).rejects.toThrow('db write failed');
+
+    const persisted = persistedMessages(mockConversationManager);
+    const errorRow = persisted.find(
+      (message) => message.role === 'assistant' && message.content.startsWith('Error:'),
+    );
+    expect(errorRow!.content).toBe('Error: db write failed');
+  });
+
   it('工具抛错（tool-error part）时记录并持久化真实失败，不伪造成功', async () => {
     mockToolLoopAgentStream.mockImplementationOnce(async (options) => {
       options.onStepFinish({
@@ -1202,7 +1283,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     expect(result.toolCalls).toHaveLength(1);
     expect(result.toolCalls[0]!.result).toEqual({ success: false, error: '标签页不存在' });
 
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const toolMsg = persisted.find((message) => message.role === 'tool');
     expect(JSON.parse(toolMsg!.content)).toEqual({ success: false, error: '标签页不存在' });
   });
@@ -1242,7 +1323,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     const result = await adapter.run(basicInput);
 
     expect(result.toolCalls[0]!.result).toEqual({ success: false, error: '权限不足' });
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const toolMsg = persisted.find((message) => message.role === 'tool');
     expect(JSON.parse(toolMsg!.content)).toEqual({ success: false, error: '权限不足' });
   });
@@ -1263,7 +1344,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     const result = await adapter.run(basicInput);
 
     expect(result.toolCalls[0]!.result).toEqual({ success: true, data: { tabs: 3 } });
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const toolMsg = persisted.find((message) => message.role === 'tool');
     expect(JSON.parse(toolMsg!.content)).toEqual({ success: true, data: { tabs: 3 } });
   });
@@ -1563,7 +1644,7 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     expect(result.activeTools).toEqual(['tabs_query', 'skill_execute']);
   });
 
-  it('buildMessages 末尾已是同内容 user 消息时不重复追加', async () => {
+  it('上一条同文 user 消息保留，本轮输入按唯一身份追加一次', async () => {
     vi.mocked(mockConversationManager.getRecentMessages).mockResolvedValue([
       { id: 'last-user', role: 'user', content: 'Hello' },
     ]);
@@ -1572,8 +1653,11 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
 
     const messages = mockToolLoopAgentStream.mock.calls[0]?.[0]?.messages as Array<{ role: string; content: string }>;
     const userMessages = messages.filter((message) => message.role === 'user');
-    expect(userMessages).toHaveLength(1);
-    expect(userMessages[0]!.content).toBe('Hello');
+    // #232：不能按内容去重——上一条同文用户是真实历史，本轮输入必须再追加一次
+    expect(userMessages).toEqual([
+      { role: 'user', content: 'Hello' },
+      { role: 'user', content: 'Hello' },
+    ]);
   });
 
   it('历史中未识别的消息角色回退为 user 消息', async () => {
@@ -2124,7 +2208,7 @@ describe('ToolLoopAdapter 工具执行与结果截断', () => {
     );
 
     await expect(adapter.run(basicInput)).rejects.toThrow('tool execute failed');
-    const persisted = vi.mocked(mockConversationManager.addMessage).mock.calls.map(([, message]) => message);
+    const persisted = persistedMessages(mockConversationManager);
     const errorMsg = [...persisted].reverse().find(
       (message) => message.role === 'assistant' && message.content.startsWith('Error:'),
     );

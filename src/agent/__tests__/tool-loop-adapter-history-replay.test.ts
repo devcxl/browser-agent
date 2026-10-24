@@ -37,11 +37,18 @@ interface CapturedAgentOptions {
 
 const capturedAgentOptions: CapturedAgentOptions[] = [];
 const streamMock = vi.fn();
+const generateTextMock = vi.hoisted(() => vi.fn());
+// 真实实现引用：默认透传，避免影响用真实 generateText 做协议校验的用例
+const realGenerateText = vi.hoisted(() => ({
+  current: undefined as unknown as typeof import('ai').generateText,
+}));
 
 vi.mock('ai', async (importOriginal) => {
   const actual = await importOriginal<typeof import('ai')>();
+  realGenerateText.current = actual.generateText;
   return {
     ...actual,
+    generateText: generateTextMock,
     ToolLoopAgent: vi.fn().mockImplementation((options: CapturedAgentOptions) => {
       capturedAgentOptions.push(options);
       return { stream: streamMock };
@@ -187,6 +194,8 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
   beforeEach(async () => {
     capturedAgentOptions.length = 0;
     streamMock.mockReset();
+    generateTextMock.mockReset();
+    generateTextMock.mockImplementation(realGenerateText.current);
     vi.mocked(GUARDRAIL.check).mockClear();
 
     Database.resetInstance();
@@ -292,7 +301,8 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
         && parseToolCalls(message.toolCalls).some((call) => call.id === failure.toolCallId));
       expect(toolRow).toBeDefined();
       expect(callRow).toBeDefined();
-      expect(toolRow!.timestamp).toBe(callRow!.timestamp);
+      // 同一批写入分配严格递增的逻辑时间戳：调用行在前、结果行紧随其后
+      expect(toolRow!.timestamp).toBe(callRow!.timestamp + 1);
       expect(toolRow!.parentMessageId).toBe(callRow!.id);
       // 原始 toolCallId 与结果内容保持独立，不被新主键改写
       expect(toolRow!.id).not.toBe(failure.toolCallId);
@@ -343,33 +353,40 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
     const assistantId = 'f0000000-0000-4000-8000-000000000001';
     const authenticResult = { success: true as const, data: { tabs: ['tab-1'] } };
 
-    await conversationManager.addMessage(conversationId, {
+    // 旧数据夹具：为复现「同毫秒按主键排序 = 结果行在最前」，
+    // 必须绕过 ConversationManager（#232 起它会给同批写入分配递增逻辑时间戳），
+    // 直接用 putMessage 保留旧的同毫秒存储顺序。
+    await db.putMessage({
       id: 'user-seed',
+      conversationId,
       role: 'user',
       content: '先查这两个标签页',
       timestamp: base,
     });
-    await conversationManager.addMessage(conversationId, {
+    await db.putMessage({
       id: assistantId,
+      conversationId,
       role: 'assistant',
       content: '',
       timestamp: base + 1,
-      toolCalls: [
+      toolCalls: JSON.stringify([
         { id: '0-call-1', name: 'tabs_query', params: { id: 'tab-1' } },
         { id: '0-call-2', name: 'tabs_query', params: { id: 'tab-2' } },
-      ],
+      ]),
     });
     // 只有 call-1 的真实结果；主键排序领先于 assistant（同毫秒倒序）
-    await conversationManager.addMessage(conversationId, {
+    await db.putMessage({
       id: '0-call-1',
+      conversationId,
       role: 'tool',
       content: JSON.stringify(authenticResult),
       toolCallId: '0-call-1',
       timestamp: base + 1,
     });
     // 无法匹配任何调用的旧孤立结果，必须继续排除
-    await conversationManager.addMessage(conversationId, {
+    await db.putMessage({
       id: '0-orphan',
+      conversationId,
       role: 'tool',
       content: JSON.stringify({ success: false, error: '旧数据' }),
       toolCallId: 'ghost-call',
@@ -867,5 +884,157 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
       id: 'call_dup',
       params: { id: 'second' },
     });
+  });
+
+  // ── #232：新写入顺序与续发输入 ────────────────────────
+
+  it('#232 上一条同文用户消息不被当作本轮输入吞掉，本轮输入只出现一次且在末尾', async () => {
+    const repeated = '继续';
+
+    await conversationManager.addMessage(conversationId, {
+      id: 'user-prior-same-text',
+      role: 'user',
+      content: repeated,
+    });
+
+    mockFinalText('收到。');
+    await adapter.run(makeInput(repeated));
+
+    const messages = streamMock.mock.calls[0]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(messages);
+
+    // 上一条真实历史与本轮输入都必须在场，且本轮输入只在末尾出现一次
+    expect(messages.filter((message) => message.role === 'user')).toEqual([
+      { role: 'user', content: repeated },
+      { role: 'user', content: repeated },
+    ]);
+    expect(messages.at(-1)).toEqual({ role: 'user', content: repeated });
+
+    const stored = await db.getMessagesByConversation(conversationId);
+    expect(stored.filter((row) => row.role === 'user' && row.content === repeated))
+      .toHaveLength(2);
+  });
+
+  it('#232 连续步骤回填按步骤顺序落库，后续用户消息排在所有步骤之后', async () => {
+    // 让旧的同毫秒实现（按主键排序）必然逆序：后分配的行字典序更小
+    let sequence = 0xffffff;
+    const uuidSpy = vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
+      sequence -= 1;
+      return `00000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`;
+    });
+
+    try {
+      mockToolSteps([
+        {
+          toolCallId: 'step-1-call',
+          toolName: 'tabs_query',
+          input: { id: 'step-1' },
+          result: { success: true, data: { step: 1 } },
+        },
+        {
+          toolCallId: 'step-2-call',
+          toolName: 'tabs_query',
+          input: { id: 'step-2' },
+          result: { success: true, data: { step: 2 } },
+        },
+      ]);
+
+      await adapter.run(makeInput('第一步输入'));
+
+      const stored = await db.getMessagesByConversation(conversationId);
+      expect(stored.map((row) => row.role)).toEqual([
+        'user',
+        'assistant',
+        'tool',
+        'assistant',
+        'tool',
+        'assistant',
+      ]);
+      expect(parseToolCalls(stored[1]!.toolCalls)[0]!.id).toBe('step-1-call');
+      expect(stored[2]!.toolCallId).toBe('step-1-call');
+      expect(stored[2]!.parentMessageId).toBe(stored[1]!.id);
+      expect(parseToolCalls(stored[3]!.toolCalls)[0]!.id).toBe('step-2-call');
+      expect(stored[4]!.toolCallId).toBe('step-2-call');
+      expect(stored[4]!.parentMessageId).toBe(stored[3]!.id);
+
+      const timestamps = stored.map((row) => row.timestamp);
+      expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
+      expect(new Set(timestamps).size).toBe(timestamps.length);
+
+      // 后续用户消息必须排在首轮全部步骤之后
+      mockFinalText('继续完成。');
+      await adapter.run(makeInput('后续用户'));
+
+      const after = await db.getMessagesByConversation(conversationId);
+      const lastUserIndex = after.findLastIndex((row) => row.role === 'user');
+      const firstStepIndex = after.findIndex((row) => row.role === 'tool');
+      expect(lastUserIndex).toBeGreaterThan(firstStepIndex);
+      expect(after.at(-1)!.role).toBe('assistant');
+      expect(after[lastUserIndex]!.content).toBe('后续用户');
+      expect(after[lastUserIndex]!.timestamp).toBeGreaterThan(
+        Math.max(...after.slice(0, lastUserIndex).map((row) => row.timestamp)),
+      );
+    } finally {
+      uuidSpy.mockRestore();
+    }
+  });
+
+  it('#232 压缩后重建历史包含本轮输入一次，且摘要行为保持不变', async () => {
+    // 长历史触发摘要；尾部用户消息与本轮输入同文，验证排除按唯一 ID 而不是文本
+    const padding = 'x'.repeat(1_500);
+    const rows = Array.from({ length: 8 }, (_, index) => [
+      {
+        id: `long-user-${index}`,
+        role: 'user' as const,
+        content: `历史问题-${index}-${padding}`,
+      },
+      {
+        id: `long-assistant-${index}`,
+        role: 'assistant' as const,
+        content: `历史回答-${index}-${padding}`,
+      },
+    ]).flat();
+    await db.appendMessages(rows.map((row, index) => ({
+      ...row,
+      conversationId,
+      timestamp: Date.now() + index,
+    })));
+    await conversationManager.addMessage(conversationId, {
+      id: 'user-tail-same-text',
+      role: 'user',
+      content: '继续',
+    });
+
+    generateTextMock.mockResolvedValue({ text: '压缩摘要' });
+    const compactingAdapter = new ToolLoopAdapter(
+      registry,
+      GUARDRAIL,
+      conversationManager,
+      PROVIDER_CONFIG,
+      'test-model',
+      { maxToolRounds: 99, contextWindowTokens: 10_000, tokenBudgetMargin: 100 },
+    );
+    mockFinalText('继续完成。');
+    await compactingAdapter.run(makeInput('继续'));
+
+    expect(generateTextMock).toHaveBeenCalledTimes(1);
+    const conversation = await conversationManager.get(conversationId);
+    expect(conversation!.summary).toBe('压缩摘要');
+
+    const messages = streamMock.mock.calls[0]?.[0]?.messages as ModelMessage[];
+    await validateWithAiSdk(messages);
+
+    expect(messages[0]).toEqual(expect.objectContaining({ role: 'system' }));
+    expect(messages.some((message) => message.role === 'system'
+      && typeof message.content === 'string'
+      && message.content.includes('压缩摘要'))).toBe(true);
+    // 尾部同文历史与本轮输入都在场，本轮输入在末尾只出现一次
+    expect(messages.filter((message) => message.role === 'user'
+      && message.content === '继续')).toEqual([
+      { role: 'user', content: '继续' },
+      { role: 'user', content: '继续' },
+    ]);
+    expect(messages.at(-1)).toEqual({ role: 'user', content: '继续' });
+    expect(messages.some((message) => message.content === `历史问题-0-${padding}`)).toBe(false);
   });
 });

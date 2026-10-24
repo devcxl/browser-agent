@@ -128,18 +128,31 @@ export class ConversationManager implements IConversationManager {
     conversationId: string,
     message: StoredMessage,
   ): Promise<void> {
-    await this.db.putMessage({
-      id: message.id,
-      conversationId,
-      role: message.role,
-      content: message.content,
-      toolCalls: message.toolCalls?.length
-        ? JSON.stringify(message.toolCalls)
-        : undefined,
-      toolCallId: message.toolCallId,
-      parentMessageId: message.parentMessageId,
-      timestamp: message.timestamp ?? Date.now(),
-    });
+    await this.addMessages(conversationId, [message]);
+  }
+
+  async addMessages(
+    conversationId: string,
+    messages: StoredMessage[],
+  ): Promise<void> {
+    if (messages.length === 0) return;
+
+    // appendMessages 单事务写入并分配逻辑时间戳：同批消息保持传入顺序，
+    // 不会因为同一毫秒或调用方显式时间戳相同而被主键顺序打乱。
+    await this.db.appendMessages(
+      messages.map((message) => ({
+        id: message.id,
+        conversationId,
+        role: message.role,
+        content: message.content,
+        toolCalls: message.toolCalls?.length
+          ? JSON.stringify(message.toolCalls)
+          : undefined,
+        toolCallId: message.toolCallId,
+        parentMessageId: message.parentMessageId,
+        timestamp: message.timestamp ?? Date.now(),
+      })),
+    );
 
     const existing = await this.db.getConversation(conversationId);
     if (existing) {
