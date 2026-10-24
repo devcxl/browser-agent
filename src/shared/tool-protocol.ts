@@ -17,6 +17,11 @@ import type { StoredMessage } from './types/conversation';
  *
  * 结果里同时返回 syntheticUnknown（合成占位的消息 ID 集合），供 UI（#231）
  * 区分真实结果与仅模型可见的占位；占位绝不写回数据库。
+ *
+ * #233 起支持可见窗口：配对与歧义判定始终在完整输入上进行，窗口只裁剪输出。
+ * 只有非工具行（user/assistant）的下标落在 [visibleFrom, visibleUntil) 内时，
+ * 该逻辑消息及其全部配对结果才会返回；父行不可见时结果行也不可见，反之父行
+ * 可见时其结果行即使物理位置在窗口外也照样跟随。
  */
 
 /**
@@ -25,9 +30,17 @@ import type { StoredMessage } from './types/conversation';
  * 不臆测成功/失败（可能已产生副作用），也不暗示可以直接重试；
  * 只用于本次请求的消息上下文，绝不写回会话历史。
  */
-export const UNKNOWN_TOOL_RESULT_CONTENT =
+const UNKNOWN_TOOL_RESULT_CONTENT =
   '执行状态未知：这次工具调用的结果没有保存，无法确认是否已执行。'
   + '它可能已经执行并对浏览器产生了副作用；请先核实当前页面或标签页状态，不要自动重试。';
+
+/** 只输出原始 messages 下标在 [visibleFrom, visibleUntil) 内的非工具行 */
+export interface ReconstructToolProtocolOptions {
+  /** 可见窗口起点（含），对应原始 messages 数组下标 */
+  visibleFrom?: number;
+  /** 可见窗口终点（不含），对应原始 messages 数组下标 */
+  visibleUntil?: number;
+}
 
 export interface ReconstructedToolProtocol {
   /** 按 assistant tool-call → tool-result 顺序重排后的消息，可直接转模型消息 */
@@ -45,6 +58,13 @@ interface CallOccurrence {
   modelCallId: string;
 }
 
+interface CallIndex {
+  occurrencesByMessage: Map<StoredMessage, CallOccurrence[]>;
+  occurrencesByCallId: Map<string, CallOccurrence[]>;
+  occurrencesByLinkKey: Map<string, CallOccurrence[]>;
+  allOccurrences: CallOccurrence[];
+}
+
 const LINK_KEY_SEPARATOR = '\u0000';
 
 function linkKey(parentMessageId: string, toolCallId: string): string {
@@ -57,9 +77,8 @@ function addToBucket<T>(map: Map<string, T[]>, key: string, value: T): void {
   else map.set(key, [value]);
 }
 
-export function reconstructToolProtocol(
-  messages: readonly StoredMessage[],
-): ReconstructedToolProtocol {
+/** 按存储顺序登记全部调用，并分配确定性的模型侧 ID */
+function indexToolCalls(messages: readonly StoredMessage[]): CallIndex {
   // 先登记所有持久化 ID，保证模型侧重命名不会与真实 ID 撞车（确定性）
   const usedModelIds = new Set<string>();
   for (const message of messages) {
@@ -68,10 +87,12 @@ export function reconstructToolProtocol(
   }
 
   const nextOrdinal = new Map<string, number>();
-  const occurrencesByMessage = new Map<StoredMessage, CallOccurrence[]>();
-  const occurrencesByCallId = new Map<string, CallOccurrence[]>();
-  const occurrencesByLinkKey = new Map<string, CallOccurrence[]>();
-  const allOccurrences: CallOccurrence[] = [];
+  const index: CallIndex = {
+    occurrencesByMessage: new Map(),
+    occurrencesByCallId: new Map(),
+    occurrencesByLinkKey: new Map(),
+    allOccurrences: [],
+  };
 
   const nextModelCallId = (callId: string): string => {
     const ordinal = (nextOrdinal.get(callId) ?? 0) + 1;
@@ -101,13 +122,26 @@ export function reconstructToolProtocol(
         modelCallId: nextModelCallId(call.id),
       };
       occurrences.push(occurrence);
-      allOccurrences.push(occurrence);
-      addToBucket(occurrencesByCallId, call.id, occurrence);
-      addToBucket(occurrencesByLinkKey, linkKey(message.id, call.id), occurrence);
+      index.allOccurrences.push(occurrence);
+      addToBucket(index.occurrencesByCallId, call.id, occurrence);
+      addToBucket(index.occurrencesByLinkKey, linkKey(message.id, call.id), occurrence);
     }
-    occurrencesByMessage.set(message, occurrences);
+    index.occurrencesByMessage.set(message, occurrences);
   }
 
+  return index;
+}
+
+/**
+ * 在完整输入上配对调用与结果。
+ *
+ * 只有归属唯一时才配对：同一 link key 或同一 toolCallId 出现多次都视为歧义，
+ * 留给调用方合成「状态未知」，避免把结果挂到错误的调用上。
+ */
+function pairToolResults(
+  messages: readonly StoredMessage[],
+  index: CallIndex,
+): Map<CallOccurrence, ToolResultMessage> {
   const linkedResults = new Map<string, ToolResultMessage[]>();
   const legacyResults = new Map<string, ToolResultMessage[]>();
   for (const message of messages) {
@@ -123,13 +157,13 @@ export function reconstructToolProtocol(
   const pairedResultByOccurrence = new Map<CallOccurrence, ToolResultMessage>();
   const consumedResultIds = new Set<string>();
 
-  for (const occurrence of allOccurrences) {
+  for (const occurrence of index.allOccurrences) {
     const key = linkKey(occurrence.message.id, occurrence.call.id);
     const linked = linkedResults.get(key) ?? [];
 
     if (linked.length > 0) {
       // 同一 assistant 行内重复 call id 时没有额外索引可区分结果归属
-      const sameParentOccurrences = occurrencesByLinkKey.get(key)?.length ?? 0;
+      const sameParentOccurrences = index.occurrencesByLinkKey.get(key)?.length ?? 0;
       if (sameParentOccurrences === 1 && linked.length === 1) {
         const result = linked[0]!;
         if (!consumedResultIds.has(result.id)) {
@@ -144,7 +178,7 @@ export function reconstructToolProtocol(
     if (legacy.length === 0) continue;
 
     // 旧数据只能按 toolCallId 关联；同一 ID 出现多次时唯一存活的行无法确定归属
-    const totalOccurrences = occurrencesByCallId.get(occurrence.call.id)?.length ?? 0;
+    const totalOccurrences = index.occurrencesByCallId.get(occurrence.call.id)?.length ?? 0;
     if (totalOccurrences === 1 && legacy.length === 1) {
       const result = legacy[0]!;
       if (!consumedResultIds.has(result.id)) {
@@ -154,25 +188,53 @@ export function reconstructToolProtocol(
     }
   }
 
+  return pairedResultByOccurrence;
+}
+
+/** 收敛调用方传入的窗口边界，避免负值/越界/倒置区间造成意外输出 */
+function resolveVisibleRange(
+  messageCount: number,
+  options?: ReconstructToolProtocolOptions,
+): { from: number; until: number } {
+  const clamp = (value: number | undefined, fallback: number): number => {
+    if (value === undefined || !Number.isFinite(value)) return fallback;
+    return Math.min(Math.max(Math.trunc(value), 0), messageCount);
+  };
+  return {
+    from: clamp(options?.visibleFrom, 0),
+    until: clamp(options?.visibleUntil, messageCount),
+  };
+}
+
+export function reconstructToolProtocol(
+  messages: readonly StoredMessage[],
+  options?: ReconstructToolProtocolOptions,
+): ReconstructedToolProtocol {
+  const index = indexToolCalls(messages);
+  const pairedResultByOccurrence = pairToolResults(messages, index);
+  const { from, until } = resolveVisibleRange(messages.length, options);
+
   const rebuilt: StoredMessage[] = [];
   const syntheticUnknown = new Set<string>();
 
-  for (const message of messages) {
+  messages.forEach((message, rowIndex) => {
     // 工具结果统一跟随其调用输出，避免结果行出现在调用之前
-    if (message.role === 'tool') continue;
+    if (message.role === 'tool') return;
+    // 父行不可见时整组不可见：结果行即使物理位置在窗口内也不输出
+    if (rowIndex < from || rowIndex >= until) return;
 
-    const occurrences = occurrencesByMessage.get(message);
+    const occurrences = index.occurrencesByMessage.get(message);
     rebuilt.push(occurrences?.length
       ? {
         ...message,
-        toolCalls: message.toolCalls!.map((call, index) => ({
+        toolCalls: message.toolCalls!.map((call, callIndex) => ({
           ...call,
-          id: occurrences[index]!.modelCallId,
+          id: occurrences[callIndex]!.modelCallId,
         })),
       }
       : message);
 
-    if (!occurrences?.length) continue;
+    if (!occurrences?.length) return;
 
     for (const occurrence of occurrences) {
       const result = pairedResultByOccurrence.get(occurrence);
@@ -190,7 +252,7 @@ export function reconstructToolProtocol(
         toolCallId: occurrence.modelCallId,
       });
     }
-  }
+  });
 
   return { messages: rebuilt, syntheticUnknown };
 }
