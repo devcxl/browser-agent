@@ -8,7 +8,7 @@ export interface ToolCallDisplay {
   name: string;
   params: Record<string, unknown>;
   result?: ToolResult;
-  status: 'running' | 'success' | 'error';
+  status: 'running' | 'success' | 'error' | 'unknown';
   riskLevel: RiskLevel;
   confirmed: boolean;
 }

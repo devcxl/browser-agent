@@ -1,4 +1,5 @@
 import type { RiskLevel, StoredMessage } from '@/shared/types';
+import { reconstructToolProtocol } from '@/shared/tool-protocol';
 import type { UIMessage, ToolCallDisplay } from './types';
 
 /** 安全转义文本（用于 textContent 设置时的二次确认） */
@@ -65,6 +66,16 @@ export function uid(): string {
 }
 
 /**
+ * 单次工具调用的稳定 UI ID。
+ *
+ * 以 assistant 消息 ID + 调用下标为基准：provider toolCallId 在同一会话里
+ * 可以重复出现，用它在 React key 或 DOM id 上会导致重复气泡被合并。
+ */
+export function toolOccurrenceId(messageId: string, callIndex: number): string {
+  return `${messageId}_tool_${callIndex}`;
+}
+
+/**
  * 将 DB 中的 StoredMessage[] 转换为 UI 层的 UIMessage[]
  *
  * 核心转换规则：
@@ -72,19 +83,24 @@ export function uid(): string {
  * - assistant(tool_calls) 消息 → 拆分：文本内容（如有）独立气泡，每个 tool_call 独立 tool 气泡
  * - assistant(纯文本) 消息 → 原样通过
  * - tool 消息 → 跳过（结果已配对到对应的 tool call 中）
+ *
+ * 配对走 #230 的 reconstructToolProtocol：那里已按「所属 assistant 行 + toolCallId」
+ * 重排过消息，重复 toolCallId 的每次出现都各自带一行结果（真实结果或合成占位）。
+ * 这里按出现顺序逐条消费，不再用 toolCallId 去 Map 里覆盖式匹配。
+ *
+ * 状态未知的占位结果只保留 result === undefined：不臆测成功/失败，等 UI 显式
+ * 未知状态补上（见下方 TODO）。
  */
 export function storedMessagesToUIMessages(messages: StoredMessage[]): UIMessage[] {
+  const { messages: ordered, syntheticUnknown } = reconstructToolProtocol(messages);
   const result: UIMessage[] = [];
 
-  // 第一趟：建立 toolCallId → tool result JSON 的映射
-  const toolResults = new Map<string, string>();
-  for (const msg of messages) {
-    if (msg.role === 'tool' && msg.toolCallId) {
-      toolResults.set(msg.toolCallId, msg.content);
-    }
-  }
+  let index = 0;
+  while (index < ordered.length) {
+    const msg = ordered[index]!;
+    index += 1;
 
-  for (const msg of messages) {
+    // 工具结果只跟随其调用渲染；重建后不应再有孤立结果
     if (msg.role === 'tool') continue;
 
     if (msg.role === 'user') {
@@ -98,58 +114,78 @@ export function storedMessagesToUIMessages(messages: StoredMessage[]): UIMessage
       continue;
     }
 
-    // assistant
-    if (msg.toolCalls && msg.toolCalls.length > 0) {
-      // 如有文本内容，先输出纯文本气泡
+    const toolCalls = msg.toolCalls ?? [];
+
+    // assistant(纯文本)
+    if (toolCalls.length === 0) {
       if (msg.content) {
         result.push({
-          id: msg.id + '_text',
-          role: 'assistant',
+          id: msg.id,
+          role: msg.role,
           content: msg.content,
           reasoningContent: msg.reasoningContent,
           timestamp: msg.timestamp,
           status: 'complete',
         });
       }
+      continue;
+    }
 
-      for (const tc of msg.toolCalls) {
-        const rawResult = toolResults.get(tc.id);
-        let parsedResult: ToolCallDisplay['result'];
-        if (rawResult) {
-          try {
-            parsedResult = JSON.parse(rawResult);
-          } catch {
-            parsedResult = { success: false, error: rawResult };
-          }
-        }
-
-        result.push({
-          id: tc.id,
-          role: 'tool',
-          content: tc.name,
-          toolCallDisplay: {
-            id: tc.id,
-            name: tc.name,
-            params: tc.params,
-            result: parsedResult,
-            status: parsedResult?.success ? 'success' : 'error',
-            riskLevel: 'low' as RiskLevel,
-            confirmed: true,
-          },
-          timestamp: msg.timestamp,
-          status: 'complete',
-        });
-      }
-    } else if (msg.content) {
+    // 如有文本内容，先输出纯文本气泡
+    if (msg.content) {
       result.push({
-        id: msg.id,
-        role: msg.role,
+        id: msg.id + '_text',
+        role: 'assistant',
         content: msg.content,
         reasoningContent: msg.reasoningContent,
         timestamp: msg.timestamp,
         status: 'complete',
       });
     }
+
+    // 重建结果把每个调用的结果行紧跟在 assistant 行之后，按出现顺序消费
+    const resultRows: StoredMessage[] = [];
+    while (ordered[index + resultRows.length]?.role === 'tool') {
+      resultRows.push(ordered[index + resultRows.length]!);
+    }
+    index += resultRows.length;
+
+    toolCalls.forEach((toolCall, callIndex) => {
+      const row = resultRows[callIndex];
+      const id = toolOccurrenceId(msg.id, callIndex);
+      const isSyntheticUnknown = !row || syntheticUnknown.has(row.id);
+
+      let parsedResult: ToolCallDisplay['result'];
+      // 合成占位不是真实结果，解析它等于把「状态未知」伪装成失败结论
+      if (row && !syntheticUnknown.has(row.id)) {
+        try {
+          parsedResult = JSON.parse(row.content);
+        } catch {
+          parsedResult = { success: false, error: row.content };
+        }
+      }
+
+      result.push({
+        id,
+        role: 'tool',
+        content: toolCall.name,
+        toolCallDisplay: {
+          id,
+          name: toolCall.name,
+          params: toolCall.params,
+          result: parsedResult,
+          status: isSyntheticUnknown
+            ? 'unknown'
+            : parsedResult?.success
+              ? 'success'
+              : 'error',
+          riskLevel: 'low' as RiskLevel,
+          confirmed: true,
+        },
+        timestamp: msg.timestamp,
+        status: 'complete',
+      });
+    });
   }
 
   return result;
