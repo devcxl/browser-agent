@@ -9,7 +9,8 @@
 import { FloatingWidget } from './widget';
 import { shouldMount } from './blacklist';
 import { ConfigStore } from '@/shared/storage/config-store';
-import type { FloatingButtonSettings } from '@/shared/types/storage';
+import { DEFAULT_ACCENT_COLOR, normalizeAccentColor } from '@/shared/accent-palette';
+import type { FloatingButtonSettings, UserPreferences } from '@/shared/types/storage';
 
 /** 全局唯一实例引用 */
 let activeWidget: FloatingWidget | null = null;
@@ -17,16 +18,24 @@ let activeWidget: FloatingWidget | null = null;
 let unsubscribe: (() => void) | null = null;
 /** 位置写入防抖 timer */
 let positionDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+/** 最近一次读取的主色（用于重建实例时保持头像颜色） */
+/**
+ * 最近一次读到的主色，供黑名单开关后重建实例时沿用；
+ * 运行中的头像热更新由 FloatingWidget 自己订阅 preferences，避免 content 入口承担渲染职责。
+ */
+let accentColor = DEFAULT_ACCENT_COLOR;
 
 /**
  * 启动浮动控件（仅在 content script 中调用）。
- * - 读取 floatingButtonSettings
+ * - 读取 floatingButtonSettings 与 preferences.accentColor
  * - 调用 shouldMount() 判定是否挂载
  * - 挂载成功后订阅 storage.onChanged 实现热更新
  */
 export async function startFloatingWidget(): Promise<void> {
   const store = ConfigStore.getInstance();
   const settings = await store.get<FloatingButtonSettings>('floatingButtonSettings');
+  const preferences = await store.get<UserPreferences>('preferences');
+  accentColor = normalizeAccentColor(preferences.accentColor);
   const hostname = window.location.hostname;
 
   // 首次判定
@@ -36,6 +45,10 @@ export async function startFloatingWidget(): Promise<void> {
 
   // 订阅 storage 变更
   unsubscribe = store.onChange((changes) => {
+    if (changes.preferences) {
+      accentColor = normalizeAccentColor(changes.preferences.accentColor);
+    }
+
     const newSettings = changes.floatingButtonSettings;
     if (newSettings === undefined) return;
 
@@ -64,7 +77,7 @@ function mountWidget(settings: FloatingButtonSettings, hostname: string): void {
     activeWidget = null;
   }
 
-  activeWidget = new FloatingWidget(settings, hostname);
+  activeWidget = new FloatingWidget(settings, hostname, accentColor);
 
   // 位置变更回调：防抖写入 storage
   activeWidget.setOnPositionChange((pos) => {

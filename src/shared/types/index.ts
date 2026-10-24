@@ -1,5 +1,11 @@
 // 所有类型统一从 index.ts 导出，外部模块只 import 此文件
 
+/**
+ * 悬浮球 status 消息的结束原因，仅在 agent 回到 idle 时携带。
+ * 缺省（旧发送端不带 reason）按 complete 处理，保证协议向后兼容。
+ */
+export type WidgetStatusReason = 'complete' | 'error' | 'abort';
+
 export type {
   Tab,
   Window,

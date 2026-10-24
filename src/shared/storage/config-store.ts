@@ -1,4 +1,18 @@
-import type { StorageSchema, IConfigStore } from '@/shared/types';
+import type {
+  FloatingButtonSettings,
+  StorageSchema,
+  IConfigStore,
+  UserPreferences,
+} from '@/shared/types';
+import { DEFAULT_ACCENT_COLOR, normalizeAccentColor } from '@/shared/accent-palette';
+import { PANEL_WIDTH_DEFAULT, clampPanelWidth } from '@/shared/panel-width';
+
+/** 读/写共用的浮窗设置归一化：补齐缺省 panelWidth 并钳制到合法区间 */
+function normalizeFloatingButtonSettings(
+  settings: FloatingButtonSettings,
+): FloatingButtonSettings {
+  return { ...settings, panelWidth: clampPanelWidth(settings.panelWidth) };
+}
 
 /**
  * 默认配置值
@@ -19,6 +33,7 @@ const DEFAULTS: StorageSchema = {
   },
   preferences: {
     theme: 'system',
+    accentColor: DEFAULT_ACCENT_COLOR,
     sidebarExpanded: true,
     reasoningAutoExpand: false,
   },
@@ -28,8 +43,21 @@ const DEFAULTS: StorageSchema = {
     enabled: true,
     position: null,
     blacklist: [],
+    panelWidth: PANEL_WIDTH_DEFAULT,
   },
 };
+
+/**
+ * 合并偏好默认值并校验主色。
+ * accentColor 缺省或非法时回退默认暖橙；其余字段透传（兼容旧版本存储）。
+ */
+function withValidAccent(prefs: Partial<UserPreferences> | undefined): UserPreferences {
+  return {
+    ...DEFAULTS.preferences,
+    ...prefs,
+    accentColor: normalizeAccentColor(prefs?.accentColor),
+  };
+}
 
 /**
  * chrome.storage.local 配置存储
@@ -62,6 +90,17 @@ export class ConfigStore implements IConfigStore {
   async get<T>(key: keyof StorageSchema): Promise<T> {
     const result = await this.storage.get(key);
     const value = result[key];
+    if (key === 'preferences') {
+      return withValidAccent(value as Partial<UserPreferences> | undefined) as unknown as T;
+    }
+    if (key === 'floatingButtonSettings') {
+      const fallback = DEFAULTS.floatingButtonSettings;
+      const stored =
+        value && typeof value === 'object'
+          ? (value as FloatingButtonSettings)
+          : fallback;
+      return normalizeFloatingButtonSettings(stored) as T;
+    }
     if (value !== undefined) {
       return value as T;
     }
@@ -70,20 +109,37 @@ export class ConfigStore implements IConfigStore {
 
   async getAll(): Promise<StorageSchema> {
     const result = await this.storage.get(null);
-    return {
+    const stored = result as Partial<StorageSchema>;
+    const merged = {
       ...DEFAULTS,
-      ...(result as Partial<StorageSchema>),
+      ...stored,
+      preferences: withValidAccent(stored.preferences),
+    };
+    return {
+      ...merged,
+      floatingButtonSettings: normalizeFloatingButtonSettings(merged.floatingButtonSettings),
     };
   }
 
   // ── 写入 ────────────────────────────────────────────
 
   async set<T>(key: keyof StorageSchema, value: T): Promise<void> {
-    await this.storage.set({ [key]: value });
+    const next =
+      key === 'preferences'
+        ? withValidAccent(value as Partial<UserPreferences>)
+        : key === 'floatingButtonSettings'
+          ? normalizeFloatingButtonSettings(value as FloatingButtonSettings)
+          : value;
+    await this.storage.set({ [key]: next });
   }
 
   async patch(patch: Partial<StorageSchema>): Promise<void> {
-    await this.storage.set(patch as Record<string, unknown>);
+    const next = { ...patch };
+    // 仅在显式携带主色时校验，保持部分更新的原有语义
+    if (next.preferences && 'accentColor' in next.preferences) {
+      next.preferences = withValidAccent(next.preferences);
+    }
+    await this.storage.set(next as Record<string, unknown>);
   }
 
   // ── 监听 ────────────────────────────────────────────
@@ -98,7 +154,16 @@ export class ConfigStore implements IConfigStore {
     ) => {
       const typedChanges: Partial<StorageSchema> = {};
       for (const [key, change] of Object.entries(changes)) {
-        (typedChanges as Record<string, unknown>)[key] = change.newValue;
+        let nextValue = change.newValue;
+        // 与 get/set 保持同一套校验：变更事件同样不能把非法值透给调用方
+        if (key === 'preferences') {
+          nextValue = withValidAccent(nextValue as Partial<UserPreferences> | undefined);
+        } else if (key === 'floatingButtonSettings') {
+          nextValue = normalizeFloatingButtonSettings(
+            (nextValue as FloatingButtonSettings | undefined) ?? DEFAULTS.floatingButtonSettings,
+          );
+        }
+        (typedChanges as Record<string, unknown>)[key] = nextValue;
       }
       callback(typedChanges);
     };

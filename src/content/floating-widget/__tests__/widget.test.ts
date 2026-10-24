@@ -1,23 +1,42 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { FloatingWidget } from '../widget';
+import { GrokBot } from '../grokbot';
 import { ConfigStore } from '@/shared/storage/config-store';
-import { createI18nMock } from '@/test/i18n-mock';
 import type { FloatingButtonSettings } from '@/shared/types/storage';
+import {
+  HOSTNAME,
+  baseSettings,
+  createBrowserStub,
+  createCanvasContextStub,
+  firePointer,
+  mountWidget,
+  patchPointerCapture,
+} from './helpers/widget-harness';
 
 // ChatPanel 通过动态 import 延迟加载；用 mock 隔离 iframe 依赖并记录调用。
-const { toggleMock, ctorMock, destroyMock } = vi.hoisted(() => ({
+const { toggleMock, ctorMock, destroyMock, setWidthMock } = vi.hoisted(() => ({
   toggleMock: vi.fn(),
   ctorMock: vi.fn(),
   destroyMock: vi.fn(),
+  setWidthMock: vi.fn(),
 }));
 
 vi.mock('../panel', () => ({
   ChatPanel: class {
-    constructor(container: HTMLElement, side: 'left' | 'right') {
-      ctorMock(container, side);
+    constructor(
+      container: HTMLElement,
+      side: 'left' | 'right',
+      _onStatus?: unknown,
+      _onClose?: unknown,
+      width?: number,
+    ) {
+      ctorMock(container, side, width);
     }
     toggle(): void {
       toggleMock();
+    }
+    setWidth(width: number): void {
+      setWidthMock(width);
     }
     destroy(): void {
       destroyMock();
@@ -25,92 +44,20 @@ vi.mock('../panel', () => ({
   },
 }));
 
-const HOSTNAME = 'example.com';
-
-const baseSettings: FloatingButtonSettings = {
-  enabled: true,
-  position: null,
-  blacklist: [],
-};
-
-// jsdom 未实现 Pointer Capture；补 no-op 以便事件流完整执行
-if (typeof Element.prototype.setPointerCapture !== 'function') {
-  (Element.prototype as unknown as { setPointerCapture: () => void }).setPointerCapture = () => {};
-}
-if (typeof Element.prototype.releasePointerCapture !== 'function') {
-  (Element.prototype as unknown as { releasePointerCapture: () => void }).releasePointerCapture = () => {};
-}
-
-function createBrowserStub() {
-  const storage: Record<string, unknown> = {};
-  const local = {
-    get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {
-      if (keys === null) return { ...storage };
-      const keysArr = (Array.isArray(keys) ? keys : [keys]) as string[];
-      const result: Record<string, unknown> = {};
-      for (const key of keysArr) {
-        if (key in storage) result[key] = storage[key];
-      }
-      return result;
-    }),
-    set: vi.fn(async (items: Record<string, unknown>) => {
-      Object.assign(storage, items);
-    }),
-    remove: vi.fn(),
-    clear: vi.fn(),
-  };
-  const onChanged = { addListener: vi.fn(), removeListener: vi.fn() };
-  return {
-    browser: {
-      storage: { local, onChanged },
-      runtime: {
-        getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
-      },
-      i18n: createI18nMock(),
-    },
-    local,
-    storage,
-  };
-}
-
 let currentBrowser: ReturnType<typeof createBrowserStub>;
 let widget: FloatingWidget | null = null;
+
+patchPointerCapture();
 
 async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/** 挂载 widget 并返回其 closed shadow root（attachShadow 包装捕获引用） */
+/** 兼容既有调用点：挂载后更新模块级 widget，便于 afterEach 统一销毁 */
 function mountWithShadow(settings: FloatingButtonSettings = baseSettings): ShadowRoot {
-  const origAttach = Element.prototype.attachShadow;
-  let captured: ShadowRoot | null = null;
-  Element.prototype.attachShadow = function (
-    this: Element,
-    init: ShadowRootInit,
-  ): ShadowRoot {
-    const sr = origAttach.call(this, init);
-    captured = sr;
-    return sr;
-  };
-  try {
-    widget = new FloatingWidget(settings, HOSTNAME);
-    widget.mount();
-  } finally {
-    Element.prototype.attachShadow = origAttach;
-  }
-  return captured as ShadowRoot;
-}
-
-function firePointer(el: Element, type: string, clientX: number, clientY: number): void {
-  el.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      pointerId: 1,
-      clientX,
-      clientY,
-    }),
-  );
+  const mounted = mountWidget(settings);
+  widget = mounted.widget;
+  return mounted.shadow;
 }
 
 describe('FloatingWidget', () => {
@@ -118,12 +65,16 @@ describe('FloatingWidget', () => {
     toggleMock.mockClear();
     ctorMock.mockClear();
     destroyMock.mockClear();
+    setWidthMock.mockClear();
     widget = null;
     currentBrowser = createBrowserStub();
     vi.stubGlobal('browser', currentBrowser.browser);
     ConfigStore.resetInstance();
     document.documentElement.innerHTML = '';
     document.body.innerHTML = '';
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      createCanvasContextStub(),
+    );
   });
 
   afterEach(() => {
@@ -131,6 +82,7 @@ describe('FloatingWidget', () => {
     widget = null;
     ConfigStore.resetInstance();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   describe('mount / DOM 构建', () => {
@@ -168,31 +120,48 @@ describe('FloatingWidget', () => {
       expect(document.querySelectorAll('#ba-floating-host').length).toBe(1);
     });
 
-    it('按钮包含 aria-label / title 与 logo 图片', () => {
+    it('按钮包含 aria-label / title 与 60px canvas 头像', () => {
       const shadow = mountWithShadow();
       const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
       expect(btn.getAttribute('aria-label')).toBe('打开聊天');
       expect(btn.getAttribute('title')).toBe('打开聊天');
-      expect(btn.querySelector('img')).not.toBeNull();
-      expect(currentBrowser.browser.runtime.getURL).toHaveBeenCalledWith('logo-48.png');
+
+      // 不再使用 logo 图片，头像由 canvas 上的 GrokBot 引擎绘制
+      expect(btn.querySelector('img')).toBeNull();
+      const canvas = btn.querySelector('canvas') as HTMLCanvasElement;
+      expect(canvas).not.toBeNull();
+      expect(canvas.getAttribute('aria-label')).toBe('打开聊天');
+      expect(canvas.width).toBe(60);
+      expect(canvas.height).toBe(60);
+      expect(canvas.style.width).toBe('60px');
+      expect(canvas.style.height).toBe('60px');
     });
 
-    it('图片加载失败时降级为文字 BA', () => {
+    it('CSS 中按钮与 canvas 的尺寸均为 60px', () => {
+      const shadow = mountWithShadow();
+      const css = shadow.querySelector('style')?.textContent ?? '';
+      const btnRule = /\.float-btn\s*\{([^}]*)\}/s.exec(css)?.[1] ?? '';
+      const canvasRule = /\.float-btn canvas\s*\{([^}]*)\}/s.exec(css)?.[1] ?? '';
+
+      expect(btnRule).toMatch(/width:\s*60px/);
+      expect(btnRule).toMatch(/height:\s*60px/);
+      expect(canvasRule).toMatch(/width:\s*60px/);
+      expect(canvasRule).toMatch(/height:\s*60px/);
+    });
+
+    it('Canvas 2D 不可用时安全降级：按钮仍可点击', async () => {
+      // 覆盖无 Canvas 实现的宿主环境（引擎构造函数会抛错）
+      vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
       const shadow = mountWithShadow();
       const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
-      const img = btn.querySelector('img') as HTMLImageElement;
-      img.dispatchEvent(new Event('error'));
-      expect(btn.querySelector('span')?.textContent).toBe('BA');
-      expect(btn.querySelector('img')).toBeNull();
-    });
 
-    it('runtime.getURL 抛错时图片回退到占位 SVG（扩展上下文失效场景）', () => {
-      currentBrowser.browser.runtime.getURL.mockImplementation(() => {
-        throw new Error('extension context invalidated');
-      });
-      const shadow = mountWithShadow();
-      const img = shadow.querySelector('button.float-btn img') as HTMLImageElement;
-      expect(img.src.startsWith('data:image/svg+xml')).toBe(true);
+      expect(btn.querySelector('canvas')).not.toBeNull();
+      // 兜底样式保证按钮仍然可见
+      expect(btn.classList.contains('avatar-unavailable')).toBe(true);
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+      expect(toggleMock).toHaveBeenCalledTimes(1);
     });
 
     it('阻止按钮 dragstart 默认行为', () => {
@@ -259,6 +228,15 @@ describe('FloatingWidget', () => {
   });
 
   describe('destroy', () => {
+    it('destroy 停止头像引擎', () => {
+      const engineDestroy = vi.spyOn(GrokBot.prototype, 'destroy');
+      mountWithShadow();
+      expect(engineDestroy).not.toHaveBeenCalled();
+
+      widget?.destroy();
+      expect(engineDestroy).toHaveBeenCalledTimes(1);
+    });
+
     it('destroy 移除 host 并清理已创建的 ChatPanel', async () => {
       const shadow = mountWithShadow();
       const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
@@ -324,6 +302,77 @@ describe('FloatingWidget', () => {
       expect(side).toBe('left');
     });
 
+    it('创建面板时传入当前配置的面板宽度', async () => {
+      const shadow = mountWithShadow({ ...baseSettings, panelWidth: 600 });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+
+      expect(ctorMock).toHaveBeenCalledTimes(1);
+      const [, side, width] = ctorMock.mock.calls[0] as [HTMLDivElement, 'left' | 'right', number];
+      expect(side).toBe('right');
+      expect(width).toBe(600);
+    });
+
+    it('未配置面板宽度时向 ChatPanel 传入默认 420', async () => {
+      const shadow = mountWithShadow();
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+
+      const [, , width] = ctorMock.mock.calls[0] as [HTMLDivElement, 'left' | 'right', number];
+      expect(width).toBe(420);
+    });
+
+    it('apply() 宽度变化且面板已创建 → 调用 setWidth 热更新', async () => {
+      const shadow = mountWithShadow({ ...baseSettings, panelWidth: 420 });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+      expect(ctorMock).toHaveBeenCalledTimes(1);
+
+      const alive = widget?.apply({ ...baseSettings, panelWidth: 680 });
+
+      expect(alive).toBe(true);
+      expect(setWidthMock).toHaveBeenCalledWith(680);
+      expect(ctorMock).toHaveBeenCalledTimes(1); // 不重建面板
+    });
+
+    it('apply() 宽度被移除（undefined）时回退默认 420', async () => {
+      const shadow = mountWithShadow({ ...baseSettings, panelWidth: 600 });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointerup', 100, 100);
+      await flush();
+
+      widget?.apply({ ...baseSettings, panelWidth: undefined });
+
+      expect(setWidthMock).toHaveBeenCalledWith(420);
+    });
+
+    it('apply() 宽度未变化时不调用 setWidth', () => {
+      mountWithShadow({ ...baseSettings, panelWidth: 520 });
+
+      widget?.apply({ ...baseSettings, panelWidth: 520 });
+
+      expect(setWidthMock).not.toHaveBeenCalled();
+    });
+
+    it('apply() 宽度变化但面板尚未创建时不调用 setWidth（下次创建生效）', () => {
+      mountWithShadow({ ...baseSettings, panelWidth: 420 });
+
+      widget?.apply({ ...baseSettings, panelWidth: 640 });
+
+      expect(setWidthMock).not.toHaveBeenCalled();
+    });
+
     it('销毁后再次挂载可重新创建面板', async () => {
       const shadow = mountWithShadow();
       const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
@@ -362,9 +411,9 @@ describe('FloatingWidget', () => {
       firePointer(btn, 'pointerup', 900, 400);
       await flush();
 
-      expect(onPositionChange).toHaveBeenCalledWith({ side: 'right', top: 376 });
+      expect(onPositionChange).toHaveBeenCalledWith({ side: 'right', top: 370 });
       expect(btn.style.right).toBe('0px');
-      expect(btn.style.top).toBe('376px');
+      expect(btn.style.top).toBe('370px');
       expect(toggleMock).not.toHaveBeenCalled();
     });
 
@@ -378,9 +427,9 @@ describe('FloatingWidget', () => {
       firePointer(btn, 'pointermove', 100, 400);
       firePointer(btn, 'pointerup', 100, 400);
 
-      expect(onPositionChange).toHaveBeenCalledWith({ side: 'left', top: 376 });
+      expect(onPositionChange).toHaveBeenCalledWith({ side: 'left', top: 370 });
       expect(btn.style.left).toBe('0px');
-      expect(btn.style.top).toBe('376px');
+      expect(btn.style.top).toBe('370px');
       expect(btn.classList.contains('dragging')).toBe(false);
       expect(toggleMock).not.toHaveBeenCalled();
     });
@@ -496,9 +545,46 @@ describe('FloatingWidget', () => {
           enabled: true,
           position: { side: 'right', top: 100 },
           blacklist: ['already.com', HOSTNAME],
+          // ConfigStore.set 统一归一化：旧数据缺省宽度补齐为默认值
+          panelWidth: 420,
         },
       });
       expect(document.getElementById('ba-floating-host')).toBeNull();
+    });
+  });
+
+  describe('健壮性分支', () => {
+    it('未按下拖拽时 pointermove / pointerup 不移动按钮', () => {
+      const shadow = mountWithShadow();
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+      const before = btn.style.transform;
+
+      firePointer(btn, 'pointermove', 400, 300);
+      firePointer(btn, 'pointerup', 400, 300);
+
+      expect(btn.style.transform).toBe(before);
+    });
+
+    it('Canvas 不可用时按钮兜底底色跟随主色变更', () => {
+      vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
+      const shadow = mountWithShadow();
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+      // 降级时立即写入主色，避免透明按钮不可见
+      expect(btn.style.background).toBe('rgb(194, 65, 12)');
+
+      const calls = currentBrowser.browser.storage.onChanged.addListener.mock.calls;
+      const handler = calls[calls.length - 1]![0] as (changes: Record<string, { newValue?: unknown }>) => void;
+      handler({ preferences: { newValue: { accentColor: '#2563eb' } } });
+
+      expect(btn.style.background).toBe('rgb(37, 99, 235)');
+    });
+
+    it('storage 监听注册失败时仍能挂载', () => {
+      vi.spyOn(ConfigStore.prototype, 'onChange').mockImplementation(() => {
+        throw new Error('storage unavailable');
+      });
+
+      expect(() => mountWithShadow()).not.toThrow();
     });
   });
 });

@@ -75,9 +75,17 @@ function findNode(root: CdpNode, predicate: (node: CdpNode) => boolean): CdpNode
 interface ShadowSnapshot {
   buttonCenter: { x: number; y: number } | null;
   panelDisplay: string | null;
+  /** 面板计算宽度（px） */
+  panelWidth: string | null;
+  /** 悬浮球 canvas 的 aria-label；canvas 不存在时为 null */
+  canvasAriaLabel: string | null;
+  /** canvas 的 role；引擎构造成功才会写入 'img' */
+  canvasRole: string | null;
+  /** canvas 是否对读屏隐藏（按钮自身已有 aria-label） */
+  canvasAriaHidden: string | null;
 }
 
-/** 一次 CDP 往返取出按钮坐标与面板容器 display */
+/** 一次 CDP 往返取出按钮坐标、面板 display 与头像 canvas 的可访问名 */
 async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
   const { root } = (await cdp.send('DOM.getDocument', { depth: -1, pierce: true })) as {
     root: CdpNode;
@@ -88,6 +96,13 @@ async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
     (node) => node.nodeName === 'BUTTON' && nodeAttributes(node)['aria-label'] === BUTTON_LABEL,
   );
   const panel = findNode(root, (node) => nodeAttributes(node)['class'] === 'panel-container');
+  const host = findNode(root, (node) => nodeAttributes(node)['id'] === 'ba-floating-host');
+  // 仅认 host 自己的 shadow root：避免把宿主页面上无关的 canvas 算进来
+  const canvas = host ? findNode(host, (node) => node.nodeName === 'CANVAS') : null;
+  const canvasAttrs = canvas ? nodeAttributes(canvas) : {};
+  const canvasAriaLabel = canvas ? canvasAttrs['aria-label'] ?? null : null;
+  const canvasRole = canvas ? canvasAttrs['role'] ?? null : null;
+  const canvasAriaHidden = canvas ? canvasAttrs['aria-hidden'] ?? null : null;
 
   let buttonCenter: ShadowSnapshot['buttonCenter'] = null;
   if (button) {
@@ -99,14 +114,16 @@ async function inspectShadow(cdp: CDPSession): Promise<ShadowSnapshot> {
   }
 
   let panelDisplay: string | null = null;
+  let panelWidth: string | null = null;
   if (panel) {
     const { computedStyle } = (await cdp.send('CSS.getComputedStyleForNode', {
       nodeId: panel.nodeId,
     })) as { computedStyle: Array<{ name: string; value: string }> };
     panelDisplay = computedStyle.find((p) => p.name === 'display')?.value ?? null;
+    panelWidth = computedStyle.find((p) => p.name === 'width')?.value ?? null;
   }
 
-  return { buttonCenter, panelDisplay };
+  return { buttonCenter, panelDisplay, panelWidth, canvasAriaLabel, canvasRole, canvasAriaHidden };
 }
 
 /** 点击穿透 closed shadow root 的浮动按钮 */
@@ -121,10 +138,32 @@ function panelFrames(page: Page) {
   return page.frames().filter((f) => f.url().includes('sidepanel.html'));
 }
 
+/** 通过扩展页面写入 floatingButtonSettings（content script 启动/热更新时读取） */
+async function seedFloatingButtonSettings(
+  context: BrowserContext,
+  extensionId: string,
+  settings: Record<string, unknown>,
+): Promise<void> {
+  if (!extensionId) throw new Error('未能获取扩展 ID，无法写入 chrome.storage');
+  const extensionPage = await context.newPage();
+  await extensionPage.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  await extensionPage.waitForLoadState('domcontentloaded');
+  await extensionPage.evaluate(
+    (value) =>
+      new Promise<void>((resolve) => {
+        chrome.storage.local.set({ floatingButtonSettings: value }, () => resolve());
+      }),
+    settings,
+  );
+  await extensionPage.close();
+}
+
 test.describe('浮动按钮 E2E', () => {
   let context: BrowserContext;
   let page: Page;
   let cdp: CDPSession;
+  /** 扩展 ID：通过扩展页面写 chrome.storage，模拟用户配置 */
+  let extensionId = '';
 
   test.beforeAll(async () => {
     context = await chromium.launchPersistentContext('', {
@@ -140,9 +179,10 @@ test.describe('浮动按钮 E2E', () => {
     });
 
     // 等待 Service Worker / background 就绪
-    await context.waitForEvent('serviceworker', { timeout: 30000 }).catch(() => {
-      // Chrome 扩展可能没有 service worker，忽略
-    });
+    const ready = await context
+      .waitForEvent('serviceworker', { timeout: 30000 })
+      .catch(() => context.serviceWorkers()[0] ?? null);
+    extensionId = ready?.url().split('/')[2] ?? '';
   });
 
   test.afterAll(async () => {
@@ -167,6 +207,12 @@ test.describe('浮动按钮 E2E', () => {
     await expect(page.locator(HOST_ID)).toBeAttached();
     // 按钮位于 closed shadow root 内，须经 CDP 穿透确认其已渲染且有尺寸
     await expect.poll(async () => (await inspectShadow(cdp)).buttonCenter).not.toBeNull();
+    // 头像由 canvas 承载：role=img 只在引擎构造成功时由引擎写入，可作为「已构造」证据
+    await expect.poll(async () => (await inspectShadow(cdp)).canvasRole).toBe('img');
+    // canvas 对读屏隐藏，可访问名由按钮自身提供
+    await expect.poll(async () => (await inspectShadow(cdp)).canvasAriaHidden).toBe('true');
+    await expect.poll(async () => (await inspectShadow(cdp)).canvasAriaLabel)
+      .toBe(BUTTON_LABEL);
   });
 
   test('点击浮动按钮打开面板，iframe 加载 sidepanel.html', async () => {
@@ -195,5 +241,26 @@ test.describe('浮动按钮 E2E', () => {
       timeout: 10000,
       intervals: [200],
     }).toBe('none');
+  });
+
+  test('配置面板宽度后打开面板，容器宽度等于配置值', async () => {
+    await seedFloatingButtonSettings(context, extensionId, {
+      enabled: true,
+      position: null,
+      blacklist: [],
+      panelWidth: 620,
+    });
+
+    // 重新加载测试页：content script 以最新配置初始化（避免 storage 传播时序影响）
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator(HOST_ID).waitFor({ state: 'attached', timeout: 15000 });
+
+    await clickFloatingButton(page, cdp);
+
+    await expect.poll(async () => (await inspectShadow(cdp)).panelDisplay, { timeout: 10000 })
+      .toBe('block');
+    // 视口 1280 > 620，配置值直接生效
+    await expect.poll(async () => (await inspectShadow(cdp)).panelWidth, { timeout: 10000 })
+      .toBe('620px');
   });
 });

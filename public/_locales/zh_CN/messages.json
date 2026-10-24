@@ -200,6 +200,21 @@
   "settings_theme_dark": {
     "message": "深色"
   },
+  "settings_accent_label": {
+    "message": "主色"
+  },
+  "settings_accent_description": {
+    "message": "用于按钮、高亮与悬浮头像"
+  },
+  "settings_accent_custom": {
+    "message": "自定义颜色"
+  },
+  "settings_accent_current": {
+    "message": "当前色值"
+  },
+  "settings_accent_preset": {
+    "message": "使用 {color}"
+  },
   "settings_tabs_provider": {
     "message": "Provider"
   },
@@ -586,6 +601,15 @@
   },
   "settings_floatingButton_resetSuccess": {
     "message": "位置已重置"
+  },
+  "settings_floatingButton_panelWidth": {
+    "message": "聊天面板宽度"
+  },
+  "settings_floatingButton_panelWidthDesc": {
+    "message": "调整在网页上打开聊天面板时的宽度"
+  },
+  "settings_floatingButton_panelWidthValue": {
+    "message": "{width} px"
   },
   "dialog_confirmTitle": {
     "message": "确认操作"

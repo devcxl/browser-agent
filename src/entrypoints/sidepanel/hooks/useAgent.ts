@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef } from 'react';
 import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
-import type { JevSettings, ProviderConfig, ProviderModelConfig } from '@/shared/types';
+import type {
+  JevSettings,
+  ProviderConfig,
+  ProviderModelConfig,
+  WidgetStatusReason,
+} from '@/shared/types';
 import type { ToolCallRecord } from '@/shared/types/agent';
 import type { IAgentRuntime, AgentConfig } from '@/shared/types/agent';
 import type { IToolRegistry } from '@/registry/types';
@@ -115,6 +120,8 @@ function recordToDisplay(record: ToolCallRecord): ToolCallDisplay {
 export function useAgent() {
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  /** 最近一次运行的结束原因；仅 idle 转换时供外层悬浮球区分「完成/出错/中止」 */
+  const [lastRunOutcome, setLastRunOutcome] = useState<WidgetStatusReason | null>(null);
   const [runningConversationId, setRunningConversationId] = useState<string | null>(null);
   const cbRef = useRef<AgentCallbacks>({});
   const loopRef = useRef<IAgentRuntime | null>(null);
@@ -134,7 +141,6 @@ export function useAgent() {
       modelConfig?: ProviderModelConfig,
     ) => {
       setRunningConversationId(conversationId);
-      setStatus('running');
       setError(null);
 
       const userMsg: UIMessage = {
@@ -194,6 +200,8 @@ export function useAgent() {
             return new Promise<'approve' | 'deny'>((resolve) => {
               setStatus('waitingConfirmation');
               confirmResolveRef.current = (allowed: boolean) => {
+                // 确认已给出，工具即将执行：先离开「等待确认」，执行期由 onToolCall 标为 running
+                setStatus('running');
                 resolve(allowed ? 'approve' : 'deny');
               };
               cbRef.current.onConfirm?.({
@@ -223,6 +231,8 @@ export function useAgent() {
           },
           callbacks: {
             onStreamChunk: (chunk: string) => {
+              // 工具执行结束、文本恢复输出：从 running 回到 streaming（思考/生成中）
+              setStatus((current) => (current === 'streaming' || current === 'idle' ? current : 'streaming'));
               // 工具调用后开启新的文本气泡
               if (assistantMsg.status === 'complete') {
                 cbRef.current.onMessage?.({ ...assistantMsg });
@@ -242,6 +252,8 @@ export function useAgent() {
               cbRef.current.onMessage?.({ ...assistantMsg });
             },
             onToolCall: (record: ToolCallRecord) => {
+              // 工具即将执行：进入 running（外部映射为 working），直到下一段文本恢复输出
+              setStatus('running');
               // 当前 assistant 消息如有内容则先终结，保证思考/文本/工具按时间顺序分格
               if (assistantMsg.content || assistantMsg.reasoningContent) {
                 cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined });
@@ -291,6 +303,7 @@ export function useAgent() {
           cbRef.current.onTokenUsage?.(output.tokenUsage);
         }
         setRunningConversationId(null);
+        setLastRunOutcome('complete');
         setStatus('idle');
         generateTitle();
       } catch (err) {
@@ -299,6 +312,7 @@ export function useAgent() {
           assistantMsg.status = 'complete';
           cbRef.current.onMessage?.({ ...assistantMsg });
           setRunningConversationId(null);
+          setLastRunOutcome('abort');
           setStatus('idle');
           return;
         }
@@ -307,6 +321,7 @@ export function useAgent() {
         cbRef.current.onMessage?.({ ...assistantMsg });
         setError((err as Error).message);
         setRunningConversationId(null);
+        setLastRunOutcome('error');
         setStatus('idle');
       }
     },
@@ -322,5 +337,5 @@ export function useAgent() {
     confirmResolveRef.current = null;
   }, []);
 
-  return { status, error, run, abort, setCallbacks, resolveConfirm, runningConversationId };
+  return { status, error, lastRunOutcome, run, abort, setCallbacks, resolveConfirm, runningConversationId };
 }

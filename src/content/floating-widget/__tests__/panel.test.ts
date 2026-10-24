@@ -12,11 +12,25 @@ vi.stubGlobal('browser', {
 });
 
 /** 创建容器并实例化 ChatPanel（默认右侧） */
-function setupPanel(side: 'left' | 'right' = 'right') {
+function setupPanel(
+  side: 'left' | 'right' = 'right',
+  onStatus?: (state: string, reason?: 'complete' | 'error' | 'abort') => void,
+  onClose?: () => void,
+  width?: number,
+) {
   const container = document.createElement('div');
   document.body.appendChild(container);
-  const panel = new ChatPanel(container, side);
+  const panel = new ChatPanel(container, side, onStatus, onClose, width);
   return { container, panel };
+}
+
+/** 派发来自 iframe 的协议消息 */
+function dispatchFromIframe(
+  iframe: HTMLIFrameElement,
+  data: Record<string, unknown> | string,
+  source: Window = iframe.contentWindow as unknown as Window,
+) {
+  window.dispatchEvent(new MessageEvent('message', { data, source }));
 }
 
 describe('ChatPanel', () => {
@@ -160,6 +174,77 @@ describe('ChatPanel', () => {
     });
   });
 
+  describe('面板宽度', () => {
+    it('未传宽度时使用默认 420px', () => {
+      const { container, panel } = setupPanel();
+      panel.open();
+      expect(container.style.width).toBe('420px');
+    });
+
+    it('构造时传入宽度 → open 时应用该宽度', () => {
+      const { container, panel } = setupPanel('right', undefined, undefined, 620);
+      panel.open();
+      expect(container.style.width).toBe('620px');
+    });
+
+    it('构造宽度被钳制到 320–720 且按 10 步进', () => {
+      const low = setupPanel('right', undefined, undefined, 100);
+      low.panel.open();
+      expect(low.container.style.width).toBe('320px');
+
+      const high = setupPanel('right', undefined, undefined, 1000);
+      high.panel.open();
+      expect(high.container.style.width).toBe('720px');
+
+      const stepped = setupPanel('right', undefined, undefined, 424);
+      stepped.panel.open();
+      expect(stepped.container.style.width).toBe('420px');
+    });
+
+    it('视口宽度小于配置宽度时取视口宽度', () => {
+      const spy = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(400);
+      const { container, panel } = setupPanel('right', undefined, undefined, 620);
+      panel.open();
+      expect(container.style.width).toBe('400px');
+      spy.mockRestore();
+    });
+
+    it('setWidth() 只更新容器样式，不重建 iframe', () => {
+      const { container, panel } = setupPanel();
+      panel.open();
+      const iframe = container.querySelector('iframe');
+
+      panel.setWidth(600);
+
+      expect(container.style.width).toBe('600px');
+      expect(container.querySelector('iframe')).toBe(iframe);
+      expect(container.querySelectorAll('iframe').length).toBe(1);
+    });
+
+    it('setWidth() 在面板首次打开前生效', () => {
+      const { container, panel } = setupPanel();
+      panel.setWidth(560);
+      // 尚未创建 iframe，不触碰 DOM
+      expect(container.style.width).toBe('');
+
+      panel.open();
+      expect(container.style.width).toBe('560px');
+    });
+
+    it('setWidth() 同样经过钳制与视口上限', () => {
+      const { container, panel } = setupPanel();
+      panel.open();
+
+      panel.setWidth(2000);
+      expect(container.style.width).toBe('720px');
+
+      const spy = vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(500);
+      panel.setWidth(700);
+      expect(container.style.width).toBe('500px');
+      spy.mockRestore();
+    });
+  });
+
   describe('懒加载 iframe', () => {
     it('首次 open 注入 iframe，src 指向 sidepanel.html?embedded=1，含 sandbox/allow 属性', () => {
       const { container, panel } = setupPanel();
@@ -243,6 +328,125 @@ describe('ChatPanel', () => {
         }),
       );
       expect(panel.isOpen).toBe(false);
+    });
+
+    it('收到合法 status 消息时用 state 调用 onStatus，且不关闭面板', () => {
+      const onStatus = vi.fn();
+      const { container, panel } = setupPanel('right', onStatus);
+      panel.open();
+      const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+
+      dispatchFromIframe(iframe, { source: 'ba-floating-widget', type: 'status', state: 'running' });
+
+      expect(onStatus).toHaveBeenCalledOnce();
+      expect(onStatus).toHaveBeenCalledWith('running', undefined);
+      expect(panel.isOpen).toBe(true);
+    });
+
+    it('status 消息携带的合法 reason 透传给 onStatus', () => {
+      const onStatus = vi.fn();
+      const { container, panel } = setupPanel('right', onStatus);
+      panel.open();
+      const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+
+      dispatchFromIframe(iframe, {
+        source: 'ba-floating-widget',
+        type: 'status',
+        state: 'idle',
+        reason: 'error',
+      });
+      dispatchFromIframe(iframe, {
+        source: 'ba-floating-widget',
+        type: 'status',
+        state: 'idle',
+        reason: 'complete',
+      });
+
+      expect(onStatus).toHaveBeenNthCalledWith(1, 'idle', 'error');
+      expect(onStatus).toHaveBeenNthCalledWith(2, 'idle', 'complete');
+    });
+
+    it('未知 reason 被忽略，按缺省（complete）处理', () => {
+      const onStatus = vi.fn();
+      const { container, panel } = setupPanel('right', onStatus);
+      panel.open();
+      const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+
+      dispatchFromIframe(iframe, {
+        source: 'ba-floating-widget',
+        type: 'status',
+        state: 'idle',
+        reason: 'exploded',
+      });
+
+      expect(onStatus).toHaveBeenCalledWith('idle', undefined);
+    });
+
+    it('close-request 关闭面板时触发 onClose', () => {
+      const onClose = vi.fn();
+      const { container, panel } = setupPanel('right', undefined, onClose);
+      panel.open();
+      const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+
+      dispatchFromIframe(iframe, { source: 'ba-floating-widget', type: 'close-request' });
+
+      expect(onClose).toHaveBeenCalledOnce();
+      expect(panel.isOpen).toBe(false);
+    });
+
+    it('close() 触发 onClose；open() 与重复 close 不触发', () => {
+      const onClose = vi.fn();
+      const { panel } = setupPanel('right', undefined, onClose);
+
+      panel.open();
+      expect(onClose).not.toHaveBeenCalled();
+
+      panel.close();
+      expect(onClose).toHaveBeenCalledOnce();
+
+      panel.close();
+      expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('忽略伪造来源的 status 消息', () => {
+      const onStatus = vi.fn();
+      const { container, panel } = setupPanel('right', onStatus);
+      panel.open();
+      const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+
+      // event.source 不是我们的 iframe.contentWindow
+      dispatchFromIframe(
+        iframe,
+        { source: 'ba-floating-widget', type: 'status', state: 'running' },
+        window as unknown as Window,
+      );
+
+      expect(onStatus).not.toHaveBeenCalled();
+    });
+
+    it('忽略未知 type、非字符串/空 state 的 status 消息', () => {
+      const onStatus = vi.fn();
+      const { container, panel } = setupPanel('right', onStatus);
+      panel.open();
+      const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+
+      dispatchFromIframe(iframe, { source: 'ba-floating-widget', type: 'other', state: 'running' });
+      dispatchFromIframe(iframe, { source: 'ba-floating-widget', type: 'status', state: 42 });
+      dispatchFromIframe(iframe, { source: 'ba-floating-widget', type: 'status', state: '' });
+      dispatchFromIframe(iframe, { source: 'ba-floating-widget', type: 'status' });
+
+      expect(onStatus).not.toHaveBeenCalled();
+    });
+
+    it('未注入 onStatus 时 status 消息被安全忽略', () => {
+      const { container, panel } = setupPanel();
+      panel.open();
+      const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+
+      expect(() =>
+        dispatchFromIframe(iframe, { source: 'ba-floating-widget', type: 'status', state: 'idle' }),
+      ).not.toThrow();
+      expect(panel.isOpen).toBe(true);
     });
 
     it('忽略非 iframe source 的消息', () => {

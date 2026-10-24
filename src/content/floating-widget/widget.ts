@@ -2,7 +2,7 @@
  * FloatingWidget — 浮动控件 DOM 组装与交互。
  *
  * 在页面注入 Shadow DOM 宿主，内含：
- * - 圆形拖拽按钮（logo + aria-label）
+ * - 圆形拖拽按钮（GrokBot 动画头像 + aria-label）
  * - 右键/长按快捷菜单
  * - iframe 面板容器（委托 ChatPanel）
  *
@@ -11,14 +11,32 @@
 
 import { isClick, resolveSide, clampTop } from './drag';
 import { addToBlacklist, shouldMount } from './blacklist';
+import { computeGaze } from './gaze';
+import { GrokBot } from './grokbot';
+import type { Vec2 } from './grokbot';
+import { BotStateController } from './bot-state-controller';
+import { mapAgentStatusToBotState } from './status-map';
 import { translate } from '@/shared/i18n';
+import { DEFAULT_ACCENT_COLOR, normalizeAccentColor } from '@/shared/accent-palette';
+import { PANEL_WIDTH_DEFAULT } from '@/shared/panel-width';
 import type { FloatingButtonSettings } from '@/shared/types/storage';
 import { ConfigStore } from '@/shared/storage/config-store';
 
+/** 面板句柄：动态导入的 ChatPanel 在本模块使用的最小接口 */
+interface ChatPanelHandle {
+  toggle(): void;
+  destroy(): void;
+  setWidth(width: number): void;
+}
+
 /** 按钮尺寸（px），与 drag.ts 中 clampTop 的 buttonSize 保持一致 */
-const BUTTON_SIZE = 48;
+const BUTTON_SIZE = 60;
 /** 长按判定阈值（ms） */
 const LONG_PRESS_DURATION = 500;
+/** 眼睛追踪：归一化变化低于该值视为抖动，跳过重建帧（约 0.5% 满程） */
+const GAZE_EPSILON = 0.01;
+/** 头像眼睛颜色（暖白），不随主色变化 */
+const EYE_COLOR = '#fff7ed';
 
 /** 默认吸附侧 */
 const DEFAULT_SIDE: 'left' | 'right' = 'right';
@@ -54,41 +72,45 @@ const SHADOW_CSS = /* css */ `
   width: ${BUTTON_SIZE}px;
   height: ${BUTTON_SIZE}px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  /* 头像本体直接可见：按钮自身不加底色/描边，只用 drop-shadow 保留悬浮感 */
+  background: transparent;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.28));
   cursor: pointer;
   pointer-events: auto;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
-  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  transition: filter 0.2s ease, transform 0.15s ease;
   position: fixed;
-  overflow: hidden;
 }
 
 .float-btn:hover {
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.1);
-  transform: scale(1.05);
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.35));
+  transform: scale(1.06);
 }
 
 .float-btn:active {
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.05);
-  transform: scale(0.97);
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.22));
+  transform: scale(0.96);
 }
 
-.float-btn img {
+.float-btn canvas {
   width: ${BUTTON_SIZE}px;
   height: ${BUTTON_SIZE}px;
   display: block;
   pointer-events: none;
   -webkit-user-drag: none;
   user-select: none;
-  object-fit: contain;
 }
 
 .float-btn.dragging {
   transition: none;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.1);
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.32));
+}
+
+/* Canvas 不可用时的兜底：至少保留可见的圆形点击目标（与头像主体同色） */
+.float-btn.avatar-unavailable {
+  background: ${DEFAULT_ACCENT_COLOR};
 }
 
 .context-menu {
@@ -133,7 +155,7 @@ const SHADOW_CSS = /* css */ `
   position: fixed;
   top: 0;
   bottom: 0;
-  width: 420px;
+  width: ${PANEL_WIDTH_DEFAULT}px;
   max-width: 100vw;
   background: #ffffff;
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.15);
@@ -163,10 +185,20 @@ export class FloatingWidget {
   private host: HTMLDivElement | null = null;
   private shadowRoot: ShadowRoot | null = null;
   private btn: HTMLButtonElement | null = null;
+  /** GrokBot 动画引擎；Canvas 2D 不可用时为 null（按钮仍可交互） */
+  private bot: GrokBot | null = null;
+  /** 当前主色（头像 bodyColor），随 preferences 热更新 */
+  private accentColor: string;
+  /** preferences 变更退订函数 */
+  private unsubscribePreferences: (() => void) | null = null;
+  /** 状态去抖 / 庆祝 / 复位逻辑（与 DOM 解耦的纯逻辑单元） */
+  private readonly botState = new BotStateController({
+    apply: (state) => this.bot?.update({ state }),
+  });
   private menu: HTMLDivElement | null = null;
   private panelContainer: HTMLDivElement | null = null;
   /** ChatPanel 实例引用，延迟导入避免循环依赖 */
-  private chatPanel: unknown = null;
+  private chatPanel: ChatPanelHandle | null = null;
 
   private position: ButtonPosition;
   /** 拖拽期间的瞬时偏移（相对于吸附位置） */
@@ -175,6 +207,13 @@ export class FloatingWidget {
   private pointerStart = { x: 0, y: 0 };
   private pointerMoved = 0;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** 待执行的 gaze 计算帧；同一帧内的高频 pointermove 合并为一次 */
+  private gazeRafId: number | null = null;
+  /** 最近一次指针坐标（rAF 执行时消费） */
+  private pendingPointer: { x: number; y: number } | null = null;
+  /** 最近一次下发给引擎的 gaze，用于跳过微小抖动 */
+  private lastGaze: Vec2 = { x: 0, y: 0 };
 
   /** 位置变更回调（防抖写入 storage） */
   private onPositionChange: ((pos: ButtonPosition) => void) | null = null;
@@ -185,13 +224,18 @@ export class FloatingWidget {
   private boundPointerUp: (e: PointerEvent) => void;
   private boundContextMenu: (e: Event) => void;
   private boundDocClick: (e: Event) => void;
+  private boundWindowPointerMove: (e: PointerEvent) => void;
+  private boundDocumentPointerLeave: () => void;
+  private boundWindowBlur: () => void;
 
   constructor(
     settings: FloatingButtonSettings,
     hostname: string,
+    accentColor: string = DEFAULT_ACCENT_COLOR,
   ) {
     this.settings = settings;
     this.hostname = hostname;
+    this.accentColor = normalizeAccentColor(accentColor);
 
     // 从 settings 读取初始位置或使用默认值
     const savedPos = settings.position;
@@ -205,6 +249,9 @@ export class FloatingWidget {
     this.boundPointerUp = this.onPointerUp.bind(this);
     this.boundContextMenu = this.onContextMenu.bind(this);
     this.boundDocClick = this.onDocClick.bind(this);
+    this.boundWindowPointerMove = this.onWindowPointerMove.bind(this);
+    this.boundDocumentPointerLeave = this.resetGaze.bind(this);
+    this.boundWindowBlur = this.resetGaze.bind(this);
   }
 
   /** 设置位置变更回调 */
@@ -226,18 +273,27 @@ export class FloatingWidget {
     // 渲染内部 DOM
     this.renderContent();
 
+    // 订阅主色变更（headless 测试或 storage 不可用时静默跳过）
+    this.subscribePreferences();
+
     // 绑定事件
     this.bindEvents();
   }
 
   /** 响应设置变更。返回 false 表示 widget 已被销毁（如 enabled 关闭或命中黑名单） */
   apply(nextSettings: FloatingButtonSettings): boolean {
+    const prevPanelWidth = this.settings.panelWidth;
     this.settings = nextSettings;
 
     // enabled 关闭 → 销毁
     if (!shouldMount(nextSettings, this.hostname)) {
       this.destroy();
       return false;
+    }
+
+    // 面板已创建且宽度变化 → 实时改样式（不重建 iframe）
+    if (this.chatPanel && prevPanelWidth !== nextSettings.panelWidth) {
+      this.chatPanel.setWidth(nextSettings.panelWidth ?? PANEL_WIDTH_DEFAULT);
     }
 
     // 位置更新
@@ -251,13 +307,24 @@ export class FloatingWidget {
     return true;
   }
 
-  /** 销毁：移除 host，清理事件 */
+  /** 销毁：停止动画引擎、移除 host，清理事件 */
   destroy(): void {
+    if (this.unsubscribePreferences) {
+      this.unsubscribePreferences();
+      this.unsubscribePreferences = null;
+    }
     this.unbindEvents();
     this.clearLongPressTimer();
 
-    if (this.chatPanel && typeof (this.chatPanel as Record<string, unknown>).destroy === 'function') {
-      ((this.chatPanel as Record<string, unknown>).destroy as () => void)();
+    // 先停状态机，避免销毁过程中仍有去抖/庆祝定时器回调引擎
+    this.botState.destroy();
+
+    // 停止 rAF / 眨眼定时器 / 观察者，避免销毁后继续占用资源
+    this.bot?.destroy();
+    this.bot = null;
+
+    if (this.chatPanel) {
+      this.chatPanel.destroy();
     }
     this.chatPanel = null;
 
@@ -306,27 +373,35 @@ export class FloatingWidget {
   private buildButton(): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.className = 'float-btn';
-    btn.setAttribute('aria-label', translate('widget.buttonAriaLabel'));
-    btn.setAttribute('title', translate('widget.buttonAriaLabel'));
+    const label = translate('widget.buttonAriaLabel');
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
 
-    const img = document.createElement('img');
+    // 头像由 GrokBot 引擎绘制到 canvas；尺寸固定 60，引擎内部处理 DPR
+    const canvas = document.createElement('canvas');
+    canvas.width = BUTTON_SIZE;
+    canvas.height = BUTTON_SIZE;
+    canvas.setAttribute('aria-label', label);
+    // 按钮本身已有 aria-label；canvas 仅作视觉呈现，避免读屏重复播报
+    canvas.setAttribute('aria-hidden', 'true');
+    btn.appendChild(canvas);
+
     try {
-      img.src = browser.runtime.getURL('logo-48.png');
+      this.bot = new GrokBot(canvas, {
+        state: 'idle',
+        size: BUTTON_SIZE,
+        autoBlink: true,
+        ariaLabel: label,
+        theme: { bodyColor: this.accentColor, eyeColor: EYE_COLOR },
+      });
     } catch {
-      // 静默回退：扩展上下文失效时用占位 SVG
-      img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"%3E%3Crect width="48" height="48" rx="8" fill="%23ddd"/%3E%3C/svg%3E';
+      // 无 Canvas 2D 实现的宿主（如 jsdom/受限环境）：放弃动画但保留可见、可点击的按钮
+      this.bot = null;
+      btn.classList.add('avatar-unavailable');
+      btn.style.background = this.accentColor;
     }
-    img.alt = 'BA';
-    // 图片加载失败时显示文字 fallback，确保按钮始终可见
-    img.addEventListener('error', () => {
-      const text = document.createElement('span');
-      text.textContent = 'BA';
-      text.style.cssText = 'font-size:18px;font-weight:700;color:#333;line-height:1;';
-      img.replaceWith(text);
-    }, { once: true });
-    btn.appendChild(img);
 
-    // 阻止默认拖拽行为（防止浏览器图片拖拽）
+    // 阻止默认拖拽行为（canvas 不参与原生拖拽）
     btn.addEventListener('dragstart', (e) => e.preventDefault());
 
     return btn;
@@ -354,6 +429,32 @@ export class FloatingWidget {
     return container;
   }
 
+  // ── 主色订阅 ───────────────────────────────────────────
+
+  /** 订阅 preferences 中的主色；旧版本配置缺省时回退暖橙 */
+  private subscribePreferences(): void {
+    if (this.unsubscribePreferences) return;
+    try {
+      this.unsubscribePreferences = ConfigStore.getInstance().onChange((changes) => {
+        if (!changes.preferences) return;
+        this.applyAccent(normalizeAccentColor(changes.preferences.accentColor));
+      });
+    } catch {
+      // 纯 headless 环境（无 browser.storage）：保持构造时的颜色
+      this.unsubscribePreferences = null;
+    }
+  }
+
+  /** 热更新头像主色；Canvas 不可用时同步兜底按钮底色 */
+  private applyAccent(accentColor: string): void {
+    this.accentColor = accentColor;
+    if (this.bot) {
+      this.bot.update({ theme: { bodyColor: accentColor, eyeColor: EYE_COLOR } });
+    } else if (this.btn) {
+      this.btn.style.background = accentColor;
+    }
+  }
+
   // ── 事件绑定 ───────────────────────────────────────────
 
   private bindEvents(): void {
@@ -366,6 +467,13 @@ export class FloatingWidget {
 
     // 全局点击关闭菜单
     document.addEventListener('click', this.boundDocClick, true);
+
+    // 眼睛追踪仅在头像引擎可用时启用（Canvas 降级时无追踪目标）
+    if (this.bot) {
+      window.addEventListener('pointermove', this.boundWindowPointerMove, { passive: true });
+      document.addEventListener('pointerleave', this.boundDocumentPointerLeave);
+      window.addEventListener('blur', this.boundWindowBlur);
+    }
   }
 
   private unbindEvents(): void {
@@ -376,6 +484,67 @@ export class FloatingWidget {
       this.btn.removeEventListener('contextmenu', this.boundContextMenu);
     }
     document.removeEventListener('click', this.boundDocClick, true);
+    window.removeEventListener('pointermove', this.boundWindowPointerMove);
+    document.removeEventListener('pointerleave', this.boundDocumentPointerLeave);
+    window.removeEventListener('blur', this.boundWindowBlur);
+    this.cancelGazeFrame();
+    this.pendingPointer = null;
+  }
+
+  // ── 眼睛追踪 ───────────────────────────────────────────
+
+  /** 全局 pointermove：只记录坐标并排一帧，避免高频重绘 */
+  private onWindowPointerMove(e: PointerEvent): void {
+    this.pendingPointer = { x: e.clientX, y: e.clientY };
+    if (this.gazeRafId !== null) return;
+    this.gazeRafId = requestAnimationFrame(() => {
+      this.gazeRafId = null;
+      this.applyPendingGaze();
+    });
+  }
+
+  /** rAF 回调：用最新指针位置计算 gaze，变化过小则跳过 */
+  private applyPendingGaze(): void {
+    const pointer = this.pendingPointer;
+    const btn = this.btn;
+    const bot = this.bot;
+    this.pendingPointer = null;
+    // 监听仅在 bot 存在时绑定，且销毁会先取消待执行帧；这里的判空是防御性兜底
+    if (!pointer || !btn || !bot) return;
+
+    const rect = btn.getBoundingClientRect();
+    const gaze = computeGaze({
+      pointerX: pointer.x,
+      pointerY: pointer.y,
+      centerX: rect.left + rect.width / 2,
+      centerY: rect.top + rect.height / 2,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
+
+    if (
+      Math.abs(gaze.x - this.lastGaze.x) < GAZE_EPSILON &&
+      Math.abs(gaze.y - this.lastGaze.y) < GAZE_EPSILON
+    ) {
+      return;
+    }
+
+    this.lastGaze = gaze;
+    bot.update({ gaze });
+  }
+
+  /** 指针离开文档或窗口失焦：取消待执行帧并回正 */
+  private resetGaze(): void {
+    this.cancelGazeFrame();
+    this.pendingPointer = null;
+    this.lastGaze = { x: 0, y: 0 };
+    this.bot?.update({ gaze: { x: 0, y: 0 } });
+  }
+
+  private cancelGazeFrame(): void {
+    if (this.gazeRafId === null) return;
+    cancelAnimationFrame(this.gazeRafId);
+    this.gazeRafId = null;
   }
 
   // ── 拖拽处理 ───────────────────────────────────────────
@@ -505,10 +674,18 @@ export class FloatingWidget {
     // 延迟 / 按需加载 ChatPanel
     if (!this.chatPanel) {
       const { ChatPanel } = await import('./panel');
-      this.chatPanel = new ChatPanel(this.panelContainer, this.position.side);
+      this.chatPanel = new ChatPanel(
+        this.panelContainer,
+        this.position.side,
+        // Canvas 不可用时 bot 为 null：apply 里用可选链兜底，不影响面板功能
+        (state, reason) => this.botState.handle(mapAgentStatusToBotState(state), reason),
+        // 面板关闭（按钮或 iframe close-request）→ 立即取消去抖/庆祝并回 idle
+        () => this.botState.reset(),
+        this.settings.panelWidth ?? PANEL_WIDTH_DEFAULT,
+      );
     }
 
-    (this.chatPanel as { toggle: () => void }).toggle();
+    this.chatPanel.toggle();
   }
 
   // ── 定位辅助 ───────────────────────────────────────────
