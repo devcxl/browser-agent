@@ -88,8 +88,8 @@ export function toolOccurrenceId(messageId: string, callIndex: number): string {
  * 重排过消息，重复 toolCallId 的每次出现都各自带一行结果（真实结果或合成占位）。
  * 这里按出现顺序逐条消费，不再用 toolCallId 去 Map 里覆盖式匹配。
  *
- * 状态未知的占位结果只保留 result === undefined：不臆测成功/失败，等 UI 显式
- * 未知状态补上（见下方 TODO）。
+ * 状态未知的占位结果只保留 result === undefined，并把 status 显式标为 unknown：
+ * 不臆测成功/失败（合成占位的内容不是真实工具输出，不能解析成 error 结论）。
  */
 export function storedMessagesToUIMessages(messages: StoredMessage[]): UIMessage[] {
   const { messages: ordered, syntheticUnknown } = reconstructToolProtocol(messages);

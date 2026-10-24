@@ -444,7 +444,7 @@ function ToolBubble({ call }: { call: ToolCallDisplay }) {
 }
 
 /** 工具调用状态点 */
-export function StatusDot({ status }: { status: 'running' | 'success' | 'error' | 'unknown' }) {
+export function StatusDot({ status }: { status: ToolCallDisplay['status'] }) {
   switch (status) {
     case 'running':
       return <span className="w-1.5 h-1.5 rounded-full bg-warning animate-dot-pulse shrink-0" />;

@@ -356,24 +356,6 @@ describe('storedMessagesToUIMessages', () => {
     expect(result[0]!.toolCallDisplay!.status).toBe('unknown');
   });
 
-  it('does not parse synthetic unknown placeholder as a failed result', () => {
-    const stored: StoredMessage[] = [
-      {
-        id: 'a1',
-        role: 'assistant',
-        content: '',
-        timestamp: 1000,
-        toolCalls: [{ id: 'tc-orphan', name: 'click_element', params: { selector: '#btn' } }],
-      },
-    ];
-
-    const result = storedMessagesToUIMessages(stored);
-
-    expect(result).toHaveLength(1);
-    expect(result[0]!.toolCallDisplay!.status).toBe('unknown');
-    expect(result[0]!.toolCallDisplay!.result).toBeUndefined();
-  });
-
   it('distinguishes real success, real failure, malformed json, and synthetic unknown', () => {
     const stored: StoredMessage[] = [
       {
