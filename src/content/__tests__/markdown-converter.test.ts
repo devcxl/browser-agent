@@ -292,29 +292,6 @@ malicious: true</h1>
     expect(result.markdown).toContain('==important==');
   });
 
-  it('converts pre with bare code child and language class (not language-*)', () => {
-    const document = createDocument(`
-      <!doctype html>
-      <html>
-        <head><title>Bare pre</title></head>
-        <body>
-          <article>
-            <h1>Bare pre</h1>
-            <pre class="highlighted"><code>const a = 1;
-const b = 2;</code></pre>
-          </article>
-        </body>
-      </html>
-    `);
-
-    const result = convertToMarkdown(document, new Date('2026-06-21T12:00:00Z'));
-
-    // preCodeBlock 规则触发，且非 language-* 的 className 不会污染语言名
-    expect(result.markdown).toContain('```\nconst a = 1;');
-    expect(result.markdown).not.toContain('```highlighted');
-    expect(result.markdown).not.toContain('```foo');
-  });
-
   it('removes href attribute from unsafe links instead of dropping text', () => {
     const document = createDocument(`
       <!doctype html>

@@ -17,7 +17,7 @@
   <a href="https://github.com/devcxl/browser-agent/releases"><img src="https://img.shields.io/github/v/release/devcxl/browser-agent" alt="Release"></a>
   <a href="https://github.com/devcxl/browser-agent/actions"><img src="https://img.shields.io/github/actions/workflow/status/devcxl/browser-agent/build.yml" alt="Build"></a>
   <a href="https://chromewebstore.google.com/detail/browser-agent/ocdmppclkippfbdhephcacmpmomkmdip"><img src="https://img.shields.io/badge/Chrome-MV3-blue" alt="Chrome"></a>
-  <a href="https://addons.mozilla.org/zh-CN/firefox/addon/browser-agent/"><img src="https://img.shields.io/badge/Firefox-MV2-orange" alt="Firefox"></a>
+  <a href="https://addons.mozilla.org/zh-CN/firefox/addon/browser-agent/"><img src="https://img.shields.io/badge/Firefox-orange" alt="Firefox"></a>
 </p>
 
 ## 特性
@@ -104,8 +104,13 @@ src/
 
 | 浏览器 | Manifest | 输出目录 |
 |--------|----------|----------|
-| Chrome | MV3 | `.output/chrome-mv3/` |
-| Firefox | MV2 | `.output/firefox-mv2/` |
+| Chrome | MV3 | `dist/chrome-mv3/` |
+| Firefox | MV3 | `dist/firefox-mv3/` |
+
+要在 Firefox 本地测试最新构建，先运行 `npm run build:firefox`，再打开
+`about:debugging#/runtime/this-firefox`，点击「临时载入附加组件」，选择
+`dist/firefox-mv3/manifest.json`。重新加载已安装的旧扩展不会替换成这份构建；
+重启 Firefox 后需要重新载入临时扩展。
 
 ```bash
 # 打包为 zip

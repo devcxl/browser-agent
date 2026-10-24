@@ -398,6 +398,11 @@ function ToolBubble({ call }: { call: ToolCallDisplay }) {
           <span className="font-mono text-xs font-medium text-ink flex-1 truncate">
             {call.name}
           </span>
+          {call.status === 'unknown' && (
+            <span className="text-[10px] font-medium text-mute shrink-0">
+              状态未知
+            </span>
+          )}
           <RiskBadge level={call.riskLevel} />
           <svg
             className={cn('w-3.5 h-3.5 text-mute transition-transform duration-150', expanded && 'rotate-180')}
@@ -414,7 +419,14 @@ function ToolBubble({ call }: { call: ToolCallDisplay }) {
                 {truncate(JSON.stringify(call.params, null, 2), 400)}
               </code>
             </div>
-            {call.result && (
+            {call.status === 'unknown' ? (
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">结果</div>
+                <p className="text-xs text-mute font-sans leading-relaxed">
+                  执行结果未保存，状态未知。该操作可能已在浏览器中生效，请先核实当前页面或标签页状态，切勿盲目重试。
+                </p>
+              </div>
+            ) : call.result ? (
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-mute mb-0.5">结果</div>
                 <code className="text-body break-all whitespace-pre-wrap">
@@ -423,7 +435,7 @@ function ToolBubble({ call }: { call: ToolCallDisplay }) {
                     : call.result.error}
                 </code>
               </div>
-            )}
+            ) : null}
           </div>
         )}
       </div>
@@ -432,7 +444,7 @@ function ToolBubble({ call }: { call: ToolCallDisplay }) {
 }
 
 /** 工具调用状态点 */
-export function StatusDot({ status }: { status: 'running' | 'success' | 'error' }) {
+export function StatusDot({ status }: { status: ToolCallDisplay['status'] }) {
   switch (status) {
     case 'running':
       return <span className="w-1.5 h-1.5 rounded-full bg-warning animate-dot-pulse shrink-0" />;
@@ -440,6 +452,8 @@ export function StatusDot({ status }: { status: 'running' | 'success' | 'error' 
       return <span className="w-1.5 h-1.5 rounded-full bg-success shrink-0" />;
     case 'error':
       return <span className="w-1.5 h-1.5 rounded-full bg-danger shrink-0" />;
+    case 'unknown':
+      return <span className="w-1.5 h-1.5 rounded-full bg-mute shrink-0" />;
   }
 }
 

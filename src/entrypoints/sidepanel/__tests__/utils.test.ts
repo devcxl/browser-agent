@@ -81,7 +81,7 @@ describe('storedMessagesToUIMessages', () => {
     expect(result[0]!.role).toBe('assistant');
     expect(result[0]!.content).toBe('let me check');
 
-    expect(result[1]!.id).toBe('tc-1');
+    expect(result[1]!.id).toBe('msg-2_tool_0');
     expect(result[1]!.role).toBe('tool');
     expect(result[1]!.toolCallDisplay).toBeDefined();
     expect(result[1]!.toolCallDisplay!.name).toBe('tabs_query');
@@ -189,5 +189,274 @@ describe('storedMessagesToUIMessages', () => {
     expect(result[3]!.toolCallDisplay!.name).toBe('close_tab');
     expect(result[4]!.role).toBe('assistant');
     expect(result[4]!.content).toBe('已完成操作');
+  });
+
+  it('keeps both occurrences of a duplicated toolCallId as separate bubbles', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1000,
+        toolCalls: [{ id: 'dup', name: 'tabs_query', params: { round: 1 } }],
+      },
+      {
+        id: 'r1',
+        role: 'tool',
+        content: '{"success":true,"data":"first"}',
+        toolCallId: 'dup',
+        parentMessageId: 'a1',
+        timestamp: 1001,
+      },
+      {
+        id: 'a2',
+        role: 'assistant',
+        content: '',
+        timestamp: 2000,
+        toolCalls: [{ id: 'dup', name: 'tabs_query', params: { round: 2 } }],
+      },
+      {
+        id: 'r2',
+        role: 'tool',
+        content: '{"success":true,"data":"second"}',
+        toolCallId: 'dup',
+        parentMessageId: 'a2',
+        timestamp: 2001,
+      },
+    ];
+
+    const result = storedMessagesToUIMessages(stored);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe('a1_tool_0');
+    expect(result[1]!.id).toBe('a2_tool_0');
+    expect(result[0]!.id).not.toBe(result[1]!.id);
+
+    expect(result[0]!.toolCallDisplay!.params).toEqual({ round: 1 });
+    expect(result[0]!.toolCallDisplay!.result).toEqual({ success: true, data: 'first' });
+    expect(result[0]!.toolCallDisplay!.status).toBe('success');
+
+    expect(result[1]!.toolCallDisplay!.params).toEqual({ round: 2 });
+    expect(result[1]!.toolCallDisplay!.result).toEqual({ success: true, data: 'second' });
+    expect(result[1]!.toolCallDisplay!.status).toBe('success');
+  });
+
+  it('produces the same UI ids on repeated conversion (stable)', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1000,
+        toolCalls: [{ id: 'dup', name: 'tabs_query', params: {} }],
+      },
+      {
+        id: 'r1',
+        role: 'tool',
+        content: '{"success":true}',
+        toolCallId: 'dup',
+        parentMessageId: 'a1',
+        timestamp: 1001,
+      },
+    ];
+
+    const first = storedMessagesToUIMessages(stored).map((m) => m.id);
+    const second = storedMessagesToUIMessages(stored).map((m) => m.id);
+    expect(first).toEqual(second);
+  });
+
+  it('pairs parallel distinct toolCallIds by order', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1000,
+        toolCalls: [
+          { id: 'tc-a', name: 'tabs_query', params: { q: 'a' } },
+          { id: 'tc-b', name: 'tabs_query', params: { q: 'b' } },
+        ],
+      },
+      {
+        id: 'ra',
+        role: 'tool',
+        content: '{"success":true,"data":"A"}',
+        toolCallId: 'tc-a',
+        parentMessageId: 'a1',
+        timestamp: 1001,
+      },
+      {
+        id: 'rb',
+        role: 'tool',
+        content: '{"success":true,"data":"B"}',
+        toolCallId: 'tc-b',
+        parentMessageId: 'a1',
+        timestamp: 1002,
+      },
+    ];
+
+    const result = storedMessagesToUIMessages(stored);
+
+    expect(result.map((m) => m.id)).toEqual(['a1_tool_0', 'a1_tool_1']);
+    expect(result[0]!.toolCallDisplay!.params).toEqual({ q: 'a' });
+    expect(result[0]!.toolCallDisplay!.result).toEqual({ success: true, data: 'A' });
+    expect(result[1]!.toolCallDisplay!.params).toEqual({ q: 'b' });
+    expect(result[1]!.toolCallDisplay!.result).toEqual({ success: true, data: 'B' });
+  });
+
+  it('ignores orphan tool results that have no matching call', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1000,
+        toolCalls: [{ id: 'tc-1', name: 'tabs_query', params: {} }],
+      },
+      {
+        id: 'r1',
+        role: 'tool',
+        content: '{"success":true}',
+        toolCallId: 'tc-1',
+        parentMessageId: 'a1',
+        timestamp: 1001,
+      },
+      {
+        id: 'ghost',
+        role: 'tool',
+        content: '{"success":true,"data":"orphan"}',
+        toolCallId: 'no-such-call',
+        timestamp: 1002,
+      },
+    ];
+
+    const result = storedMessagesToUIMessages(stored);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]!.id).toBe('a1_tool_0');
+    expect(result[0]!.toolCallDisplay!.result).toEqual({ success: true });
+  });
+
+  it('leaves result undefined and sets status to unknown when the tool result is genuinely missing', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1000,
+        toolCalls: [{ id: 'tc-1', name: 'tabs_query', params: {} }],
+      },
+    ];
+
+    const result = storedMessagesToUIMessages(stored);
+
+    expect(result).toHaveLength(1);
+    // 不臆测成功/失败：真实结果缺失时 result 保持 undefined，status 显式设为 unknown
+    expect(result[0]!.toolCallDisplay!.result).toBeUndefined();
+    expect(result[0]!.toolCallDisplay!.status).toBe('unknown');
+  });
+
+  it('distinguishes real success, real failure, malformed json, and synthetic unknown', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1000,
+        toolCalls: [
+          { id: 'c-ok', name: 'call_ok', params: {} },
+          { id: 'c-fail', name: 'call_fail', params: {} },
+          { id: 'c-malformed', name: 'call_malformed', params: {} },
+          { id: 'c-missing', name: 'call_missing', params: {} },
+        ],
+      },
+      {
+        id: 'r-ok',
+        role: 'tool',
+        content: '{"success":true,"data":"done"}',
+        toolCallId: 'c-ok',
+        parentMessageId: 'a1',
+        timestamp: 1001,
+      },
+      {
+        id: 'r-fail',
+        role: 'tool',
+        content: '{"success":false,"error":"element not found"}',
+        toolCallId: 'c-fail',
+        parentMessageId: 'a1',
+        timestamp: 1002,
+      },
+      {
+        id: 'r-malformed',
+        role: 'tool',
+        content: 'Internal Error: unexpected crash',
+        toolCallId: 'c-malformed',
+        parentMessageId: 'a1',
+        timestamp: 1003,
+      },
+    ];
+
+    const result = storedMessagesToUIMessages(stored);
+
+    expect(result).toHaveLength(4);
+
+    // 0: real success
+    expect(result[0]!.id).toBe('a1_tool_0');
+    expect(result[0]!.toolCallDisplay!.status).toBe('success');
+    expect(result[0]!.toolCallDisplay!.result).toEqual({ success: true, data: 'done' });
+
+    // 1: real error
+    expect(result[1]!.id).toBe('a1_tool_1');
+    expect(result[1]!.toolCallDisplay!.status).toBe('error');
+    expect(result[1]!.toolCallDisplay!.result).toEqual({ success: false, error: 'element not found' });
+
+    // 2: malformed json -> real error fallback
+    expect(result[2]!.id).toBe('a1_tool_2');
+    expect(result[2]!.toolCallDisplay!.status).toBe('error');
+    expect(result[2]!.toolCallDisplay!.result).toEqual({ success: false, error: 'Internal Error: unexpected crash' });
+
+    // 3: missing result -> unknown, result stays undefined
+    expect(result[3]!.id).toBe('a1_tool_3');
+    expect(result[3]!.toolCallDisplay!.status).toBe('unknown');
+    expect(result[3]!.toolCallDisplay!.result).toBeUndefined();
+  });
+
+  it('handles repeated toolCallId with mixed outcomes (success vs unknown)', () => {
+    const stored: StoredMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        timestamp: 1000,
+        toolCalls: [{ id: 'dup-id', name: 'tabs_query', params: { round: 1 } }],
+      },
+      {
+        id: 'r1',
+        role: 'tool',
+        content: '{"success":true,"data":"ok"}',
+        toolCallId: 'dup-id',
+        parentMessageId: 'a1',
+        timestamp: 1001,
+      },
+      {
+        id: 'a2',
+        role: 'assistant',
+        content: '',
+        timestamp: 2000,
+        toolCalls: [{ id: 'dup-id', name: 'tabs_query', params: { round: 2 } }],
+      },
+      // a2 has no tool result row, simulate missing result
+    ];
+
+    const result = storedMessagesToUIMessages(stored);
+
+    expect(result).toHaveLength(2);
+    expect(result[0]!.id).toBe('a1_tool_0');
+    expect(result[0]!.toolCallDisplay!.status).toBe('success');
+    expect(result[0]!.toolCallDisplay!.result).toEqual({ success: true, data: 'ok' });
+
+    expect(result[1]!.id).toBe('a2_tool_0');
+    expect(result[1]!.toolCallDisplay!.status).toBe('unknown');
+    expect(result[1]!.toolCallDisplay!.result).toBeUndefined();
   });
 });

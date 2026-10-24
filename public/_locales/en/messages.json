@@ -224,6 +224,9 @@
   "settings_tabs_expert": {
     "message": "Expert Mode"
   },
+  "settings_tabs_jev": {
+    "message": "Jev"
+  },
   "settings_tabs_skills": {
     "message": "Skills"
   },
@@ -244,6 +247,27 @@
   },
   "settings_provider_testing": {
     "message": "Testing..."
+  },
+  "settings_provider_testSuccess": {
+    "message": "Connection verified"
+  },
+  "settings_provider_testFailed": {
+    "message": "Connection failed"
+  },
+  "settings_provider_testReasonMissingModel": {
+    "message": "No available model configured"
+  },
+  "settings_provider_testReasonAuth": {
+    "message": "Authentication failed. Check API key"
+  },
+  "settings_provider_testReasonTimeout": {
+    "message": "Connection timed out"
+  },
+  "settings_provider_testReasonEmptyResponse": {
+    "message": "Empty response from model"
+  },
+  "settings_provider_testReasonRequestFailed": {
+    "message": "Request failed (check Base URL or version path like /v1)"
   },
   "settings_provider_trusted": {
     "message": "Trusted"
@@ -452,32 +476,14 @@
   "settings_agent_maxToolRounds": {
     "message": "Max Steps per Task"
   },
-  "settings_agent_contextWindowTokens": {
-    "message": "Context Window Tokens"
+  "settings_agent_circuitBreakerTitle": {
+    "message": "Intelligent Task Protection"
   },
-  "settings_agent_tokenBudgetMargin": {
-    "message": "Token Budget Margin"
+  "settings_agent_circuitBreakerDesc": {
+    "message": "Infinite loop and failure circuit breakers are enabled. Tasks run without rigid step caps."
   },
-  "settings_agent_microcompactKeepRecent": {
-    "message": "Microcompact: Keep Recent Count"
-  },
-  "settings_agent_microcompactMinChars": {
-    "message": "Microcompact: Min Char Threshold"
-  },
-  "settings_agent_microcompactExcludeTools": {
-    "message": "Microcompact: Excluded Tools"
-  },
-  "settings_agent_microcompactExcludeToolsPlaceholder": {
-    "message": "Tool names, comma-separated, e.g. page_getScreenshot"
-  },
-  "settings_agent_reasoningEffort": {
-    "message": "Reasoning Effort"
-  },
-  "settings_agent_reasoningEffortHint": {
-    "message": "Controls LLM reasoning depth. Higher values are slower but more thorough. Only supported by reasoning models like DeepSeek, OpenAI o1/o3, etc."
-  },
-  "settings_agent_systemPrompt": {
-    "message": "System Prompt"
+  "settings_agent_circuitBreakerHint": {
+    "message": "Repeated identical steps or consecutive tool failures interrupt the task with a reason. Legitimate long tasks keep running until they finish."
   },
   "settings_agent_reasoningOptions_low": {
     "message": "Low"
@@ -493,6 +499,39 @@
   },
   "settings_expert_title": {
     "message": "Expert Mode"
+  },
+  "settings_jev_title": {
+    "message": "Jev structured decisions"
+  },
+  "settings_jev_description": {
+    "message": "Jev only decides which tool categories a chat request needs; it does not generate replies or perform browser actions."
+  },
+  "settings_jev_apiKey": {
+    "message": "TypeSafe API key"
+  },
+  "settings_jev_apiKeyPlaceholder": {
+    "message": "Enter your own TypeSafe API key"
+  },
+  "settings_jev_saveApiKey": {
+    "message": "Save Jev API key"
+  },
+  "settings_jev_clearApiKey": {
+    "message": "Clear Jev API key"
+  },
+  "settings_jev_enabled": {
+    "message": "Enable Jev"
+  },
+  "settings_jev_dataDisclosure": {
+    "message": "When enabled, only chat messages not matched by local keywords are sent to TypeSafe for tool-category routing."
+  },
+  "settings_jev_storageDisclosure": {
+    "message": "The API key is stored in local extension storage, which cannot protect it from access by someone on this device."
+  },
+  "settings_jev_saved": {
+    "message": "Jev API key saved."
+  },
+  "settings_jev_saveFailed": {
+    "message": "Could not save Jev settings. Please try again."
   },
   "settings_expert_subSwitchHint": {
     "message": "Enable specific API domains after turning on Expert Mode"

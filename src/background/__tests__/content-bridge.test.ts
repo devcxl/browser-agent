@@ -163,6 +163,39 @@ describe('ContentBridge (Port mode)', () => {
     await expect(p2).rejects.toThrow('Port disconnected');
   });
 
+  it('should only reject pending requests for the disconnected tab without affecting other tabs', async () => {
+    const port1 = createMockPort();
+    const port2 = createMockPort();
+    (browser.tabs.connect as any)
+      .mockReturnValueOnce(port1)
+      .mockReturnValueOnce(port2);
+
+    const bridge = new ContentBridge();
+
+    const p1 = bridge.sendToContent(1, 'page.getContent');
+    const p2 = bridge.sendToContent(2, 'page.getContent');
+
+    let p2Settled = false;
+    void p2.then(
+      () => {
+        p2Settled = true;
+      },
+      () => {
+        p2Settled = true;
+      },
+    );
+
+    // 标签页 1 的端口断开不应连坐标签页 2
+    port1._disconnectListeners[0]();
+
+    await expect(p1).rejects.toThrow('Port disconnected');
+    expect(p2Settled).toBe(false);
+
+    // 标签页 2 的请求仍然可以正常完成
+    port2._messageListeners[0]({ jsonrpc: '2.0', id: 2, result: { title: 'Tab 2 OK' } });
+    await expect(p2).resolves.toEqual({ title: 'Tab 2 OK' });
+  });
+
   it('should recreate the port for a tab after it disconnects', async () => {
     const port2 = createMockPort();
     (browser.tabs.connect as any)

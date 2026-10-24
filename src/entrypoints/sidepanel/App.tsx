@@ -10,7 +10,8 @@ import { useI18n } from './i18n/useI18n';
 import { useEmbeddedStatusBridge } from './hooks/useEmbeddedStatusBridge';
 import { ConfigStore } from '@/shared/storage';
 import { ProviderCatalog } from '@/provider/provider-catalog';
-import { createLanguageModel } from '@/provider/language-model';
+import { pickConnectionTestModelId, testProviderConnection } from '@/provider/connection-test';
+import type { ConnectionTestResult } from '@/provider/connection-test';
 import { applyTheme } from './theme';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
@@ -64,12 +65,6 @@ function ChatLayout() {
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     maxToolRounds: 99,
     contextWindowTokens: 128000,
-    tokenBudgetMargin: 4096,
-    microcompactKeepRecent: 10,
-    microcompactMinChars: 500,
-    microcompactExcludeTools: [],
-    systemPrompt: '',
-    reasoningEffort: 'medium',
   });
   const [expertMode, setExpertMode] = useState<ExpertModeSettings>({
     enabled: false,
@@ -121,12 +116,6 @@ function ChatLayout() {
       setAgentSettings({
         maxToolRounds: saved.maxToolRounds,
         contextWindowTokens: saved.contextWindowTokens ?? 128000,
-        tokenBudgetMargin: saved.tokenBudgetMargin ?? 4096,
-        microcompactKeepRecent: saved.microcompactKeepRecent ?? 10,
-        microcompactMinChars: saved.microcompactMinChars ?? 500,
-        microcompactExcludeTools: saved.microcompactExcludeTools ?? [],
-        systemPrompt: saved.systemPrompt,
-        reasoningEffort: saved.reasoningEffort ?? 'medium',
       });
       setExpertMode(await store.get('expertModeSettings'));
       const prefs = await store.get('preferences');
@@ -166,17 +155,7 @@ function ChatLayout() {
     setAgentSettings(s);
     await store.set('agentSettings', {
       maxToolRounds: s.maxToolRounds,
-      systemPrompt: s.systemPrompt,
       contextWindowTokens: s.contextWindowTokens,
-      tokenBudgetMargin: s.tokenBudgetMargin,
-      microcompactKeepRecent: s.microcompactKeepRecent,
-      microcompactMinChars: s.microcompactMinChars,
-      microcompactExcludeTools: s.microcompactExcludeTools,
-      reasoningEffort: s.reasoningEffort,
-      summaryThreshold: {
-        messageCount: 30,
-        estimatedTokens: 12000,
-      },
     });
   }, []);
   const handleSaveExpertMode = useCallback(async (e: ExpertModeSettings) => {
@@ -247,18 +226,11 @@ function ChatLayout() {
   );
 
   const handleTestConnection = useCallback(
-    async (provider: ProviderConfig): Promise<boolean> => {
-      try {
-        const models = await ProviderCatalog.getInstance().getModels(provider);
-        if (models.length === 0) return false;
-        // 能构造出模型即视为配置可用（真实连通性验证不在本次范围）
-        await createLanguageModel(provider, models[0]!.id);
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    [],
+    (provider: ProviderConfig): Promise<ConnectionTestResult> => testProviderConnection(
+      provider,
+      pickConnectionTestModelId(provider, activeProvider?.id, selectedModelId),
+    ),
+    [activeProvider?.id, selectedModelId],
   );
 
   const handleCloseOnboarding = useCallback(() => {

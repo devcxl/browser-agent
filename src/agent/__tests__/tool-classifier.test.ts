@@ -1,10 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateText } from 'ai';
 import { ToolClassifier } from '../tool-classifier';
+import { JEV_MODEL, type JevDecision } from '../jev-api-client';
+import { TOOL_CATEGORY_DESCRIPTIONS } from '@/shared/tool-categories';
+import type { ToolCategory } from '@/shared/types/tool';
 
 vi.mock('ai', () => ({
   generateText: vi.fn(),
 }));
+
+function createJevDecision(overrides: Partial<Record<ToolCategory, number>>): JevDecision {
+  return {
+    model: JEV_MODEL,
+    probabilities: Object.fromEntries(
+      Object.keys(TOOL_CATEGORY_DESCRIPTIONS).map((category) => [
+        category,
+        overrides[category as ToolCategory] ?? 0.01,
+      ]),
+    ) as Record<ToolCategory, number>,
+  };
+}
 
 describe('ToolClassifier', () => {
   beforeEach(() => {
@@ -26,6 +41,28 @@ describe('ToolClassifier', () => {
       maxOutputTokens: 512,
       reasoning: 'none',
     }));
+  });
+
+  it('分类诊断日志不记录用户消息或模型响应正文', async () => {
+    const userMessage = 'private-user-message-7e98';
+    const modelResponse = 'private-model-response-a241 ["history"]';
+    vi.mocked(generateText).mockResolvedValue({
+      text: modelResponse,
+      reasoningText: undefined,
+      finishReason: 'stop',
+      usage: {},
+    } as Awaited<ReturnType<typeof generateText>>);
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+
+    try {
+      await new ToolClassifier().classify(userMessage, {} as never);
+
+      const diagnosticLog = debugSpy.mock.calls.flat().join(' ');
+      expect(diagnosticLog).not.toContain(userMessage);
+      expect(diagnosticLog).not.toContain('private-model-response-a241');
+    } finally {
+      debugSpy.mockRestore();
+    }
   });
 
   it('正常文本为空时从 reasoningText 提取工具类别', async () => {
@@ -160,6 +197,84 @@ describe('ToolClassifier', () => {
     } as Awaited<ReturnType<typeof generateText>>);
 
     await expect(new ToolClassifier().classify('帮我做点事情', {} as never)).resolves.toEqual(['windows', 'page']);
+  });
+
+  it('Jev 启用时在关键词未命中后按唯一高置信类别分类', async () => {
+    const jevClient = {
+      classify: vi.fn().mockResolvedValue(createJevDecision({ history: 0.96 })),
+    };
+    const controller = new AbortController();
+    const classifier = new ToolClassifier(jevClient);
+
+    const result = await classifier.classify('Review my recent activity.', {} as never, {
+      jevSettings: { enabled: true, apiKey: 'ts-secret' },
+      abortSignal: controller.signal,
+    });
+
+    expect(result).toEqual(['history']);
+    expect(jevClient.classify).toHaveBeenCalledWith(
+      'Review my recent activity.',
+      'ts-secret',
+      controller.signal,
+    );
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('本地关键词命中优先于 Jev', async () => {
+    const jevClient = { classify: vi.fn() };
+    const classifier = new ToolClassifier(jevClient);
+
+    await expect(classifier.classify('查询标签页', {} as never, {
+      jevSettings: { enabled: true, apiKey: 'ts-secret' },
+    })).resolves.toEqual(['tabs']);
+
+    expect(jevClient.classify).not.toHaveBeenCalled();
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('将 0.80 视为肯定、0.20 视为否定', async () => {
+    const jevClient = {
+      classify: vi.fn().mockResolvedValue(createJevDecision({ history: 0.8, bookmarks: 0.2 })),
+    };
+
+    await expect(new ToolClassifier(jevClient).classify('Review my recent activity.', {} as never, {
+      jevSettings: { enabled: true, apiKey: 'ts-secret' },
+    })).resolves.toEqual(['history']);
+  });
+
+  it('Jev 结果不确定时返回空分类且不回退到生成式分类', async () => {
+    const jevClient = {
+      classify: vi.fn().mockResolvedValue(createJevDecision({ history: 0.96, bookmarks: 0.5 })),
+    };
+    const classifier = new ToolClassifier(jevClient);
+
+    await expect(classifier.classify('Review my recent activity.', {} as never, {
+      jevSettings: { enabled: true, apiKey: 'ts-secret' },
+    })).resolves.toEqual([]);
+
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('多个肯定类别同时启用对应工具', async () => {
+    const jevClient = {
+      classify: vi.fn().mockResolvedValue(createJevDecision({ history: 0.96, bookmarks: 0.91 })),
+    };
+    const classifier = new ToolClassifier(jevClient);
+
+    await expect(classifier.classify('Review my recent activity.', {} as never, {
+      jevSettings: { enabled: true, apiKey: 'ts-secret' },
+    })).resolves.toEqual(['bookmarks', 'history']);
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('Jev 请求失败时不转发给生成式分类器', async () => {
+    const jevClient = { classify: vi.fn().mockRejectedValue(new Error('network failure')) };
+    const classifier = new ToolClassifier(jevClient);
+
+    await expect(classifier.classify('Review my recent activity.', {} as never, {
+      jevSettings: { enabled: true, apiKey: 'ts-secret' },
+    })).resolves.toEqual([]);
+    expect(generateText).not.toHaveBeenCalled();
   });
 
   it('reset() 清除缓存后重新走 LLM', async () => {

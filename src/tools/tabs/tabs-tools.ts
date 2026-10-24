@@ -4,7 +4,8 @@ import type { IJsonRpcClient } from "../../shared/types";
 export function createTabsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
     name: "tabs_query",
-    description: "查询当前浏览器中所有匹配条件的标签页。",
+    description:
+      "查询标签页。提供 tabId 时返回该标签页的详细信息；提供 queryInfo 或都不提供时返回匹配条件的标签页列表。",
     category: "tabs",
     riskLevel: "low",
     confirmationRequired: false,
@@ -12,8 +13,13 @@ export function createTabsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
     schema: {
       type: "object",
       properties: {
+        tabId: {
+          type: "number",
+          description: "要查询的单个标签页 ID，提供时直接获取该标签页详细信息",
+        },
         queryInfo: {
           type: "object",
+          description: "标签页过滤条件，不提供 tabId 时生效",
           properties: {
             active: { type: "boolean" },
             pinned: { type: "boolean" },
@@ -33,41 +39,27 @@ export function createTabsQueryTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      const tabs = await rpc.request("tabs.query", {
-        queryInfo: params.queryInfo ?? {},
-      });
-      return { success: true, data: tabs };
+      try {
+        if (typeof params.tabId === "number") {
+          const tab = await rpc.request("tabs.get", { tabId: params.tabId });
+          return { success: true, data: tab };
+        }
+        const tabs = await rpc.request("tabs.query", {
+          queryInfo: params.queryInfo ?? { currentWindow: true },
+        });
+        return { success: true, data: tabs };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+      }
     },
   };
 }
 
-export function createTabsGetTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createTabsManageTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: "tabs_get",
-    description: "获取单个标签页的详细信息。",
-    category: "tabs",
-    riskLevel: "low",
-    confirmationRequired: false,
-    resultSensitivity: "low",
-    schema: {
-      type: "object",
-      properties: {
-        tabId: { type: "number", description: "要查询的标签页 ID" },
-      },
-      required: ["tabId"],
-    },
-    requireBackground: true,
-    execute: async (params) => {
-      const tab = await rpc.request("tabs.get", params);
-      return { success: true, data: tab };
-    },
-  };
-}
-
-export function createTabsCreateTool(rpc: IJsonRpcClient): ToolDefinition {
-  return {
-    name: "tabs_create",
-    description: "创建新标签页并返回其详情。",
+    name: "tabs_manage",
+    description:
+      "管理标签页（新建、更新属性/激活、移动顺序、添加分组、移出分组）。通过 action 参数指定操作类型。",
     category: "tabs",
     riskLevel: "medium",
     confirmationRequired: false,
@@ -75,59 +67,109 @@ export function createTabsCreateTool(rpc: IJsonRpcClient): ToolDefinition {
     schema: {
       type: "object",
       properties: {
-        createProperties: {
-          type: "object",
-          properties: {
-            url: { type: "string", description: "新标签页的 URL" },
-            active: { type: "boolean", description: "是否立即激活" },
-            pinned: { type: "boolean", description: "是否固定" },
-            windowId: { type: "number", description: "所属窗口 ID" },
-            index: { type: "number", description: "插入位置" },
-            openerTabId: { type: "number", description: "开启者标签页 ID" },
-          },
+        action: {
+          type: "string",
+          enum: ["create", "update", "move", "group", "ungroup"],
+          description: "操作类型",
         },
+        url: { type: "string", description: "新标签页 URL 或导航地址" },
+        active: { type: "boolean", description: "是否立即激活标签页" },
+        pinned: { type: "boolean", description: "是否固定标签页" },
+        tabId: { type: "number", description: "目标标签页 ID（适用于 update、move）" },
+        tabIds: {
+          type: "array",
+          items: { type: "number" },
+          description: "批量标签页 ID（适用于 group、ungroup、move）",
+        },
+        index: { type: "number", description: "目标位置索引（适用于 move、create）" },
+        windowId: { type: "number", description: "所属窗口 ID（适用于 create、move）" },
+        groupId: { type: "number", description: "目标标签组 ID（适用于 group）" },
       },
-      required: ["createProperties"],
+      required: ["action"],
     },
     requireBackground: true,
     execute: async (params) => {
-      const tab = await rpc.request("tabs.create", params);
-      return { success: true, data: tab };
+      try {
+        const action = params.action;
+
+        if (action === "create") {
+          const tab = await rpc.request("tabs.create", {
+            createProperties: {
+              url: params.url,
+              active: params.active,
+              pinned: params.pinned,
+              windowId: params.windowId,
+              index: params.index,
+            },
+          });
+          return { success: true, data: tab };
+        }
+
+        if (action === "update") {
+          if (typeof params.tabId !== "number") {
+            return { success: false, error: 'tabs_manage action "update" 需要提供 tabId' };
+          }
+          const tab = await rpc.request("tabs.update", {
+            tabId: params.tabId,
+            updateProperties: {
+              url: params.url,
+              active: params.active,
+              pinned: params.pinned,
+            },
+          });
+          return { success: true, data: tab };
+        }
+
+        if (action === "move") {
+          const tabIds = resolveTabIds(params);
+          if (tabIds.length === 0) {
+            return { success: false, error: 'tabs_manage action "move" 需要提供 tabIds 或 tabId' };
+          }
+          if (typeof params.index !== "number") {
+            return { success: false, error: 'tabs_manage action "move" 需要提供 index' };
+          }
+          const res = await rpc.request("tabs.move", {
+            tabIds,
+            moveProperties: { index: params.index, windowId: params.windowId },
+          });
+          return { success: true, data: res };
+        }
+
+        if (action === "group") {
+          const tabIds = resolveTabIds(params);
+          if (tabIds.length === 0) {
+            return { success: false, error: 'tabs_manage action "group" 需要提供 tabIds 或 tabId' };
+          }
+          const res = await rpc.request("tabs.group", { tabIds, groupId: params.groupId });
+          return { success: true, data: res };
+        }
+
+        if (action === "ungroup") {
+          const tabIds = resolveTabIds(params);
+          if (tabIds.length === 0) {
+            return { success: false, error: 'tabs_manage action "ungroup" 需要提供 tabIds 或 tabId' };
+          }
+          const res = await rpc.request("tabs.ungroup", { tabIds });
+          return { success: true, data: res };
+        }
+
+        return { success: false, error: "未知的操作类型: " + String(action) };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+      }
     },
   };
 }
 
-export function createTabsUpdateTool(rpc: IJsonRpcClient): ToolDefinition {
-  return {
-    name: "tabs_update",
-    description: "更新标签页的属性（URL、激活状态、固定状态等）。",
-    category: "tabs",
-    riskLevel: "medium",
-    confirmationRequired: false,
-    resultSensitivity: "low",
-    schema: {
-      type: "object",
-      properties: {
-        tabId: { type: "number", description: "要更新的标签页 ID" },
-        updateProperties: {
-          type: "object",
-          properties: {
-            url: { type: "string" },
-            active: { type: "boolean" },
-            pinned: { type: "boolean" },
-            muted: { type: "boolean" },
-            highlighted: { type: "boolean" },
-          },
-        },
-      },
-      required: ["tabId", "updateProperties"],
-    },
-    requireBackground: true,
-    execute: async (params) => {
-      const tab = await rpc.request("tabs.update", params);
-      return { success: true, data: tab };
-    },
-  };
+/** 接受 tabIds 数组，或在只给出 tabId 时将其包装为单元素数组。 */
+function resolveTabIds(params: Record<string, unknown>): number[] {
+  if (Array.isArray(params.tabIds)) {
+    return params.tabIds as number[];
+  }
+  if (typeof params.tabId === "number") {
+    return [params.tabId];
+  }
+  return [];
 }
 
 export function createTabsRemoveTool(rpc: IJsonRpcClient): ToolDefinition {
@@ -182,104 +224,6 @@ export function createTabsRemoveTool(rpc: IJsonRpcClient): ToolDefinition {
     preflight,
     execute: async (params) => {
       await rpc.request("tabs.remove", params);
-      return { success: true };
-    },
-  };
-}
-
-export function createTabsMoveTool(rpc: IJsonRpcClient): ToolDefinition {
-  return {
-    name: "tabs_move",
-    description: "移动一个或多个标签页到指定窗口和位置。",
-    category: "tabs",
-    riskLevel: "medium",
-    confirmationRequired: false,
-    resultSensitivity: "low",
-    schema: {
-      type: "object",
-      properties: {
-        tabIds: {
-          type: "array",
-          items: { type: "number" },
-          description: "要移动的标签页 ID 列表",
-        },
-        moveProperties: {
-          type: "object",
-          properties: {
-            windowId: { type: "number", description: "目标窗口 ID" },
-            index: { type: "number", description: "目标位置索引" },
-          },
-        },
-      },
-      required: ["tabIds", "moveProperties"],
-    },
-    requireBackground: true,
-    execute: async (params) => {
-      const tabs = await rpc.request("tabs.move", params);
-      return { success: true, data: tabs };
-    },
-  };
-}
-
-export function createTabsGroupTool(rpc: IJsonRpcClient): ToolDefinition {
-  return {
-    name: "tabs_group",
-    description: "将一个或多个标签页分组。可指定已有分组 ID 或创建新分组。",
-    category: "tabs",
-    riskLevel: "medium",
-    confirmationRequired: false,
-    resultSensitivity: "low",
-    schema: {
-      type: "object",
-      properties: {
-        tabIds: {
-          type: "array",
-          items: { type: "number" },
-          description: "要分组的标签页 ID 列表",
-        },
-        groupId: {
-          type: "number",
-          description: "已有分组 ID（可选，不传则创建新分组）",
-        },
-        createProperties: {
-          type: "object",
-          properties: {
-            windowId: { type: "number", description: "创建新分组的窗口 ID" },
-          },
-        },
-      },
-      required: ["tabIds"],
-    },
-    requireBackground: true,
-    execute: async (params) => {
-      const result = await rpc.request("tabs.group", params);
-      return { success: true, data: result };
-    },
-  };
-}
-
-export function createTabsUngroupTool(rpc: IJsonRpcClient): ToolDefinition {
-  return {
-    name: "tabs_ungroup",
-    description: "将一个或多个标签页从分组中移除。",
-    category: "tabs",
-    riskLevel: "medium",
-    confirmationRequired: false,
-    resultSensitivity: "low",
-    schema: {
-      type: "object",
-      properties: {
-        tabIds: {
-          type: "array",
-          items: { type: "number" },
-          description: "要取消分组的标签页 ID 列表",
-        },
-      },
-      required: ["tabIds"],
-    },
-    requireBackground: true,
-    execute: async (params) => {
-      await rpc.request("tabs.ungroup", params);
       return { success: true };
     },
   };

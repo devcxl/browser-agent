@@ -1,16 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { IJsonRpcClient } from '@/shared/types';
 import { createTabsTools } from '../index';
-import {
-  createTabsQueryTool,
-  createTabsGetTool,
-  createTabsCreateTool,
-  createTabsUpdateTool,
-  createTabsRemoveTool,
-  createTabsMoveTool,
-  createTabsGroupTool,
-  createTabsUngroupTool,
-} from '../tabs-tools';
+import { createTabsQueryTool, createTabsManageTool, createTabsRemoveTool } from '../tabs-tools';
 
 function createMockRpc(): IJsonRpcClient {
   return {
@@ -27,31 +18,78 @@ function createMockRpc(): IJsonRpcClient {
 
 describe('Tabs tools', () => {
   describe('createTabsTools', () => {
-    it('should return 8 tools', () => {
+    it('should return 3 tools', () => {
       const rpc = createMockRpc();
       const tools = createTabsTools(rpc);
-      expect(tools).toHaveLength(8);
+      expect(tools).toHaveLength(3);
+    });
+
+    it('should expose tabs_query, tabs_manage and tabs_remove only', () => {
+      const rpc = createMockRpc();
+      const names = createTabsTools(rpc).map((tool) => tool.name);
+      expect(names).toEqual(['tabs_query', 'tabs_manage', 'tabs_remove']);
+    });
+
+    it('should no longer expose the fragmented tab mutation tools', () => {
+      const rpc = createMockRpc();
+      const names = createTabsTools(rpc).map((tool) => tool.name);
+      for (const retired of ['tabs_get', 'tabs_create', 'tabs_update', 'tabs_move', 'tabs_group', 'tabs_ungroup']) {
+        expect(names).not.toContain(retired);
+      }
     });
   });
 
   describe('tabs_query', () => {
-    it('should call rpc.request("tabs.query", params)', async () => {
+    it('should call rpc.request("tabs.get", { tabId }) when tabId is provided', async () => {
       const rpc = createMockRpc();
       const tool = createTabsQueryTool(rpc);
-      const params = { queryInfo: { active: true, currentWindow: true } };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.query', params);
+      await tool.execute({ tabId: 5 });
+      expect(rpc.request).toHaveBeenCalledWith('tabs.get', { tabId: 5 });
     });
 
-    it('should return success result with tabs data', async () => {
+    it('should return the full tab object when tabId is provided', async () => {
+      const rpc = createMockRpc();
+      const mockTab = { id: 5, title: 'Test', url: 'https://example.com', active: true, pinned: false };
+      vi.mocked(rpc.request).mockResolvedValue(mockTab);
+      const tool = createTabsQueryTool(rpc);
+      const result = await tool.execute({ tabId: 5 });
+      expect(result).toEqual({ success: true, data: mockTab });
+    });
+
+    it('should prefer tabId over queryInfo when both are provided', async () => {
+      const rpc = createMockRpc();
+      const tool = createTabsQueryTool(rpc);
+      await tool.execute({ tabId: 3, queryInfo: { active: true } });
+      expect(rpc.request).toHaveBeenCalledWith('tabs.get', { tabId: 3 });
+      expect(rpc.request).not.toHaveBeenCalledWith('tabs.query', expect.anything());
+    });
+
+    it('should call rpc.request("tabs.query", { queryInfo }) when queryInfo is provided', async () => {
+      const rpc = createMockRpc();
+      const tool = createTabsQueryTool(rpc);
+      await tool.execute({ queryInfo: { active: true, currentWindow: true } });
+      expect(rpc.request).toHaveBeenCalledWith('tabs.query', {
+        queryInfo: { active: true, currentWindow: true },
+      });
+    });
+
+    it('should return success result with tabs data, defaulting to currentWindow', async () => {
       const rpc = createMockRpc();
       const mockTabs = [{ id: 1, title: 'Test' }];
       vi.mocked(rpc.request).mockResolvedValue(mockTabs);
       const tool = createTabsQueryTool(rpc);
       const result = await tool.execute({});
-      expect(rpc.request).toHaveBeenCalledWith('tabs.query', { queryInfo: {} });
+      expect(rpc.request).toHaveBeenCalledWith('tabs.query', { queryInfo: { currentWindow: true } });
       expect(result.success).toBe(true);
       expect(result.data).toEqual(mockTabs);
+    });
+
+    it('should return error result when rpc fails', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockRejectedValue(new Error('RPC failed'));
+      const tool = createTabsQueryTool(rpc);
+      const result = await tool.execute({ tabId: 1 });
+      expect(result).toEqual({ success: false, error: 'RPC failed' });
     });
 
     it('should have correct metadata', () => {
@@ -64,77 +102,252 @@ describe('Tabs tools', () => {
       expect(tool.resultSensitivity).toBe('sensitive');
       expect(tool.requireBackground).toBe(true);
     });
-  });
 
-  describe('tabs_get', () => {
-    it('should call rpc.request("tabs.get", params)', async () => {
+    it('should expose optional tabId and queryInfo in schema', () => {
       const rpc = createMockRpc();
-      const tool = createTabsGetTool(rpc);
-      const params = { tabId: 5 };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.get', params);
-    });
-
-    it('should require tabId in schema', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsGetTool(rpc);
-      expect(tool.schema.required).toContain('tabId');
-    });
-
-    it('should have correct metadata', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsGetTool(rpc);
-      expect(tool.name).toBe('tabs_get');
-      expect(tool.category).toBe('tabs');
-      expect(tool.riskLevel).toBe('low');
-      expect(tool.confirmationRequired).toBe(false);
-      expect(tool.requireBackground).toBe(true);
+      const tool = createTabsQueryTool(rpc);
+      expect(tool.schema.properties).toHaveProperty('tabId');
+      expect(tool.schema.properties).toHaveProperty('queryInfo');
+      expect(tool.schema.required).toBeUndefined();
     });
   });
 
-  describe('tabs_create', () => {
-    it('should call rpc.request("tabs.create", params)', async () => {
-      const rpc = createMockRpc();
-      const tool = createTabsCreateTool(rpc);
-      const params = { createProperties: { url: 'https://example.com', active: true } };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.create', params);
+  describe('tabs_manage', () => {
+    describe('metadata', () => {
+      it('should have correct metadata', () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+        expect(tool.name).toBe('tabs_manage');
+        expect(tool.category).toBe('tabs');
+        expect(tool.riskLevel).toBe('medium');
+        expect(tool.confirmationRequired).toBe(false);
+        expect(tool.resultSensitivity).toBe('low');
+        expect(tool.requireBackground).toBe(true);
+      });
+
+      it('should require only action and expose the action enum', () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+        expect(tool.schema.required).toEqual(['action']);
+        const properties = tool.schema.properties as Record<string, { type?: string; enum?: string[] }>;
+        expect(properties.action.type).toBe('string');
+        expect(properties.action.enum).toEqual(['create', 'update', 'move', 'group', 'ungroup']);
+      });
+
+      it('should expose the shared mutation parameters in schema', () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+        const properties = tool.schema.properties as Record<string, unknown>;
+        for (const key of ['url', 'active', 'pinned', 'tabId', 'tabIds', 'index', 'windowId', 'groupId']) {
+          expect(properties).toHaveProperty(key);
+        }
+      });
     });
 
-    it('should have correct metadata', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsCreateTool(rpc);
-      expect(tool.name).toBe('tabs_create');
-      expect(tool.category).toBe('tabs');
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
-      expect(tool.requireBackground).toBe(true);
-    });
-  });
+    describe('action "create"', () => {
+      it('should call rpc.request("tabs.create", { createProperties })', async () => {
+        const rpc = createMockRpc();
+        const mockTab = { id: 11, url: 'https://example.com' };
+        vi.mocked(rpc.request).mockResolvedValue(mockTab);
+        const tool = createTabsManageTool(rpc);
 
-  describe('tabs_update', () => {
-    it('should call rpc.request("tabs.update", params)', async () => {
-      const rpc = createMockRpc();
-      const tool = createTabsUpdateTool(rpc);
-      const params = { tabId: 3, updateProperties: { url: 'https://new-url.com' } };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.update', params);
+        const result = await tool.execute({
+          action: 'create',
+          url: 'https://example.com',
+          active: false,
+          pinned: true,
+          windowId: 2,
+          index: 1,
+        });
+
+        expect(rpc.request).toHaveBeenCalledWith('tabs.create', {
+          createProperties: {
+            url: 'https://example.com',
+            active: false,
+            pinned: true,
+            windowId: 2,
+            index: 1,
+          },
+        });
+        expect(result).toEqual({ success: true, data: mockTab });
+      });
     });
 
-    it('should require tabId in schema', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsUpdateTool(rpc);
-      expect(tool.schema.required).toContain('tabId');
+    describe('action "update"', () => {
+      it('should call rpc.request("tabs.update", { tabId, updateProperties })', async () => {
+        const rpc = createMockRpc();
+        const mockTab = { id: 3, url: 'https://new-url.com' };
+        vi.mocked(rpc.request).mockResolvedValue(mockTab);
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({
+          action: 'update',
+          tabId: 3,
+          url: 'https://new-url.com',
+          active: true,
+          pinned: false,
+        });
+
+        expect(rpc.request).toHaveBeenCalledWith('tabs.update', {
+          tabId: 3,
+          updateProperties: { url: 'https://new-url.com', active: true, pinned: false },
+        });
+        expect(result).toEqual({ success: true, data: mockTab });
+      });
+
+      it('should return an error when tabId is missing', async () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({ action: 'update', url: 'https://new-url.com' });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeTruthy();
+        expect(rpc.request).not.toHaveBeenCalled();
+      });
     });
 
-    it('should have correct metadata', () => {
+    describe('action "move"', () => {
+      it('should call rpc.request("tabs.move", { tabIds, moveProperties })', async () => {
+        const rpc = createMockRpc();
+        const mockResult = [{ id: 1, index: 0 }];
+        vi.mocked(rpc.request).mockResolvedValue(mockResult);
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({
+          action: 'move',
+          tabIds: [1, 2],
+          index: 0,
+          windowId: 5,
+        });
+
+        expect(rpc.request).toHaveBeenCalledWith('tabs.move', {
+          tabIds: [1, 2],
+          moveProperties: { index: 0, windowId: 5 },
+        });
+        expect(result).toEqual({ success: true, data: mockResult });
+      });
+
+      it('should wrap a single tabId into tabIds', async () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+
+        await tool.execute({ action: 'move', tabId: 7, index: 2 });
+
+        expect(rpc.request).toHaveBeenCalledWith('tabs.move', {
+          tabIds: [7],
+          moveProperties: { index: 2, windowId: undefined },
+        });
+      });
+
+      it('should return an error when tabIds/tabId is missing', async () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({ action: 'move', index: 0 });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeTruthy();
+        expect(rpc.request).not.toHaveBeenCalled();
+      });
+
+      it('should return an error when index is missing', async () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({ action: 'move', tabIds: [1] });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeTruthy();
+        expect(rpc.request).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('action "group"', () => {
+      it('should call rpc.request("tabs.group", { tabIds, groupId })', async () => {
+        const rpc = createMockRpc();
+        vi.mocked(rpc.request).mockResolvedValue(42);
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({ action: 'group', tabIds: [1, 2, 3], groupId: 42 });
+
+        expect(rpc.request).toHaveBeenCalledWith('tabs.group', { tabIds: [1, 2, 3], groupId: 42 });
+        expect(result).toEqual({ success: true, data: 42 });
+      });
+
+      it('should wrap a single tabId into tabIds', async () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+
+        await tool.execute({ action: 'group', tabId: 9 });
+
+        expect(rpc.request).toHaveBeenCalledWith('tabs.group', { tabIds: [9], groupId: undefined });
+      });
+
+      it('should return an error when tabIds/tabId is missing', async () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({ action: 'group' });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeTruthy();
+        expect(rpc.request).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('action "ungroup"', () => {
+      it('should call rpc.request("tabs.ungroup", { tabIds })', async () => {
+        const rpc = createMockRpc();
+        vi.mocked(rpc.request).mockResolvedValue(undefined);
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({ action: 'ungroup', tabIds: [1, 2] });
+
+        expect(rpc.request).toHaveBeenCalledWith('tabs.ungroup', { tabIds: [1, 2] });
+        expect(result).toEqual({ success: true, data: undefined });
+      });
+
+      it('should wrap a single tabId into tabIds', async () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+
+        await tool.execute({ action: 'ungroup', tabId: 4 });
+
+        expect(rpc.request).toHaveBeenCalledWith('tabs.ungroup', { tabIds: [4] });
+      });
+
+      it('should return an error when tabIds/tabId is missing', async () => {
+        const rpc = createMockRpc();
+        const tool = createTabsManageTool(rpc);
+
+        const result = await tool.execute({ action: 'ungroup' });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBeTruthy();
+        expect(rpc.request).not.toHaveBeenCalled();
+      });
+    });
+
+    it('should return an error for an unknown action', async () => {
       const rpc = createMockRpc();
-      const tool = createTabsUpdateTool(rpc);
-      expect(tool.name).toBe('tabs_update');
-      expect(tool.category).toBe('tabs');
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
-      expect(tool.requireBackground).toBe(true);
+      const tool = createTabsManageTool(rpc);
+
+      const result = await tool.execute({ action: 'explode', tabIds: [1] });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('explode');
+      expect(rpc.request).not.toHaveBeenCalled();
+    });
+
+    it('should return { success: false, error } when rpc fails', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockRejectedValue(new Error('RPC failed'));
+      const tool = createTabsManageTool(rpc);
+
+      const result = await tool.execute({ action: 'create', url: 'https://example.com' });
+
+      expect(result).toEqual({ success: false, error: 'RPC failed' });
     });
   });
 
@@ -251,85 +464,6 @@ describe('Tabs tools', () => {
       const tool = createTabsRemoveTool(rpc);
       expect(tool.name).toBe('tabs_remove');
       expect(tool.category).toBe('tabs');
-      expect(tool.requireBackground).toBe(true);
-    });
-  });
-
-  describe('tabs_move', () => {
-    it('should call rpc.request("tabs.move", params)', async () => {
-      const rpc = createMockRpc();
-      const tool = createTabsMoveTool(rpc);
-      const params = { tabIds: [1, 2], moveProperties: { index: 0 } };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.move', params);
-    });
-
-    it('should require tabIds and moveProperties in schema', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsMoveTool(rpc);
-      expect(tool.schema.required).toContain('tabIds');
-      expect(tool.schema.required).toContain('moveProperties');
-    });
-
-    it('should have correct metadata', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsMoveTool(rpc);
-      expect(tool.name).toBe('tabs_move');
-      expect(tool.category).toBe('tabs');
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
-      expect(tool.requireBackground).toBe(true);
-    });
-  });
-
-  describe('tabs_group', () => {
-    it('should call rpc.request("tabs.group", params)', async () => {
-      const rpc = createMockRpc();
-      const tool = createTabsGroupTool(rpc);
-      const params = { tabIds: [1, 2, 3] };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.group', params);
-    });
-
-    it('should require tabIds in schema', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsGroupTool(rpc);
-      expect(tool.schema.required).toContain('tabIds');
-    });
-
-    it('should have correct metadata', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsGroupTool(rpc);
-      expect(tool.name).toBe('tabs_group');
-      expect(tool.category).toBe('tabs');
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
-      expect(tool.requireBackground).toBe(true);
-    });
-  });
-
-  describe('tabs_ungroup', () => {
-    it('should call rpc.request("tabs.ungroup", params)', async () => {
-      const rpc = createMockRpc();
-      const tool = createTabsUngroupTool(rpc);
-      const params = { tabIds: [1, 2] };
-      await tool.execute(params);
-      expect(rpc.request).toHaveBeenCalledWith('tabs.ungroup', params);
-    });
-
-    it('should require tabIds in schema', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsUngroupTool(rpc);
-      expect(tool.schema.required).toContain('tabIds');
-    });
-
-    it('should have correct metadata', () => {
-      const rpc = createMockRpc();
-      const tool = createTabsUngroupTool(rpc);
-      expect(tool.name).toBe('tabs_ungroup');
-      expect(tool.category).toBe('tabs');
-      expect(tool.riskLevel).toBe('medium');
-      expect(tool.confirmationRequired).toBe(false);
       expect(tool.requireBackground).toBe(true);
     });
   });

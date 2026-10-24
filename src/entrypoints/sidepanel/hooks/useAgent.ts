@@ -1,6 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
-import type { ProviderConfig, ProviderModelConfig, WidgetStatusReason } from '@/shared/types';
+import type {
+  ExpertModeSettings,
+  JevSettings,
+  ProviderConfig,
+  ProviderModelConfig,
+  WidgetStatusReason,
+} from '@/shared/types';
 import type { ToolCallRecord } from '@/shared/types/agent';
 import type { IAgentRuntime, AgentConfig } from '@/shared/types/agent';
 import type { IToolRegistry } from '@/registry/types';
@@ -82,8 +88,17 @@ async function getDeps(): Promise<AgentDeps> {
     registry.registerAll(
       createPageTools(
         async (params) => {
-          const result = await rpc.request('content.execute', params as Record<string, unknown>);
-          return { success: true, data: result };
+          try {
+            const result = await rpc.request('content.execute', params as Record<string, unknown>);
+            return { success: true, data: result };
+          } catch (err) {
+            // 内容脚本缺失、受限页面（about:blank / chrome:// 设置页）、端口断开等都会在此抛出，
+            // 统一转成结构化失败结果，避免未捕获拒绝导致整轮工具执行崩溃。
+            return {
+              success: false,
+              error: err instanceof Error ? err.message : '页面脚本不可达或通信失败',
+            };
+          }
         },
         rpc,
       ),
@@ -101,12 +116,13 @@ async function getDeps(): Promise<AgentDeps> {
 }
 
 function recordToDisplay(record: ToolCallRecord): ToolCallDisplay {
+  const result = record.result;
   return {
     id: uid(),
     name: record.toolName,
     params: record.params,
-    result: record.result,
-    status: record.result.success ? 'success' : 'error',
+    result,
+    status: result ? (result.success ? 'success' : 'error') : 'unknown',
     riskLevel: record.riskLevel,
     confirmed: record.confirmed,
   };
@@ -161,16 +177,13 @@ export function useAgent() {
 
         const { ToolLoopAdapter, registry, guardrail, convManager, LlmClient } = await getDeps();
         const savedAgentSettings = await ConfigStore.getInstance().get('agentSettings');
+        const savedJevSettings = await ConfigStore.getInstance().get<JevSettings>('jevSettings');
+        const savedExpertModeSettings = await ConfigStore.getInstance().get<ExpertModeSettings>('expertModeSettings');
         const agentConfig: AgentConfig = {
           maxToolRounds: savedAgentSettings?.maxToolRounds ?? 99,
-          systemPrompt: 'You are a browser assistant that can control tabs, windows, and more.',
           contextWindowTokens: modelConfig?.limit?.context ?? 128000,
           tokenBudgetMargin: 4096,
-          microcompactKeepRecent: 10,
-          microcompactMinChars: 500,
-          microcompactExcludeTools: [],
           reasoningEffort,
-          summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
         };
         const generateTitle = () => {
           console.debug('[Title] fire-and-forget 启动', { conversationId, model });
@@ -211,6 +224,7 @@ export function useAgent() {
               });
             });
           },
+          savedJevSettings ?? { enabled: false, apiKey: '' },
         );
         loopRef.current = adapter;
         const displayedToolCallIds = new Set<string>();
@@ -222,6 +236,7 @@ export function useAgent() {
           model,
           modelConfig,
           reasoningEffort,
+          expertModeSettings: savedExpertModeSettings ?? { enabled: false, switches: {} },
           browserContext: {
             currentWindow: { tabs: [] },
             allWindows: [],

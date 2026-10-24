@@ -215,6 +215,32 @@ test.describe('浮动按钮 E2E', () => {
       .toBe(BUTTON_LABEL);
   });
 
+  test('默认位置的浮动按钮位于视口内且头像已绘制', async () => {
+    const { root } = (await cdp.send('DOM.getDocument', { depth: -1, pierce: true })) as {
+      root: CdpNode;
+    };
+    const host = findNode(root, (node) => nodeAttributes(node)['id'] === 'ba-floating-host');
+    const canvas = host && findNode(host, (node) => node.nodeName === 'CANVAS');
+    expect(canvas).not.toBeNull();
+    const { object } = (await cdp.send('DOM.resolveNode', { nodeId: canvas!.nodeId })) as {
+      object: { objectId: string };
+    };
+    await expect.poll(async () => {
+      const { result } = (await cdp.send('Runtime.callFunctionOn', {
+        objectId: object.objectId,
+        functionDeclaration: 'function () { const pixels = this.getContext("2d").getImageData(0, 0, this.width, this.height).data; return pixels.some((channel, index) => index % 4 === 3 && channel > 0); }',
+        returnByValue: true,
+      })) as { result: { value: boolean } };
+      return result.value;
+    }).toBe(true);
+    const { buttonCenter } = await inspectShadow(cdp);
+    expect(buttonCenter).not.toBeNull();
+    expect(buttonCenter!.x).toBeGreaterThanOrEqual(0);
+    expect(buttonCenter!.x).toBeLessThan(1280);
+    expect(buttonCenter!.y).toBeGreaterThanOrEqual(0);
+    expect(buttonCenter!.y).toBeLessThan(720);
+  });
+
   test('点击浮动按钮打开面板，iframe 加载 sidepanel.html', async () => {
     expect(panelFrames(page)).toHaveLength(0);
 
@@ -262,5 +288,27 @@ test.describe('浮动按钮 E2E', () => {
     // 视口 1280 > 620，配置值直接生效
     await expect.poll(async () => (await inspectShadow(cdp)).panelWidth, { timeout: 10000 })
       .toBe('620px');
+  });
+
+  test('刷新后保存的位置仍使浮动按钮位于视口内', async () => {
+    await seedFloatingButtonSettings(context, extensionId, {
+      enabled: true,
+      position: { side: 'right', top: 2000 },
+      blacklist: [],
+      panelWidth: 420,
+    });
+
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.locator(HOST_ID).waitFor({ state: 'attached', timeout: 15000 });
+      const { buttonCenter } = await inspectShadow(cdp);
+      expect(buttonCenter).not.toBeNull();
+      expect(buttonCenter!.y).toBeGreaterThanOrEqual(0);
+      expect(buttonCenter!.y).toBeLessThan(720);
+    } finally {
+      await seedFloatingButtonSettings(context, extensionId, {
+        enabled: true, position: null, blacklist: [], panelWidth: 420,
+      });
+    }
   });
 });

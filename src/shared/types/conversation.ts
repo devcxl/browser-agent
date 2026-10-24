@@ -15,6 +15,12 @@ export interface StoredMessage {
   }>;
   /** 工具调用 ID（仅 tool 消息） */
   toolCallId?: string;
+  /**
+   * 关联的 assistant 消息 ID（仅 tool 消息）。
+   * #230 起新工具结果行以独立 UUID 为主键，通过该字段定位所属调用行；
+   * 旧数据没有此字段，只能按 toolCallId 兼容配对。
+   */
+  parentMessageId?: string;
   /** 推理/思考内容（仅 assistant 消息） */
   reasoningContent?: string;
   /** 消息时间戳，缺省时由 ConversationManager 写入 Date.now() */
@@ -48,6 +54,11 @@ export interface IConversationManager {
   update(id: string, patch: Partial<Conversation>): Promise<void>;
   delete(id: string): Promise<void>;
   addMessage(conversationId: string, message: StoredMessage): Promise<void>;
+  /**
+   * 原子追加一批消息（同一会话）：按给定顺序分配严格递增时间戳，
+   * 要么全部写入、要么全部不写入，且只更新一次会话 updatedAt。
+   */
+  addMessages(conversationId: string, messages: StoredMessage[]): Promise<void>;
   getRecentMessages(conversationId: string, count: number): Promise<StoredMessage[]>;
   /** 根据首轮问答生成标题，无法生成时返回 undefined */
   generateTitle(conversationId: string, llmClient: ILlmClient, model: string): Promise<string | undefined>;

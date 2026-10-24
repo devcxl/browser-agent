@@ -224,6 +224,9 @@
   "settings_tabs_expert": {
     "message": "Expert Mode"
   },
+  "settings_tabs_jev": {
+    "message": "Jev"
+  },
   "settings_tabs_skills": {
     "message": "Skills"
   },
@@ -244,6 +247,27 @@
   },
   "settings_provider_testing": {
     "message": "测试中..."
+  },
+  "settings_provider_testSuccess": {
+    "message": "连接验证成功"
+  },
+  "settings_provider_testFailed": {
+    "message": "连接失败"
+  },
+  "settings_provider_testReasonMissingModel": {
+    "message": "未配置可用模型"
+  },
+  "settings_provider_testReasonAuth": {
+    "message": "认证失败，请检查 API Key"
+  },
+  "settings_provider_testReasonTimeout": {
+    "message": "连接超时"
+  },
+  "settings_provider_testReasonEmptyResponse": {
+    "message": "模型返回内容为空"
+  },
+  "settings_provider_testReasonRequestFailed": {
+    "message": "请求失败（请检查 Base URL 或版本路径如 /v1）"
   },
   "settings_provider_trusted": {
     "message": "Trusted"
@@ -452,32 +476,14 @@
   "settings_agent_maxToolRounds": {
     "message": "单次任务最大执行步数"
   },
-  "settings_agent_contextWindowTokens": {
-    "message": "上下文窗口 Token 上限"
+  "settings_agent_circuitBreakerTitle": {
+    "message": "智能执行保护"
   },
-  "settings_agent_tokenBudgetMargin": {
-    "message": "Token 预算安全边际"
+  "settings_agent_circuitBreakerDesc": {
+    "message": "已启用任务死循环与连续失败自动熔断保护，长任务不再受固定步数上限限制。"
   },
-  "settings_agent_microcompactKeepRecent": {
-    "message": "工具结果微压缩：保留最近条数"
-  },
-  "settings_agent_microcompactMinChars": {
-    "message": "工具结果微压缩：最小字符阈值"
-  },
-  "settings_agent_microcompactExcludeTools": {
-    "message": "工具结果微压缩：排除工具列表"
-  },
-  "settings_agent_microcompactExcludeToolsPlaceholder": {
-    "message": "工具名，逗号分隔，如 page_getScreenshot"
-  },
-  "settings_agent_reasoningEffort": {
-    "message": "思考强度"
-  },
-  "settings_agent_reasoningEffortHint": {
-    "message": "控制 LLM 推理深度，越高越慢但越深入。仅支持 DeepSeek、OpenAI o1/o3 等推理模型。"
-  },
-  "settings_agent_systemPrompt": {
-    "message": "系统提示词"
+  "settings_agent_circuitBreakerHint": {
+    "message": "检测到连续重复操作或工具连续失败时会自动中断并说明原因；正常的长任务会持续执行直到完成。"
   },
   "settings_agent_reasoningOptions_low": {
     "message": "Low（低）"
@@ -493,6 +499,39 @@
   },
   "settings_expert_title": {
     "message": "Expert Mode"
+  },
+  "settings_jev_title": {
+    "message": "Jev 结构化决策"
+  },
+  "settings_jev_description": {
+    "message": "Jev 仅用于判断聊天请求需要哪些工具类别，不负责生成回复或执行浏览器操作。"
+  },
+  "settings_jev_apiKey": {
+    "message": "TypeSafe API key"
+  },
+  "settings_jev_apiKeyPlaceholder": {
+    "message": "输入你自己的 TypeSafe API key"
+  },
+  "settings_jev_saveApiKey": {
+    "message": "保存 Jev API key"
+  },
+  "settings_jev_clearApiKey": {
+    "message": "清除 Jev API key"
+  },
+  "settings_jev_enabled": {
+    "message": "启用 Jev"
+  },
+  "settings_jev_dataDisclosure": {
+    "message": "启用后，只有本地关键词未命中的聊天消息会发送给 TypeSafe 进行工具类别判断。"
+  },
+  "settings_jev_storageDisclosure": {
+    "message": "API key 保存在扩展本地存储中；本地存储无法保护它免受本机访问者读取。"
+  },
+  "settings_jev_saved": {
+    "message": "Jev API key 已保存。"
+  },
+  "settings_jev_saveFailed": {
+    "message": "保存 Jev 设置失败，请重试。"
   },
   "settings_expert_subSwitchHint": {
     "message": "开启 Expert Mode 后，逐个开启以下 API 域"

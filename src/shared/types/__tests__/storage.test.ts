@@ -6,8 +6,6 @@ import type {
   UserPreferences,
   DbConversation,
   DbMessage,
-  DbToolCallLog,
-  DbSnapshot,
   IConfigStore,
 } from '../storage';
 import { DB_NAME, DB_VERSION } from '../storage';
@@ -19,9 +17,7 @@ describe('Storage types', () => {
         providers: [],
         agentSettings: {
           maxToolRounds: 99,
-          systemPrompt: '',
-          reasoningEffort: 'medium',
-          summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
+          contextWindowTokens: 128000,
         },
         expertModeSettings: { enabled: false, switches: {} },
         preferences: { theme: 'system', sidebarExpanded: true },
@@ -36,8 +32,7 @@ describe('Storage types', () => {
     it('should accept agent settings', () => {
       const s: AgentSettings = {
         maxToolRounds: 10,
-        systemPrompt: 'You are a browser agent',
-        summaryThreshold: { messageCount: 25, estimatedTokens: 10000 },
+        contextWindowTokens: 128000,
       };
       expect(s.maxToolRounds).toBe(10);
     });
@@ -60,7 +55,7 @@ describe('Storage types', () => {
   describe('DB_NAME and DB_VERSION', () => {
     it('should have correct values', () => {
       expect(DB_NAME).toBe('browser-agent-db');
-      expect(DB_VERSION).toBe(3);
+      expect(DB_VERSION).toBe(4);
     });
   });
 
@@ -93,35 +88,6 @@ describe('Storage types', () => {
     });
   });
 
-  describe('DbToolCallLog', () => {
-    it('should accept db tool call log', () => {
-      const log: DbToolCallLog = {
-        id: 'l-1',
-        conversationId: 'c-1',
-        toolName: 'tabs_query',
-        riskLevel: 'low',
-        paramsSummary: '{}',
-        resultSummary: 'success',
-        success: true,
-        confirmedByUser: true,
-        timestamp: 0,
-      };
-      expect(log.toolName).toBe('tabs_query');
-    });
-  });
-
-  describe('DbSnapshot', () => {
-    it('should accept db snapshot', () => {
-      const snap: DbSnapshot = {
-        id: 's-1',
-        type: 'tab',
-        data: '{}',
-        capturedAt: 0,
-      };
-      expect(snap.type).toBe('tab');
-    });
-  });
-
   describe('IConfigStore', () => {
     it('should define the config store interface', () => {
       const store: IConfigStore = {
@@ -131,9 +97,7 @@ describe('Storage types', () => {
           providers: [],
           agentSettings: {
             maxToolRounds: 99,
-            systemPrompt: '',
-            reasoningEffort: 'medium',
-            summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
+            contextWindowTokens: 128000,
           },
           expertModeSettings: { enabled: false, switches: {} },
           preferences: { theme: 'system', sidebarExpanded: true },

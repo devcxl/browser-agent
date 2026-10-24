@@ -30,8 +30,8 @@ export const researchModeSkill: Omit<Skill, 'id' | 'createdAt' | 'updatedAt' | '
 
 ### 步骤 3：创建研究窗口
 1. 使用 \`windows_create\` 创建一个新窗口（不激活，让用户决定何时切换）
-2. 使用 \`tabs_move\` 将所有研究相关标签页移入该窗口
-3. 使用 \`tabs_group\` 按域名/子主题创建标签组：
+2. 使用 \`tabs_manage({ action: "move", tabIds, windowId })\` 将所有研究相关标签页移入该窗口
+3. 使用 \`tabs_manage({ action: "group", tabIds })\` 按域名/子主题创建标签组：
    - 同一域名（如 react.dev、github.com/facebook/react）归为一个标签组
    - 不同域名但同主题的可以归入同一个标签组
    - 组名体现子主题，如“官方文档”、“社区讨论”、“参考实现”

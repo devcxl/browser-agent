@@ -42,6 +42,24 @@ const EYE_COLOR = '#fff7ed';
 const DEFAULT_SIDE: 'left' | 'right' = 'right';
 /** 默认距顶部距离（px） */
 const DEFAULT_TOP = 200;
+/**
+ * 侧边停靠时的自然转头朝向（弧度）：面向屏幕内侧。
+ *
+ * 几何与美术基准分析：
+ * GrokBot 默认 idle 状态首个表情（expression 0）在未偏转时的自然双眼中心约在 x = 161.2，
+ * 相对面部中心 FACE_CENTER (114.27) 自带约 +46.9 坐标单位（约 +0.475 rad）的向右偏转。
+ * 为使双眼在两侧停靠时均朝向屏幕内侧、且在视口边缘全幅追踪时双眼完整保留、不触碰圆形边框裁剪：
+ * - 面向直视中轴对应的校准偏转角约为 -0.475 rad；
+ * - 叠加内向倾斜振幅 ±0.175 rad 后：
+ *   - 左侧停靠（向右/内侧看）：-0.475 + 0.175 = -0.30 rad（双眼中心偏右约 +18.3 单位，不产生边缘裁切）
+ *   - 右侧停靠（向左/内侧看）：-0.475 - 0.175 = -0.65 rad（双眼中心偏左约 -17.0 单位，清晰面向内侧屏幕）
+ */
+const RESTING_TURN_BASE = -0.475;
+const RESTING_TURN_DELTA = 0.175;
+
+function resolveRestingTurn(side: 'left' | 'right'): number {
+  return side === 'left' ? RESTING_TURN_BASE + RESTING_TURN_DELTA : RESTING_TURN_BASE - RESTING_TURN_DELTA;
+}
 
 /** 按钮定位接口 */
 interface ButtonPosition {
@@ -207,7 +225,6 @@ export class FloatingWidget {
   private pointerStart = { x: 0, y: 0 };
   private pointerMoved = 0;
   private longPressTimer: ReturnType<typeof setTimeout> | null = null;
-  private menuHideTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** 待执行的 gaze 计算帧；同一帧内的高频 pointermove 合并为一次 */
   private gazeRafId: number | null = null;
@@ -300,9 +317,13 @@ export class FloatingWidget {
     // 位置更新
     const nextPos = nextSettings.position;
     if (nextPos) {
+      const prevSide = this.position.side;
       this.position = { side: nextPos.side, top: nextPos.top };
       this.resetDragOffset();
       this.applyButtonTransform();
+      if (prevSide !== nextPos.side && this.bot) {
+        this.bot.update({ turn: resolveRestingTurn(nextPos.side) });
+      }
     }
 
     return true;
@@ -315,7 +336,7 @@ export class FloatingWidget {
       this.unsubscribePreferences = null;
     }
     this.unbindEvents();
-    this.clearTimers();
+    this.clearLongPressTimer();
 
     // 先停状态机，避免销毁过程中仍有去抖/庆祝定时器回调引擎
     this.botState.destroy();
@@ -394,6 +415,7 @@ export class FloatingWidget {
         autoBlink: true,
         ariaLabel: label,
         theme: { bodyColor: this.accentColor, eyeColor: EYE_COLOR },
+        turn: resolveRestingTurn(this.position.side),
       });
     } catch {
       // 无 Canvas 2D 实现的宿主（如 jsdom/受限环境）：放弃动画但保留可见、可点击的按钮
@@ -617,7 +639,6 @@ export class FloatingWidget {
 
   private showMenuAtButton(): void {
     if (!this.menu || !this.btn) return;
-    this.clearMenuHideTimer();
 
     const btnRect = this.btn.getBoundingClientRect();
     const menuSide = this.position.side;
@@ -644,14 +665,6 @@ export class FloatingWidget {
     // 点击菜单外部 → 隐藏
     if (this.menu && !this.menu.contains(e.target as Node)) {
       this.hideMenu();
-    }
-  }
-
-  /** 延迟隐藏菜单（给 click 事件处理留时间） */
-  private clearMenuHideTimer(): void {
-    if (this.menuHideTimer) {
-      clearTimeout(this.menuHideTimer);
-      this.menuHideTimer = null;
     }
   }
 
@@ -705,11 +718,22 @@ export class FloatingWidget {
     this.dragOffset = { x: 0, y: 0 };
   }
 
+  /**
+   * 当前视口下按钮实际可用的 top。
+   *
+   * 保存值可能来自更早、更高的视口（或页面缩放变化），直接渲染会让按钮落在视口外；
+   * 渲染前统一 clamp 到可见区域。只修正显示位置，不回写持久化配置。
+   */
+  private effectiveTop(): number {
+    return clampTop(this.position.top, BUTTON_SIZE, window.innerHeight);
+  }
+
   /** 应用吸附定位（无拖拽状态） */
   private applyButtonTransform(): void {
     if (!this.btn) return;
     const style = this.btn.style;
-    const { side, top } = this.position;
+    const { side } = this.position;
+    const top = this.effectiveTop();
 
     // 重置所有定位属性
     style.left = 'auto';
@@ -730,7 +754,9 @@ export class FloatingWidget {
   private applyDragTransform(): void {
     if (!this.btn) return;
     const { x, y } = this.dragOffset;
-    const { side, top } = this.position;
+    const { side } = this.position;
+    // 基准位置与吸附态一致（clamp 后），否则拖拽途中按钮会跳回越界坐标
+    const top = this.effectiveTop();
 
     // 恢复吸附基准位置，然后叠加 translate
     const style = this.btn.style;
@@ -756,9 +782,13 @@ export class FloatingWidget {
     const side = resolveSide(clientX, vw);
     const top = clampTop(clientY - BUTTON_SIZE / 2, BUTTON_SIZE, vh);
 
+    const prevSide = this.position.side;
     this.position = { side, top };
     this.resetDragOffset();
     this.applyButtonTransform();
+    if (prevSide !== side && this.bot) {
+      this.bot.update({ turn: resolveRestingTurn(side) });
+    }
 
     // 通知外部（延迟写入 storage）
     if (this.onPositionChange) {
@@ -775,8 +805,4 @@ export class FloatingWidget {
     }
   }
 
-  private clearTimers(): void {
-    this.clearLongPressTimer();
-    this.clearMenuHideTimer();
-  }
 }

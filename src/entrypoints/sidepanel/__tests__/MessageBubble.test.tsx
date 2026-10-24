@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MessageBubble } from '../components/MessageBubble';
 import { mockBrowserStorage } from './test-utils';
@@ -305,6 +305,206 @@ describe('MessageBubble', () => {
       expect(screen.getByText('bad_tool')).toBeDefined();
       // error 状态显示危险色状态点
       expect(container.querySelector('.bg-danger')).toBeDefined();
+    });
+  });
+
+  // === ToolBubble 状态与未知态视觉交互 (#231) ===
+  describe('ToolBubble 状态与未知态视觉交互', () => {
+    it('未知状态渲染中性状态点与精简中文标签「状态未知」', () => {
+      const msg: UIMessage = {
+        id: 'tb-unknown',
+        role: 'tool',
+        content: 'tabs_query',
+        timestamp: Date.now(),
+        toolCallDisplay: {
+          id: 'tb-unknown',
+          name: 'tabs_query',
+          params: { query: 'active' },
+          status: 'unknown',
+          riskLevel: 'low',
+          confirmed: true,
+        },
+      };
+
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
+
+      expect(screen.getByText('tabs_query')).toBeDefined();
+      expect(screen.getByText('状态未知')).toBeDefined();
+
+      // 中性灰点，无红点、绿点或黄色脉冲
+      expect(container.querySelector('.bg-mute')).not.toBeNull();
+      expect(container.querySelector('.bg-danger')).toBeNull();
+      expect(container.querySelector('.bg-success')).toBeNull();
+      expect(container.querySelector('.bg-warning')).toBeNull();
+    });
+
+    it('折叠时不展示文案，点击展开后展示明确的指引文案', () => {
+      const msg: UIMessage = {
+        id: 'tb-unknown-expand',
+        role: 'tool',
+        content: 'click_element',
+        timestamp: Date.now(),
+        toolCallDisplay: {
+          id: 'tb-unknown-expand',
+          name: 'click_element',
+          params: { selector: '#submit' },
+          status: 'unknown',
+          riskLevel: 'medium',
+          confirmed: true,
+        },
+      };
+
+      const { container } = wrappedRender(<MessageBubble message={msg} />);
+
+      const copySnippet = '执行结果未保存，状态未知';
+      expect(screen.queryByText(new RegExp(copySnippet))).toBeNull();
+
+      // 点击展开
+      const button = container.querySelector('button')!;
+      fireEvent.click(button);
+
+      // 展开后显示三层关键指引：
+      // 1. 结果不确定
+      // 2. 操作可能已在浏览器生效
+      // 3. 请先核实页面/标签页状态，切勿盲目重试
+      const expandedText = screen.getByText(/执行结果未保存，状态未知/);
+      expect(expandedText).toBeDefined();
+      expect(expandedText.textContent).toContain('该操作可能已在浏览器中生效');
+      expect(expandedText.textContent).toContain('请先核实当前页面或标签页状态，切勿盲目重试');
+
+      // 再次点击折叠
+      fireEvent.click(button);
+      expect(screen.queryByText(new RegExp(copySnippet))).toBeNull();
+    });
+
+    it('对比：成功态、失败态与未知态展示严格区分', () => {
+      const successMsg: UIMessage = {
+        id: 'tb-success',
+        role: 'tool',
+        content: 'query_tab',
+        timestamp: Date.now(),
+        toolCallDisplay: {
+          id: 'tb-success',
+          name: 'query_tab',
+          params: {},
+          result: { success: true, data: { count: 3 } },
+          status: 'success',
+          riskLevel: 'low',
+          confirmed: true,
+        },
+      };
+
+      const errorMsg: UIMessage = {
+        id: 'tb-error',
+        role: 'tool',
+        content: 'delete_tab',
+        timestamp: Date.now(),
+        toolCallDisplay: {
+          id: 'tb-error',
+          name: 'delete_tab',
+          params: { tabId: 99 },
+          result: { success: false, error: 'Tab not found' },
+          status: 'error',
+          riskLevel: 'high',
+          confirmed: true,
+        },
+      };
+
+      const unknownMsg: UIMessage = {
+        id: 'tb-unknown-diff',
+        role: 'tool',
+        content: 'close_tab',
+        timestamp: Date.now(),
+        toolCallDisplay: {
+          id: 'tb-unknown-diff',
+          name: 'close_tab',
+          params: { tabId: 100 },
+          status: 'unknown',
+          riskLevel: 'low',
+          confirmed: true,
+        },
+      };
+
+      // 成功气泡
+      const { container: successContainer } = wrappedRender(<MessageBubble message={successMsg} />);
+      expect(successContainer.querySelector('.bg-success')).not.toBeNull();
+      expect(successContainer.textContent).not.toContain('状态未知');
+      fireEvent.click(successContainer.querySelector('button')!);
+      expect(successContainer.textContent).toContain('"count": 3');
+
+      // 失败气泡
+      const { container: errorContainer } = wrappedRender(<MessageBubble message={errorMsg} />);
+      expect(errorContainer.querySelector('.bg-danger')).not.toBeNull();
+      expect(errorContainer.textContent).not.toContain('状态未知');
+      fireEvent.click(errorContainer.querySelector('button')!);
+      expect(errorContainer.textContent).toContain('Tab not found');
+
+      // 未知态气泡
+      const { container: unknownContainer } = wrappedRender(<MessageBubble message={unknownMsg} />);
+      expect(unknownContainer.querySelector('.bg-mute')).not.toBeNull();
+      expect(unknownContainer.textContent).toContain('状态未知');
+      fireEvent.click(unknownContainer.querySelector('button')!);
+      expect(unknownContainer.textContent).toContain('切勿盲目重试');
+      expect(unknownContainer.textContent).not.toContain('Tab not found');
+    });
+
+    it('多个工具气泡（重复 ID / 连续工具）独立交互且外观稳定', () => {
+      const bubble1: UIMessage = {
+        id: 'msg_tool_0',
+        role: 'tool',
+        content: 'tabs_query',
+        timestamp: Date.now(),
+        toolCallDisplay: {
+          id: 'msg_tool_0',
+          name: 'tabs_query',
+          params: { round: 1 },
+          result: { success: true, data: 'first' },
+          status: 'success',
+          riskLevel: 'low',
+          confirmed: true,
+        },
+      };
+
+      const bubble2: UIMessage = {
+        id: 'msg_tool_1',
+        role: 'tool',
+        content: 'tabs_query',
+        timestamp: Date.now(),
+        toolCallDisplay: {
+          id: 'msg_tool_1',
+          name: 'tabs_query',
+          params: { round: 2 },
+          status: 'unknown',
+          riskLevel: 'low',
+          confirmed: true,
+        },
+      };
+
+      const { container } = wrappedRender(
+        <div>
+          <MessageBubble message={bubble1} />
+          <MessageBubble message={bubble2} />
+        </div>,
+      );
+
+      const buttons = container.querySelectorAll('button');
+      expect(buttons).toHaveLength(2);
+
+      // 初始都处于折叠状态
+      expect(screen.queryByText(/first/)).toBeNull();
+      expect(screen.queryByText(/切勿盲目重试/)).toBeNull();
+
+      // 点击第 2 个（unknown 态）
+      fireEvent.click(buttons[1]!);
+
+      // 第 2 个展开，第 1 个保持折叠
+      expect(screen.getByText(/切勿盲目重试/)).toBeDefined();
+      expect(screen.queryByText(/first/)).toBeNull();
+
+      // 点击第 1 个（success 态）
+      fireEvent.click(buttons[0]!);
+      expect(screen.getByText(/first/)).toBeDefined();
+      expect(screen.getByText(/切勿盲目重试/)).toBeDefined();
     });
   });
 });

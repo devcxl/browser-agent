@@ -8,22 +8,11 @@ import type { ExpertModeSettings } from './storage';
 
 export interface AgentConfig {
   maxToolRounds: number;
-  systemPrompt: string;
   /** 模型上下文窗口 token 上限，默认 128000 */
   contextWindowTokens: number;
   /** 预算截断安全边际（保留给 system prompt + 输出），默认 4096 */
   tokenBudgetMargin: number;
-  /** 工具结果微压缩：保留最近 N 条不压缩，默认 10 */
-  microcompactKeepRecent: number;
-  /** 工具结果微压缩：结果超过此字符数才触发，默认 500 */
-  microcompactMinChars: number;
-  /** 工具结果微压缩：始终不压缩的工具名列表 */
-  microcompactExcludeTools: string[];
   reasoningEffort?: ReasoningEffort;
-  summaryThreshold: {
-    messageCount: number;
-    estimatedTokens: number;
-  };
 }
 
 // ==================== Agent 运行输入/输出 ====================
@@ -67,7 +56,11 @@ export interface AgentRunOutput {
 export interface ToolCallRecord {
   toolName: string;
   params: Record<string, unknown>;
-  result: ToolResult;
+  /**
+   * 工具的真实结果；`undefined` 表示本次运行没有拿到结果（未知），
+   * 不得用 `{ success: false }` 之类占位伪造。显式 tool-error 仍是真实失败。
+   */
+  result?: ToolResult;
   riskLevel: RiskLevel;
   confirmed: boolean;
   timestamp: number;

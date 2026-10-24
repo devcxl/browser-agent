@@ -67,7 +67,7 @@ const tabSorter: SkillDef = {
 - 同产品线（如 github.com + github.io）合并为一个分组
 
 ### 步骤 4：创建标签组
-使用 \`tabs_group\` 为每组创建标签组，设置有意义的标题和不同颜色。
+使用 \`tabs_manage({ action: "group", tabIds })\` 为每组创建标签组，设置有意义的标题和不同颜色。
 
 ### 步骤 5：汇报
 汇报：标签页总数、创建的标签组数、每组包含的网站、未分组标签页。
@@ -132,7 +132,7 @@ const tabRescue: SkillDef = {
 分批处理，每批不超过 20 个。
 
 ### 步骤 4：分组整理剩余标签页（低优先级）
-用 \`tabs_group\` 按域名分组。
+用 \`tabs_manage({ action: "group", tabIds })\` 按域名分组。
 
 ### 步骤 5：汇报
 汇报：原始数、关闭的重复数、归档的闲置数、剩余活跃数、创建的标签组数。
@@ -179,7 +179,7 @@ const focusMode: SkillDef = {
 3. 用 \`tabs_remove\` 分批关闭
 
 ### 步骤 5：整理剩余标签页
-用 \`tabs_group\` 按主题分组，按工作流排序（概览→文档→参考→工具）。
+用 \`tabs_manage({ action: "group", tabIds })\` 按主题分组，按工作流排序（概览→文档→参考→工具）。
 
 ### 退出专注模式
 询问是否恢复之前标签页，用 \`sessions_restore\` 恢复。
@@ -287,8 +287,8 @@ const bookmarkValidator: SkillDef = {
 向用户说明：将逐一打开书签 URL、建议分批检测（每批 20-30 个）。
 
 ### 步骤 3：分批检测
-1. 用 \`tabs_create\` 在后台打开书签 URL
-2. 等待几秒后，用 \`tabs_get\` 检查状态（title 不为空、不是错误页）
+1. 用 \`tabs_manage({ action: "create", url, active: false })\` 在后台打开书签 URL
+2. 等待几秒后，用 \`tabs_query\`（传入 tabId）检查状态（title 不为空、不是错误页）
 3. 用 \`page_getMetadata\` 辅助判断
 4. 用 \`tabs_remove\` 关闭检测标签页
 5. 记录：✅ 正常 / ❌ 无法访问 / ⚠️ 跳转
@@ -325,9 +325,9 @@ const windowMerger: SkillDef = {
 让用户选择：全部合并到当前窗口、合并到新窗口、合并到指定窗口、或仅合并部分窗口。
 
 ### 步骤 3：执行合并
-1. 用 \`tabs_move\` 将标签页移动到目标窗口
+1. 用 \`tabs_manage({ action: "move", tabIds, windowId, index })\` 将标签页移动到目标窗口
 2. 移空后自动关闭源窗口（用 \`windows_remove\`）
-3. 用 \`tabs_group\` 按原始窗口来源创建标签组（不同颜色区分）
+3. 用 \`tabs_manage({ action: "group", tabIds })\` 按原始窗口来源创建标签组（不同颜色区分）
 
 ### 步骤 4：汇报
 汇报：原有窗口数→现在窗口数、合并的标签页数、关闭的空窗口数、创建的标签组数。
@@ -357,8 +357,8 @@ const researchMode: SkillDef = {
 
 ### 步骤 3：创建研究窗口
 1. 用 \`windows_create\` 创建新窗口（不激活）
-2. 用 \`tabs_move\` 将所有研究标签页移入
-3. 用 \`tabs_group\` 按域名/子主题创建标签组
+2. 用 \`tabs_manage({ action: "move", tabIds, windowId })\` 将所有研究标签页移入
+3. 用 \`tabs_manage({ action: "group", tabIds })\` 按域名/子主题创建标签组
 
 ### 步骤 4：组织标签页顺序
 按研究逻辑排列：概览→核心文档→参考案例→社区讨论。
@@ -403,7 +403,7 @@ const readingList: SkillDef = {
 
 ### 开始阅读
 1. 展示在线列表，推荐最近添加的
-2. 用 \`tabs_create\` 在新标签页打开
+2. 用 \`tabs_manage({ action: "create", url })\` 在新标签页打开
 3. 询问：已读完（从列表移除）/ 还没读完（保留）/ 加入永久书签（移动）
 
 ### 清理阅读列表

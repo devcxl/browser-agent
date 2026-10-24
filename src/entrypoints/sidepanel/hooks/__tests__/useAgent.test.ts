@@ -2,15 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 // vi.hoisted: 确保 mock 对象在 vi.mock 提升前初始化
-const { mockRun, mockAbort, mockGenerateTitle, mockConfigStoreGet, state } =
+const { mockRun, mockAbort, mockGenerateTitle, mockConfigStoreGet, mockRpcRequest, state } =
   vi.hoisted(() => ({
     mockRun: vi.fn(),
     mockAbort: vi.fn(),
     mockGenerateTitle: vi.fn(),
     mockConfigStoreGet: vi.fn(),
+    mockRpcRequest: vi.fn(),
     state: {
       capturedApprovalFn: null as any,
       capturedAdapterArgs: [] as any[][],
+      capturedPageExecuteFn: null as any,
     },
   }));
 
@@ -65,7 +67,7 @@ vi.mock('@/registry', () => ({
 }));
 vi.mock('@/shared/jsonrpc/client', () => ({
   JsonRpcClient: vi.fn().mockImplementation(() => ({
-    request: vi.fn(),
+    request: mockRpcRequest,
     notify: vi.fn(),
     onRequest: vi.fn(),
     onNotification: vi.fn(),
@@ -88,7 +90,10 @@ vi.mock('@/tools/phase2-register', () => ({
   registerPhase2Tools: vi.fn(),
 }));
 vi.mock('@/tools/page', () => ({
-  createPageTools: vi.fn().mockReturnValue([]),
+  createPageTools: vi.fn().mockImplementation((executeFn: unknown) => {
+    state.capturedPageExecuteFn = executeFn;
+    return [];
+  }),
 }));
 vi.mock('@/tools/skill-tool', () => ({
   createSkillTool: vi.fn().mockReturnValue({
@@ -135,6 +140,7 @@ describe('useAgent', () => {
     mockGenerateTitle.mockResolvedValue(undefined);
     mockConfigStoreGet.mockReset();
     mockConfigStoreGet.mockResolvedValue(null);
+    mockRpcRequest.mockReset();
   });
 
   it('初始状态为 idle', () => {
@@ -166,6 +172,26 @@ describe('useAgent', () => {
     expect(mockRun).toHaveBeenCalled();
     expect(result.current.status).toBe('idle');
     expect(result.current.lastRunOutcome).toBe('complete');
+  });
+
+  it('将持久化的 Jev 设置传给工具路由适配器', async () => {
+    const jevSettings = { enabled: true, apiKey: 'ts-test-key' };
+    mockConfigStoreGet.mockImplementation((key: string) => Promise.resolve(
+      key === 'jevSettings' ? jevSettings : { maxToolRounds: 99 },
+    ));
+    const { result } = renderHook(() => useAgent());
+
+    await act(async () => {
+      await result.current.run('conv-1', 'Review my recent activity.', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'chat-key',
+        isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    expect(state.capturedAdapterArgs[0]?.[7]).toEqual(jevSettings);
   });
 
   it('run 发送 user 和 assistant 消息', async () => {
@@ -416,14 +442,7 @@ describe('useAgent', () => {
         key === 'agentSettings'
           ? {
               maxToolRounds: 7,
-              systemPrompt: 'test',
               contextWindowTokens: 128000,
-              tokenBudgetMargin: 4096,
-              microcompactKeepRecent: 10,
-              microcompactMinChars: 500,
-              microcompactExcludeTools: [],
-              reasoningEffort: 'medium',
-              summaryThreshold: { messageCount: 30, estimatedTokens: 12000 },
             }
           : null,
       ),
@@ -487,6 +506,88 @@ describe('useAgent', () => {
     expect(toolCalls[0][0].toolCallDisplay.name).toBe('tabs_query');
 
     expect(onTokenUsage).toHaveBeenCalledWith({ prompt: 50, completion: 30 });
+  });
+
+  it('结果缺失的工具记录映射为 unknown，不伪造成功或失败', async () => {
+    mockRun.mockResolvedValue({
+      finalMessage: '操作完成',
+      toolCalls: [
+        {
+          toolName: 'tabs_remove',
+          params: { tabIds: [1] },
+          riskLevel: 'low' as const,
+          confirmed: true,
+          timestamp: Date.now(),
+          toolCallId: 'call-unknown',
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+    result.current.setCallbacks({ onMessage });
+
+    await act(async () => {
+      await result.current.run('conv-1', '删除这个标签页', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'key',
+        model: 'gpt-4o',
+        isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    const toolMessages = onMessage.mock.calls.filter(
+      (c: [UIMessage]) => c[0].role === 'tool',
+    );
+    expect(toolMessages).toHaveLength(1);
+    expect(toolMessages[0][0].toolCallDisplay).toEqual(expect.objectContaining({
+      name: 'tabs_remove',
+      status: 'unknown',
+      result: undefined,
+    }));
+  });
+
+  it('页面工具在 content.execute 失败时返回结构化错误而不抛出', async () => {
+    const provider = {
+      id: 'test',
+      name: 'Test',
+      endpoint: 'https://api.test.com',
+      apiKey: 'key',
+      model: 'gpt-4o',
+      isLocalTrusted: false,
+    };
+
+    const { result } = renderHook(() => useAgent());
+    await act(async () => {
+      await result.current.run('conv-1', '读取页面内容', provider, 'gpt-4o');
+    });
+
+    const executeFn = state.capturedPageExecuteFn;
+    expect(typeof executeFn).toBe('function');
+
+    // 端口断开 / 内容脚本缺失：RPC 拒绝应被包装为失败结果，而不是抛给调用方
+    mockRpcRequest.mockRejectedValueOnce(new Error('Port disconnected'));
+    await expect(executeFn({ action: 'page_getContent' })).resolves.toEqual({
+      success: false,
+      error: 'Port disconnected',
+    });
+    expect(mockRpcRequest).toHaveBeenCalledWith('content.execute', { action: 'page_getContent' });
+
+    // 非 Error 抛出（如字符串）：使用兜底文案
+    mockRpcRequest.mockRejectedValueOnce('No tab with id: 42');
+    await expect(executeFn({ action: 'page_getContent' })).resolves.toEqual({
+      success: false,
+      error: '页面脚本不可达或通信失败',
+    });
+
+    // 正常路径保持原有成功结构
+    mockRpcRequest.mockResolvedValueOnce({ text: '页面正文' });
+    await expect(executeFn({ action: 'page_getContent' })).resolves.toEqual({
+      success: true,
+      data: { text: '页面正文' },
+    });
   });
 
   it('工具执行期间状态为 running，供头像映射为 working', async () => {

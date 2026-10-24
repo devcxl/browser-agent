@@ -221,9 +221,8 @@ describe('ChatOnboarding', () => {
       providers: [],
       agentSettings: {
         maxToolRounds: 10,
-        systemPrompt: '',
-        reasoningEffort: 'medium',
       },
+      jevSettings: { enabled: false, apiKey: '' },
       expertModeSettings: { enabled: false, switches: {} },
       preferences: { theme: 'system', language: 'en' },
       ...overrides,

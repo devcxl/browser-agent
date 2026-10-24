@@ -60,6 +60,7 @@ describe('Conversation types', () => {
         update: async () => {},
         delete: async () => {},
         addMessage: async () => {},
+        addMessages: async () => {},
         getRecentMessages: async () => [],
         generateTitle: async () => undefined,
       };

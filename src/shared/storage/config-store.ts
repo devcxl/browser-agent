@@ -21,21 +21,15 @@ const DEFAULTS: StorageSchema = {
   providers: [],
   agentSettings: {
     maxToolRounds: 99,
-    systemPrompt: '',
     contextWindowTokens: 128000,
-    tokenBudgetMargin: 4096,
-    microcompactKeepRecent: 10,
-    microcompactMinChars: 500,
-    microcompactExcludeTools: [],
-    reasoningEffort: 'medium',
-    summaryThreshold: {
-      messageCount: 30,
-      estimatedTokens: 12000,
-    },
   },
   expertModeSettings: {
     enabled: false,
     switches: {},
+  },
+  jevSettings: {
+    enabled: false,
+    apiKey: '',
   },
   preferences: {
     theme: 'system',

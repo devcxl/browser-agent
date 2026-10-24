@@ -1,11 +1,12 @@
 import type { IAgentRuntime, AgentRunInput, AgentRunOutput, AgentConfig, ToolCallRecord } from '@/shared/types/agent';
 import type { IToolRegistry, ToolDefinition } from '@/registry/types';
 import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
-import type { IConversationManager } from '@/shared/types/conversation';
+import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
 import type { LowSensitivityContext } from '@/shared/types/browser';
+import type { JevSettings } from '@/shared/types/storage';
 import type { ToolResult, RiskLevel } from '@/shared/types/tool';
-import { ToolLoopAgent, generateText, isStepCount, isLoopFinished, pruneMessages } from 'ai';
+import { ToolLoopAgent, generateText, isLoopFinished, pruneMessages } from 'ai';
 import type {
   ModelMessage,
   ToolModelMessage,
@@ -25,9 +26,12 @@ import {
   selectSummaryCutoff,
 } from './conversation-compaction';
 import { ToolClassifier } from './tool-classifier';
+import { CircuitBreaker, formatInterruptionMessage } from './circuit-breaker';
+import type { AgentRunInterruption } from './circuit-breaker';
 import { TOOL_CATEGORY_DESCRIPTIONS } from '@/shared/tool-categories';
 import type { ToolCategory } from '@/shared/types/tool';
-import { DEFAULT_AGENT_CONFIG } from './system-prompt';
+import { reconstructToolProtocol } from '@/shared/tool-protocol';
+import { DEFAULT_AGENT_CONFIG } from './agent-config';
 
 /** 常驻类别：高频操作不参与懒加载过滤，分类失效时仍有核心能力可用 */
 const CORE_TOOL_CATEGORIES: readonly ToolCategory[] = [
@@ -51,6 +55,13 @@ function mapReasoningEffort(effort?: AgentConfig['reasoningEffort']): 'low' | 'm
 /** Agent 接口所需的工具集类型 */
 type AdapterTools = Record<string, AISdkTool>;
 
+/** StepResult 中本模块使用的字段：工具调用/结果，以及识别 tool-error 所需的 content */
+type StepToolData = {
+  toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>;
+  toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>>;
+  content?: ReadonlyArray<{ type: string; toolCallId?: string; error?: unknown }>;
+};
+
 /** toolApproval 回调请求参数 */
 export interface ToolApprovalRequest {
   toolName: string;
@@ -68,6 +79,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
   private _agent: ToolLoopAgent | null = null;
   private _tools: AdapterTools | null = null;
   private toolClassifier: ToolClassifier;
+  /** 本次运行（run）的熔断状态；每次 run 前重置 */
+  private circuitBreaker = new CircuitBreaker();
   private onRequestApproval?: OnRequestApproval;
   /** 缓存的 LanguageModel；provider 或模型变化时由调用方重建 adapter */
   private _model: Promise<LanguageModelV4> | null = null;
@@ -79,6 +92,11 @@ export class ToolLoopAdapter implements IAgentRuntime {
     grantedPermissions: [],
     sessionGrants: { sensitiveDataAllowed: false },
   };
+  /**
+   * 本次 run 第 0 步确定的活跃工具子集，供后续步骤继承。
+   * 不继承时 SDK 会在每个新步骤回退到全部工具，上下文随步数反复膨胀。
+   */
+  private lastActiveTools?: string[];
 
   constructor(
     private toolRegistry: IToolRegistry,
@@ -88,36 +106,17 @@ export class ToolLoopAdapter implements IAgentRuntime {
     private modelId: string,
     private agentConfig: AgentConfig = DEFAULT_AGENT_CONFIG as AgentConfig,
     onRequestApproval?: OnRequestApproval,
+    private jevSettings: JevSettings = { enabled: false, apiKey: '' },
   ) {
     this.onRequestApproval = onRequestApproval;
     this.toolClassifier = new ToolClassifier();
   }
 
-  // ─── Agent 接口 ──────────────────────────────────────
-
-  get version(): 'agent-v1' {
-    return 'agent-v1';
-  }
-
-  get id(): string | undefined {
-    return undefined;
-  }
-
-  get tools(): AdapterTools {
+  private get tools(): AdapterTools {
     if (!this._tools) {
       this._tools = this.buildTools();
     }
     return this._tools;
-  }
-
-  async generate(options: any): Promise<any> {
-    const agent = await this.getOrCreateAgent();
-    return agent.generate(options);
-  }
-
-  async stream(options: any): Promise<any> {
-    const agent = await this.getOrCreateAgent();
-    return agent.stream(options);
   }
 
   // ─── IAgentRuntime 接口 ──────────────────────────────
@@ -128,24 +127,41 @@ export class ToolLoopAdapter implements IAgentRuntime {
     this._agent = null;
   }
 
-  async run(input: AgentRunInput): Promise<AgentRunOutput> {
-    console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId, message: input.userMessage.slice(0, 100) });
+  async run(input: AgentRunInput): Promise<AgentRunOutput & AgentRunInterruption> {
+    console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId });
     this.abortController = new AbortController();
+    this.circuitBreaker.reset();
+    this.lastActiveTools = undefined;
     const toolCalls: ToolCallRecord[] = [];
     const persistenceTasks: Promise<void>[] = [];
+    // 本次输入的唯一身份：用于重建历史时排除「已落库的本轮输入」，
+    // 而不是按文本比较（相同文本的上一条用户消息必须保留）。
+    const currentUserMessageId = crypto.randomUUID();
+    // 步骤落库串行链：onStepFinish 可能连续触发且不等待返回的 Promise，
+    // 必须保证前一步整批写完再写下一步，否则时间戳与步骤顺序会交错。
+    let persistenceChain: Promise<void> = Promise.resolve();
+    const persistStep = (stepResult: StepResult<Record<string, AISdkTool>>) => {
+      const task = persistenceChain.then(
+        () => this.persistStepMessages(input.conversationId, stepResult),
+      );
+      // 单独挂一个消费分支，避免失败在 await 之前变成未处理的 rejection；
+      // persistenceTasks 保留原始 Promise，让 run() 最终感知失败。
+      persistenceChain = task.catch(() => {});
+      persistenceTasks.push(task);
+    };
 
     try {
       console.debug('[ToolLoopAdapter] buildMessages 开始');
-      let messages = await this.buildMessages(input);
+      let messages = await this.buildMessages(input, currentUserMessageId);
       const compacted = await this.compactConversationIfNeeded(input, messages);
 
       await this.conversationManager.addMessage(input.conversationId, {
-        id: crypto.randomUUID(),
+        id: currentUserMessageId,
         role: 'user',
         content: input.userMessage,
       });
       if (compacted) {
-        messages = await this.buildMessages(input);
+        messages = await this.buildMessages(input, currentUserMessageId);
       }
       console.debug('[ToolLoopAdapter] buildMessages 完成, count:', messages.length);
 
@@ -166,7 +182,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
             toolCount: stepResult.toolCalls?.length ?? 0,
           });
           this.recordStepToolCalls(stepResult, toolCalls, input.callbacks?.onToolCall);
-          persistenceTasks.push(this.persistStepMessages(input.conversationId, stepResult));
+          persistStep(stepResult);
         },
       });
 
@@ -190,31 +206,46 @@ export class ToolLoopAdapter implements IAgentRuntime {
       // 取最后一步的单步 usage —— 最后一步的 inputTokens 即最近一次请求
       // 发送给 LLM 的完整上下文（系统提示+历史+工具结果）。
       const usage = finalStep.usage ?? (await result.usage);
+      // 熔断：loop 已由 stopWhen 提前结束，这里补齐面向用户的停止原因
+      const interruption = this.circuitBreaker.tripReason;
+      const assistantContent = interruption
+        ? formatInterruptionMessage(interruption, finalStep.text || accumulatedText)
+        : finalStep.text || accumulatedText;
+      if (interruption) {
+        input.callbacks?.onStreamChunk?.(accumulatedText ? `\n\n${interruption.message}` : interruption.message);
+      }
       await Promise.all(persistenceTasks);
       console.debug('[ToolLoopAdapter] 执行完成', {
-        finalText: finalStep.text?.slice(0, 80),
         toolCalls: toolCalls.length,
         usage,
+        interrupted: interruption?.reason,
       });
 
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: finalStep.text || accumulatedText,
+        content: assistantContent,
         reasoningContent: finalStep.reasoningText || accumulatedReasoning || undefined,
       });
 
-      return {
-        finalMessage: finalStep.text,
+      const output: AgentRunOutput & AgentRunInterruption = {
+        finalMessage: interruption ? assistantContent : finalStep.text,
         toolCalls,
         tokenUsage: usage
           ? { prompt: usage.inputTokens ?? 0, completion: usage.outputTokens ?? 0 }
           : undefined,
       };
+      if (interruption) {
+        output.stopReason = 'interrupted';
+        output.interruption = interruption;
+      }
+      return output;
     } catch (err) {
       await Promise.allSettled(persistenceTasks);
       const message = err instanceof Error ? err.message : String(err);
-      console.error('[ToolLoopAdapter] run() 异常', err);
+      console.error('[ToolLoopAdapter] run() 异常', {
+        errorType: err instanceof Error ? err.name : typeof err,
+      });
       await this.conversationManager.addMessage(input.conversationId, {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -227,33 +258,6 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   // ─── 私有方法 ──────────────────────────────────────────
-
-  /** 懒加载创建 ToolLoopAgent（仅首次或 abort 后重建） */
-  private async getOrCreateAgent(): Promise<ToolLoopAgent> {
-    if (!this._agent) {
-      this.abortController = new AbortController();
-      this._agent = new ToolLoopAgent({
-        model: await this.createModel(),
-        maxOutputTokens: this.getModelConfig()?.defaults?.maxOutputTokens,
-        temperature: this.getModelConfig()?.defaults?.temperature,
-        reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
-        tools: this.tools,
-        allowSystemInMessages: true,
-        stopWhen: [isStepCount(Math.max(1, this.agentConfig.maxToolRounds)), isLoopFinished()],
-        toolApproval: this.createToolApproval(),
-        prepareStep: async ({ messages, stepNumber, model }) => {
-          // 工具懒加载：step 0 时 LLM 预分类
-          const toolFilter = await this.classifyAndFilterTools(messages, stepNumber, model);
-          const prunedMessages = this.pruneContextIfNeeded(messages);
-          return { ...(prunedMessages ? { messages: prunedMessages } : {}), ...toolFilter };
-        },
-        onStepFinish: () => {
-          // toolCalls 记录由 useChat 框架处理，此处不重复记录
-        },
-      });
-    }
-    return this._agent;
-  }
 
   /** 为 run() 路径创建 agent（带 run() 特有的 onStepFinish 和正确的 guardrail 上下文） */
   private async ensureAgentCreated(input: AgentRunInput): Promise<void> {
@@ -277,7 +281,29 @@ export class ToolLoopAdapter implements IAgentRuntime {
       reasoning: mapReasoningEffort(this.agentConfig.reasoningEffort),
       tools: this.tools,
       allowSystemInMessages: true,
-      stopWhen: [isStepCount(Math.max(1, this.agentConfig.maxToolRounds)), isLoopFinished()],
+      stopWhen: [
+        // 不设固定步数上限：循环何时结束由模型是否继续调用工具决定。
+        // isLoopFinished() 永不返回 true，显式声明「让循环自然收敛」——
+        // 省略 stopWhen 时 ToolLoopAgent 会默认在 20 步后停止。
+        isLoopFinished(),
+        // 熔断条件：重扫全部 steps，CircuitBreaker 按 toolCallId 去重不会重复计数
+        ({ steps }) => {
+          for (const step of steps) {
+            this.circuitBreaker.recordStep({
+              toolCalls: step.toolCalls,
+              toolResults: step.toolResults,
+              toolErrors: step.content.flatMap((part) => (
+                part.type === 'tool-error' ? [{ toolCallId: part.toolCallId }] : []
+              )),
+            });
+          }
+          const trip = this.circuitBreaker.tripReason;
+          if (trip) {
+            console.warn('[ToolLoopAdapter] 熔断触发', { reason: trip.reason, toolName: trip.toolName });
+          }
+          return trip !== null;
+        },
+      ],
       toolApproval: this.createToolApproval(),
       prepareStep: async ({ messages, stepNumber, model }) => {
         console.debug('[ToolLoopAdapter] prepareStep step:', stepNumber, 'totalTools:', Object.keys(this.tools).length);
@@ -383,8 +409,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
     stepNumber: number,
     model: LanguageModel,
   ): Promise<{ activeTools?: string[] }> {
+    // 后续步骤沿用第 0 步确定的子集；返回 {} 会让 SDK 回退到全部工具
     if (stepNumber !== 0) {
-      return {};
+      return { activeTools: this.lastActiveTools ?? this.getAvailableToolNames() };
     }
 
     const lastUserMsg = [...messages].reverse().find(
@@ -393,39 +420,62 @@ export class ToolLoopAdapter implements IAgentRuntime {
     );
     if (!lastUserMsg) {
       console.debug('[ToolLoopAdapter] classify: 未找到用户消息');
-      return {};
+      return this.fallbackToAvailableTools();
     }
 
     try {
-      console.debug('[ToolLoopAdapter] classify: 开始 LLM 分类, message:', lastUserMsg.content.slice(0, 80));
-      const categories = await this.toolClassifier.classify(
-        lastUserMsg.content,
-        model,
-      );
-      console.debug('[ToolLoopAdapter] classify: LLM 返回 categories:', categories);
+      const jevEnabled = this.jevSettings.enabled && this.jevSettings.apiKey.trim().length > 0;
+      console.debug('[ToolLoopAdapter] classify: 开始分类', { usingJev: jevEnabled });
+      const categories = jevEnabled
+        ? await this.toolClassifier.classify(lastUserMsg.content, model, {
+          jevSettings: this.jevSettings,
+          abortSignal: this.abortController?.signal,
+        })
+        : await this.toolClassifier.classify(lastUserMsg.content, model);
+      console.debug('[ToolLoopAdapter] classify: 返回 categories:', categories);
 
       if (categories.length === 0) {
-        console.debug('[ToolLoopAdapter] classify: 无匹配类别, 降级到全量工具');
-        return {};
+        console.debug('[ToolLoopAdapter] classify: 无匹配类别, 降级到可用工具');
+        return this.fallbackToAvailableTools();
       }
 
-      const allTools = this.toolRegistry.getAllTools();
-      const toolNames = allTools
+      const baseTools = this.getBaseTools();
+      const activeTools = baseTools
         .filter((t) => CORE_TOOL_CATEGORIES.includes(t.category) || categories.includes(t.category))
         .map((t) => t.name);
 
       console.debug('[ToolLoopAdapter] classify: 过滤结果', {
-        totalTools: allTools.length,
+        totalTools: baseTools.length,
         matchedCategories: categories,
         coreCategories: CORE_TOOL_CATEGORIES,
-        activeTools: toolNames,
+        activeTools,
       });
 
-      return toolNames.length > 0 ? { activeTools: toolNames } : {};
+      this.lastActiveTools = activeTools.length > 0 ? activeTools : baseTools.map((t) => t.name);
+      return { activeTools: this.lastActiveTools };
     } catch (err) {
-      console.warn('[ToolLoopAdapter] classify: 分类失败, 降级到全量工具', err);
-      return {};
+      console.warn('[ToolLoopAdapter] classify: 分类失败, 降级到可用工具', {
+        errorType: err instanceof Error ? err.name : typeof err,
+      });
+      return this.fallbackToAvailableTools();
     }
+  }
+
+  /** 本次运行可用的工具：非 Expert Mode 下排除 expertOnly 与 expert 类别工具 */
+  private getBaseTools(): ToolDefinition[] {
+    return this.toolRegistry.getAllTools().filter(
+      (t) => (!t.expertOnly && t.category !== 'expert') || this.guardrailContext.expertModeEnabled,
+    );
+  }
+
+  private getAvailableToolNames(): string[] {
+    return this.getBaseTools().map((t) => t.name);
+  }
+
+  /** 分类不可用时的降级：保留可用工具集合并记录，供后续步骤继承 */
+  private fallbackToAvailableTools(): { activeTools: string[] } {
+    this.lastActiveTools = this.getAvailableToolNames();
+    return { activeTools: this.lastActiveTools };
   }
 
   /** 将 ToolDefinition[] 转换为 AI SDK ToolSet */
@@ -492,7 +542,10 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   /** 构建初始 messages */
-  private async buildMessages(input: AgentRunInput): Promise<ModelMessage[]> {
+  private async buildMessages(
+    input: AgentRunInput,
+    currentUserMessageId: string,
+  ): Promise<ModelMessage[]> {
     const messages: ModelMessage[] = [];
 
     // 1. 静态 system prompt（保持前缀稳定以命中 provider prompt cache）
@@ -510,35 +563,40 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
 
     // 3. 摘要之后的完整历史；上下文裁剪交给 AI SDK prepareStep。
-    const recentMessages = conversation
-      ? conversation.messages.slice(conversation.summaryUpToIndex ?? 0)
+    // #233：配对与歧义判定必须在完整 conversation.messages 上完成，窗口只裁剪
+    // 输出。先按 summaryUpToIndex 切片会让边界处的调用/结果彼此丢失，重复 ID
+    // 的旧结果也会因为看不到窗口外的调用而被误配。
+    const allMessages = conversation
+      ? conversation.messages
       : await this.conversationManager.getRecentMessages(
         input.conversationId,
         Number.MAX_SAFE_INTEGER,
       );
+    // summaryUpToIndex 始终按原始 messages 下标解释（与写入时一致）；
+    // 没有会话时（备用读取路径）从 0 开始。
+    const visibleFrom = conversation?.summaryUpToIndex ?? 0;
+    const { messages: rebuiltHistory } = reconstructToolProtocol(allMessages, { visibleFrom });
+    // 压缩后重建时本轮输入可能已落库（#232 保证它总是最后一行，且在窗口内）：
+    // 按本次输入的唯一 ID 排除，再统一在末尾追加一次。排除发生在窗口裁剪之后，
+    // 不改动 visibleFrom 对原始下标的解释。不能按文本比较——上一条同文用户消息
+    // 是真实历史。
+    const history = rebuiltHistory.filter((message) => message.id !== currentUserMessageId);
     const toolNames = new Map<string, string>();
-    const pendingToolCallIds = new Set<string>();
-    for (const msg of recentMessages) {
-      if (msg.role === 'assistant') {
-        for (const toolCall of msg.toolCalls ?? []) {
-          toolNames.set(toolCall.id, toolCall.name);
-          pendingToolCallIds.add(toolCall.id);
-        }
+    for (const msg of history) {
+      if (msg.role !== 'assistant') continue;
+      for (const toolCall of msg.toolCalls ?? []) {
+        toolNames.set(toolCall.id, toolCall.name);
       }
-      if (msg.role === 'tool') {
-        if (!msg.toolCallId || !pendingToolCallIds.delete(msg.toolCallId)) continue;
-      }
+    }
+    for (const msg of history) {
       messages.push(this.convertToModelMessage(msg, toolNames.get(msg.toolCallId ?? '')));
     }
 
-    // 4. Current user message (if not already in history)
-    const lastMsg = recentMessages[recentMessages.length - 1];
-    if (!lastMsg || lastMsg.role !== 'user' || lastMsg.content !== input.userMessage) {
-      messages.push({
-        role: 'user',
-        content: input.userMessage,
-      });
-    }
+    // 4. 本轮输入始终追加且只追加一次
+    messages.push({
+      role: 'user',
+      content: input.userMessage,
+    });
 
     return messages;
   }
@@ -632,13 +690,19 @@ export class ToolLoopAdapter implements IAgentRuntime {
     );
     if (cutoff === null) return false;
 
+    // #233：摘要输入同样在完整历史上配对，再按调用方 parent 的原始下标
+    // [startIndex, cutoff) 选取逻辑消息。这样边界两侧的调用与结果不会被拆开：
+    // 父调用可见时结果跟随进入摘要（即使物理位置在 cutoff 之后），父调用不可见
+    // 时结果也不会作为孤立行出现在保留侧。
+    const { messages: summaryInput } = reconstructToolProtocol(conversation.messages, {
+      visibleFrom: startIndex,
+      visibleUntil: cutoff,
+    });
+
     try {
       const result = await generateText({
         model: await this.createModel(),
-        prompt: buildSummaryPrompt(
-          conversation.messages.slice(startIndex, cutoff),
-          conversation.summary,
-        ),
+        prompt: buildSummaryPrompt(summaryInput, conversation.summary),
         temperature: 0.2,
         maxOutputTokens: summaryOutputTokens,
       });
@@ -650,7 +714,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
       });
       return true;
     } catch (error) {
-      console.warn('[ToolLoopAdapter] 上下文摘要失败，继续使用原始历史', error);
+      console.warn('[ToolLoopAdapter] 上下文摘要失败，继续使用原始历史', {
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
       return false;
     }
   }
@@ -745,23 +811,54 @@ export class ToolLoopAdapter implements IAgentRuntime {
     return this.providerConfig.models?.[this.modelId];
   }
 
-  /** 从 StepResult 中提取并记录工具调用 */
+  /**
+   * 把 StepResult 还原成真实的 ToolResult。
+   *
+   * - 工具正常返回时，output 本身就是 ToolResult（executeTool 已归一化），直接透传，
+   *   避免把 `{ success: false, error }` 二次包装成 `{ success: true, data: ... }`；
+   * - 工具抛错时 AI SDK 不产出 toolResults，而是在 content 中给出 tool-error part，
+   *   必须转成失败结果，绝不能伪造成功；
+   * - 两者都不存在时返回 undefined：结果缺失是「未知」，不能伪造失败或成功。
+   */
+  private resolveToolResult(
+    tc: { toolCallId: string; toolName: string },
+    stepResult: StepToolData,
+  ): ToolResult | undefined {
+    const tr = stepResult.toolResults?.find((r) => r.toolCallId === tc.toolCallId);
+    if (tr?.output !== undefined) {
+      if (tr.output !== null && typeof tr.output === 'object' && 'success' in (tr.output as Record<string, unknown>)) {
+        return tr.output as ToolResult;
+      }
+      return { success: true, data: tr.output };
+    }
+    // 以 part 存在为准：error 为空/假值仍代表工具执行失败，不能降级为未知。
+    const errPart = stepResult.content?.find(
+      (p) => p?.type === 'tool-error' && p?.toolCallId === tc.toolCallId,
+    );
+    if (errPart) {
+      return { success: false, error: this.formatToolError(errPart.error) };
+    }
+    return undefined;
+  }
+
+  private formatToolError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return message.trim() || '工具执行失败（未提供错误信息）';
+  }
+
+  /** 从 StepResult 中提取并记录工具调用；缺失结果时不写 result 字段 */
   private recordStepToolCalls(
-    stepResult: { toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>; toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>> },
+    stepResult: StepToolData,
     toolCalls: ToolCallRecord[],
     onToolCall?: (record: ToolCallRecord) => void,
   ) {
     const stepToolCalls = stepResult.toolCalls ?? [];
-    const stepToolResults = stepResult.toolResults ?? [];
     for (const tc of stepToolCalls) {
-      const tr = stepToolResults.find((r) => r.toolCallId === tc.toolCallId);
-      const result: ToolResult = tr?.output
-        ? { success: true, data: tr.output }
-        : { success: true };
+      const result = this.resolveToolResult(tc, stepResult);
       const record: ToolCallRecord = {
         toolName: tc.toolName,
         params: (tc.input as Record<string, unknown>) ?? {},
-        result,
+        ...(result ? { result } : {}),
         riskLevel: 'low' as RiskLevel,
         confirmed: true,
         timestamp: Date.now(),
@@ -772,17 +869,22 @@ export class ToolLoopAdapter implements IAgentRuntime {
     }
   }
 
-  /** 按 assistant tool-call → tool-result 顺序持久化，保证下一轮历史符合协议。 */
+  /**
+   * 把同一工具步骤的调用行与（存在的）结果行作为一批原子写入，保持步骤内顺序。
+   * 结果缺失时只写调用行——绝不伪造结果行。
+   */
   private async persistStepMessages(
     conversationId: string,
-    stepResult: { toolCalls?: Array<TypedToolCall<Record<string, AISdkTool>>>; toolResults?: Array<TypedToolResult<Record<string, AISdkTool>>> },
+    stepResult: StepToolData,
   ) {
     const stepToolCalls = stepResult.toolCalls ?? [];
-    const stepToolResults = stepResult.toolResults ?? [];
     if (stepToolCalls.length === 0) return;
 
-    await this.conversationManager.addMessage(conversationId, {
-      id: crypto.randomUUID(),
+    // 同一步骤的 assistant 行 ID 预先确定：每个结果行通过 parentMessageId
+    // 指回它，避免重复 toolCallId 或同毫秒写入时靠时间戳猜归属。
+    const assistantMessageId = crypto.randomUUID();
+    const rows: StoredMessage[] = [{
+      id: assistantMessageId,
       role: 'assistant',
       content: '',
       toolCalls: stepToolCalls.map((toolCall) => ({
@@ -790,16 +892,21 @@ export class ToolLoopAdapter implements IAgentRuntime {
         name: toolCall.toolName,
         params: (toolCall.input as Record<string, unknown>) ?? {},
       })),
-    });
+    }];
 
     for (const tc of stepToolCalls) {
-      const tr = stepToolResults.find((r) => r.toolCallId === tc.toolCallId);
-      await this.conversationManager.addMessage(conversationId, {
-        id: tc.toolCallId,
+      const result = this.resolveToolResult(tc, stepResult);
+      if (!result) continue;
+      rows.push({
+        // 独立 UUID 作主键；原始 toolCallId 保留在字段里，不参与主键
+        id: crypto.randomUUID(),
         role: 'tool',
-        content: JSON.stringify(tr?.output ?? { success: true }),
+        content: JSON.stringify(result),
         toolCallId: tc.toolCallId,
+        parentMessageId: assistantMessageId,
       });
     }
+
+    await this.conversationManager.addMessages(conversationId, rows);
   }
 }

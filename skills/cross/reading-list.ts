@@ -51,7 +51,7 @@ export const readingListSkill: Omit<Skill, 'id' | 'createdAt' | 'updatedAt' | 'e
 
 1. 展示在线阅读列表
 2. 询问要读哪一篇（最近添加的优先推荐）
-3. 用 \`tabs_create\` 在新标签页打开该文章
+3. 用 \`tabs_manage({ action: "create", url })\` 在新标签页打开该文章
 4. 打开后，询问用户：
    - **已读完** → \`bookmarks_delete\` 从列表中移除
    - **还没读完** → 保留，下次继续

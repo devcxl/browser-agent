@@ -46,6 +46,7 @@ function createMockDb(): Database {
     updateConversationTitleIfPending: vi.fn().mockResolvedValue(true),
     deleteConversation: vi.fn(),
     listConversationsByUpdatedAt: vi.fn(),
+    appendMessages: vi.fn().mockImplementation(async (rows: DbMessage[]) => rows),
     putMessage: vi.fn(),
     getMessage: vi.fn(),
     getMessagesByConversation: vi.fn(),
@@ -53,12 +54,6 @@ function createMockDb(): Database {
     deleteMessage: vi.fn(),
     deleteMessagesByConversation: vi.fn(),
     countMessagesByConversation: vi.fn(),
-    putToolCallLog: vi.fn(),
-    getToolCallLogsByConversation: vi.fn(),
-    deleteToolCallLogsByConversation: vi.fn(),
-    putSnapshot: vi.fn(),
-    getSnapshotsByTimeRange: vi.fn(),
-    deleteOldSnapshots: vi.fn(),
     putMessagesBatch: vi.fn(),
     getDB: vi.fn(),
     close: vi.fn(),
@@ -185,9 +180,10 @@ describe('ConversationManager', () => {
     };
     await mgr.addMessage('c1', msg);
 
-    expect(db.putMessage).toHaveBeenCalledWith(
+    expect(db.appendMessages).toHaveBeenCalledWith([
       expect.objectContaining({ id: 'm1', conversationId: 'c1' }),
-    );
+    ]);
+    expect(db.putMessage).not.toHaveBeenCalled();
     expect(db.putConversation).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'c1', updatedAt: expect.any(Number) }),
     );
@@ -214,12 +210,12 @@ describe('ConversationManager', () => {
     };
     await mgr.addMessage('c1', msg);
 
-    expect(db.putMessage).toHaveBeenCalledWith(
+    expect(db.appendMessages).toHaveBeenCalledWith([
       expect.objectContaining({
         toolCalls: '[{"id":"call_1","name":"getWeather","params":{"city":"Beijing"},"result":"Sunny"}]',
         toolCallId: undefined,
       }),
-    );
+    ]);
   });
 
   // #10b (Slice B)
@@ -236,7 +232,7 @@ describe('ConversationManager', () => {
     };
     await mgr.addMessage('c1', msg);
 
-    expect(db.putMessage).toHaveBeenCalledWith(
+    expect(db.appendMessages).toHaveBeenCalledWith([
       expect.objectContaining({
         id: 'm-tool',
         role: 'tool',
@@ -244,7 +240,61 @@ describe('ConversationManager', () => {
         toolCallId: 'call_real_1',
         toolCalls: undefined,
       }),
-    );
+    ]);
+  });
+
+  // #232
+  it('addMessages() 以单批原子写入整步并只更新一次 updatedAt', async () => {
+    const conv = mockConv({ id: 'c1' });
+    vi.mocked(db.getConversation).mockResolvedValue(conv);
+
+    await mgr.addMessages('c1', [
+      {
+        id: 'call-row',
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'call_1', name: 'tabs_query', params: {} }],
+      },
+      {
+        id: 'result-row',
+        role: 'tool',
+        content: '{"success":true}',
+        toolCallId: 'call_1',
+        parentMessageId: 'call-row',
+      },
+    ]);
+
+    expect(db.appendMessages).toHaveBeenCalledOnce();
+    const rows = vi.mocked(db.appendMessages).mock.calls[0]![0];
+    expect(rows.map((row) => row.id)).toEqual(['call-row', 'result-row']);
+    expect(rows[1]).toEqual(expect.objectContaining({
+      conversationId: 'c1',
+      parentMessageId: 'call-row',
+      timestamp: expect.any(Number),
+    }));
+    expect(db.putMessage).not.toHaveBeenCalled();
+    expect(db.putConversation).toHaveBeenCalledOnce();
+  });
+
+  // #232
+  it('addMessages() 空数组为无操作（不写库、不触碰 updatedAt）', async () => {
+    await mgr.addMessages('c1', []);
+
+    expect(db.appendMessages).not.toHaveBeenCalled();
+    expect(db.putConversation).not.toHaveBeenCalled();
+  });
+
+  // #232
+  it('addMessages() 将写入失败向上抛出（不静默吞掉）', async () => {
+    vi.mocked(db.getConversation).mockResolvedValue(mockConv({ id: 'c1' }));
+    vi.mocked(db.appendMessages).mockRejectedValueOnce(new Error('write failed'));
+
+    await expect(mgr.addMessages('c1', [{
+      id: 'm-fail',
+      role: 'user',
+      content: 'x',
+    }])).rejects.toThrow('write failed');
+    expect(db.putConversation).not.toHaveBeenCalled();
   });
 
   // #10c (Slice F)

@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import type { ProviderConfig, UserPreferences } from '@/shared/types';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import type { JevSettings, ProviderConfig, UserPreferences } from '@/shared/types';
 import type { AgentSettings, ExpertModeSettings } from '../types';
 import type { Skill, SkillSubscription } from '@/shared/types';
+import type { ConnectionTestFailureReason, ConnectionTestResult } from '@/provider/connection-test';
 import { ConfigStore, SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
 import { cn } from '../utils';
@@ -15,7 +16,6 @@ import {
   SettingsInput,
   SettingsSelect,
   SettingsSwitch,
-  SettingsTextarea,
 } from './SettingsControls';
 import { FloatingButtonSection } from './FloatingButtonSection';
 
@@ -29,6 +29,43 @@ const ACCENT_PRESETS = [
   '#b45309',
 ] as const;
 
+/** 把失败原因转换为简明排查提示（不泄露上游报文、headers 或密钥） */
+function getConnectionTestReasonMessage(
+  reason: ConnectionTestFailureReason,
+  t: (key: string) => string,
+): string {
+  switch (reason) {
+    case 'missing-model':
+      return t('settings.provider.testReasonMissingModel');
+    case 'auth':
+      return t('settings.provider.testReasonAuth');
+    case 'timeout':
+      return t('settings.provider.testReasonTimeout');
+    case 'empty-response':
+      return t('settings.provider.testReasonEmptyResponse');
+    case 'request-failed':
+      return t('settings.provider.testReasonRequestFailed');
+    default:
+      return t('settings.provider.testReasonRequestFailed');
+  }
+}
+
+/** 判定 Provider 连接与模型关键配置（endpoint/api/apiKey/defaultModelId/models）是否发生变更 */
+function hasProviderConnectionConfigChanged(a: ProviderConfig, b: ProviderConfig): boolean {
+  if (a.endpoint !== b.endpoint || a.api !== b.api || a.apiKey !== b.apiKey) {
+    return true;
+  }
+  if (a.defaultModelId !== b.defaultModelId) {
+    return true;
+  }
+  const aKeys = Object.keys(a.models ?? {});
+  const bKeys = Object.keys(b.models ?? {});
+  if (aKeys.length !== bKeys.length) {
+    return true;
+  }
+  return aKeys.some((k) => !(k in (b.models ?? {})));
+}
+
 interface Props {
   providers: ProviderConfig[];
   agentSettings: AgentSettings;
@@ -36,35 +73,65 @@ interface Props {
   onSaveProviders: (providers: ProviderConfig[]) => void;
   onSaveAgentSettings: (s: AgentSettings) => void;
   onSaveExpertMode: (e: ExpertModeSettings) => void;
-  onTestConnection: (provider: ProviderConfig) => Promise<boolean>;
+  onTestConnection: (provider: ProviderConfig) => Promise<ConnectionTestResult>;
   onClose: () => void;
 }
 
 export function SettingsPanel({
   providers,
-  agentSettings,
   expertMode,
   onSaveProviders,
-  onSaveAgentSettings,
   onSaveExpertMode,
   onTestConnection,
   onClose,
 }: Props) {
   const { t, locale } = useI18n();
-  const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'skills' | 'floatingButton'>('appearance');
+  const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'jev' | 'skills' | 'floatingButton'>('appearance');
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
+  const [jevSettings, setJevSettings] = useState<JevSettings>({ enabled: false, apiKey: '' });
+  const [jevApiKeyInput, setJevApiKeyInput] = useState('');
+  const [jevSaveStatus, setJevSaveStatus] = useState<'saved' | 'error' | null>(null);
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
   const [openSelectId, setOpenSelectId] = useState<string | null>(null);
 
   // Provider
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null | undefined>(undefined);
-  const [testingIdx, setTestingIdx] = useState<number | null>(null);
-  const [testResult, setTestResult] = useState<Record<number, 'ok' | 'fail'>>({});
+  const [testingProviderId, setTestingProviderId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, ConnectionTestResult>>({});
+  const activeTestVersionsRef = useRef<Record<string, number>>({});
+  const prevProvidersRef = useRef<ProviderConfig[]>(providers);
+
+  useEffect(() => {
+    const prevMap = new Map(prevProvidersRef.current.map((p) => [p.id, p]));
+    prevProvidersRef.current = providers;
+
+    setTestResults((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const id of Object.keys(next)) {
+        const current = providers.find((p) => p.id === id);
+        const previous = prevMap.get(id);
+        if (!current) {
+          delete next[id];
+          changed = true;
+        } else if (previous && hasProviderConnectionConfigChanged(previous, current)) {
+          activeTestVersionsRef.current[id] = (activeTestVersionsRef.current[id] ?? 0) + 1;
+          delete next[id];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [providers]);
 
   useEffect(() => {
     ConfigStore.getInstance().get<UserPreferences>('preferences').then((prefs) => {
       setTheme(prefs.theme ?? 'system');
       setAccentColor(normalizeAccentColor(prefs.accentColor));
+    });
+    ConfigStore.getInstance().get<JevSettings>('jevSettings').then((settings) => {
+      setJevSettings(settings);
+      setJevApiKeyInput(settings.apiKey);
     });
   }, []);
 
@@ -89,20 +156,104 @@ export function SettingsPanel({
   };
 
   const handleSaveProvider = (provider: ProviderConfig) => {
+    activeTestVersionsRef.current[provider.id] = (activeTestVersionsRef.current[provider.id] ?? 0) + 1;
+    setTestResults((prev) => {
+      if (!(provider.id in prev)) return prev;
+      const next = { ...prev };
+      delete next[provider.id];
+      return next;
+    });
+    if (testingProviderId === provider.id) {
+      setTestingProviderId(null);
+    }
     const exists = providers.some((item) => item.id === provider.id);
     onSaveProviders(exists ? providers.map((item) => item.id === provider.id ? provider : item) : [...providers, provider]);
     setEditingProvider(undefined);
   };
 
+  const handleSaveJevApiKey = async () => {
+    const apiKey = jevApiKeyInput.trim();
+    if (!apiKey) return;
+
+    const nextSettings = { ...jevSettings, apiKey };
+    try {
+      await ConfigStore.getInstance().set('jevSettings', nextSettings);
+      setJevSettings(nextSettings);
+      setJevApiKeyInput(apiKey);
+      setJevSaveStatus('saved');
+    } catch {
+      setJevSaveStatus('error');
+    }
+  };
+
+  const handleClearJevApiKey = async () => {
+    const nextSettings = { enabled: false, apiKey: '' };
+    try {
+      await ConfigStore.getInstance().set('jevSettings', nextSettings);
+      setJevSettings(nextSettings);
+      setJevApiKeyInput('');
+      setJevSaveStatus(null);
+    } catch {
+      setJevSaveStatus('error');
+    }
+  };
+
+  const handleToggleJev = async () => {
+    if (!jevSettings.apiKey) return;
+    const nextSettings = { ...jevSettings, enabled: !jevSettings.enabled };
+    try {
+      await ConfigStore.getInstance().set('jevSettings', nextSettings);
+      setJevSettings(nextSettings);
+      setJevSaveStatus(null);
+    } catch {
+      setJevSaveStatus('error');
+    }
+  };
+
   const handleDeleteProvider = (id: string) => {
+    activeTestVersionsRef.current[id] = (activeTestVersionsRef.current[id] ?? 0) + 1;
+    setTestResults((prev) => {
+      if (!(id in prev)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    if (testingProviderId === id) {
+      setTestingProviderId(null);
+    }
     onSaveProviders(providers.filter((p) => p.id !== id));
   };
 
-  const handleTestConnection = async (idx: number) => {
-    setTestingIdx(idx);
-    const ok = await onTestConnection(providers[idx]!);
-    setTestResult((prev) => ({ ...prev, [idx]: ok ? 'ok' : 'fail' }));
-    setTestingIdx(null);
+  const handleTestConnection = async (provider: ProviderConfig) => {
+    const providerId = provider.id;
+    const version = (activeTestVersionsRef.current[providerId] ?? 0) + 1;
+    activeTestVersionsRef.current[providerId] = version;
+    setTestingProviderId(providerId);
+
+    try {
+      const result = await onTestConnection(provider);
+      if (activeTestVersionsRef.current[providerId] !== version) {
+        return;
+      }
+      const current = prevProvidersRef.current.find((p) => p.id === providerId);
+      if (!current || hasProviderConnectionConfigChanged(current, provider)) {
+        return;
+      }
+
+      setTestResults((prev) => ({ ...prev, [providerId]: result }));
+    } catch {
+      if (activeTestVersionsRef.current[providerId] !== version) {
+        return;
+      }
+      setTestResults((prev) => ({
+        ...prev,
+        [providerId]: { ok: false, reason: 'request-failed' },
+      }));
+    } finally {
+      if (activeTestVersionsRef.current[providerId] === version) {
+        setTestingProviderId(null);
+      }
+    }
   };
 
   // ===== Skills tab state =====
@@ -243,7 +394,7 @@ export function SettingsPanel({
         </div>
 
         <div className="flex border-b border-hairline px-5 shrink-0">
-          {(['appearance', 'provider', 'agent', 'expert', 'skills', 'floatingButton'] as const).map((tabKey) => (
+          {(['appearance', 'provider', 'agent', 'expert', 'jev', 'skills', 'floatingButton'] as const).map((tabKey) => (
             <button
               key={tabKey}
               type="button"
@@ -276,9 +427,11 @@ export function SettingsPanel({
             />
           ) : (
             <div className="space-y-3">
-              {providers.map((provider, idx) => {
+              {providers.map((provider) => {
                 const models = Object.values(provider.models ?? {});
                 const defaultModel = provider.models?.[provider.defaultModelId ?? ''];
+                const isTesting = testingProviderId === provider.id;
+                const result = testResults[provider.id];
                 return (
                   <div key={provider.id} className="border border-hairline rounded-xl p-3 space-y-2">
                     <div className="flex items-start justify-between gap-3">
@@ -289,11 +442,31 @@ export function SettingsPanel({
                       </div>
                       <div className="flex gap-1 shrink-0">
                         <button type="button" onClick={() => setEditingProvider(provider)} className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft">Manage</button>
-                        <button type="button" onClick={() => handleTestConnection(idx)} disabled={testingIdx === idx} className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50">{testingIdx === idx ? 'Testing' : 'Test'}</button>
+                        <button
+                          type="button"
+                          onClick={() => handleTestConnection(provider)}
+                          disabled={isTesting}
+                          aria-busy={isTesting ? 'true' : 'false'}
+                          data-testid={`test-provider-button-${provider.id}`}
+                          className="px-2 py-1 text-xs rounded-full border border-hairline text-mute hover:bg-surface-soft disabled:opacity-50"
+                        >
+                          {isTesting ? t('settings.provider.testing') : t('settings.provider.test')}
+                        </button>
                         <button type="button" onClick={() => handleDeleteProvider(provider.id)} className="px-2 py-1 text-xs rounded-full border border-danger/30 text-danger hover:bg-red-50">{t('settings.provider.delete')}</button>
                       </div>
                     </div>
-                    {testResult[idx] && <div className={testResult[idx] === 'ok' ? 'text-xs text-success' : 'text-xs text-danger'}>{testResult[idx] === 'ok' ? 'Connection verified' : 'Connection failed'}</div>}
+                    {result && (
+                      <div
+                        data-testid={`connection-test-result-${provider.id}`}
+                        role={result.ok ? 'status' : 'alert'}
+                        aria-live={result.ok ? 'polite' : 'assertive'}
+                        className={result.ok ? 'text-xs text-success' : 'text-xs text-danger'}
+                      >
+                        {result.ok
+                          ? t('settings.provider.testSuccess')
+                          : `${t('settings.provider.testFailed')}: ${getConnectionTestReasonMessage(result.reason, t)}`}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -303,90 +476,15 @@ export function SettingsPanel({
           ))}
 
           {tab === 'agent' && (
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.maxToolRounds')}</span>
-                <SettingsInput
-                  type="number"
-                  value={agentSettings.maxToolRounds}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, maxToolRounds: Number(e.target.value) })
-                  }
-                  containerClassName="mt-1"
-                  min={1}
-                  max={100}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.tokenBudgetMargin')}</span>
-                <SettingsInput
-                  type="number"
-                  value={agentSettings.tokenBudgetMargin}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, tokenBudgetMargin: Number(e.target.value) })
-                  }
-                  containerClassName="mt-1"
-                  min={256}
-                  max={32768}
-                  step={256}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.microcompactKeepRecent')}</span>
-                <SettingsInput
-                  type="number"
-                  value={agentSettings.microcompactKeepRecent}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, microcompactKeepRecent: Number(e.target.value) })
-                  }
-                  containerClassName="mt-1"
-                  min={0}
-                  max={100}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.microcompactMinChars')}</span>
-                <SettingsInput
-                  type="number"
-                  value={agentSettings.microcompactMinChars}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, microcompactMinChars: Number(e.target.value) })
-                  }
-                  containerClassName="mt-1"
-                  min={100}
-                  max={100000}
-                  step={100}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.microcompactExcludeTools')}</span>
-                <SettingsInput
-                  type="text"
-                  value={agentSettings.microcompactExcludeTools.join(', ')}
-                  onChange={(e) =>
-                    onSaveAgentSettings({
-                      ...agentSettings,
-                      microcompactExcludeTools: e.target.value
-                        .split(',')
-                        .map((s) => s.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                  placeholder={t('settings.agent.microcompactExcludeToolsPlaceholder')}
-                  className="mt-1"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-mute">{t('settings.agent.systemPrompt')}</span>
-                <SettingsTextarea
-                  value={agentSettings.systemPrompt}
-                  onChange={(e) =>
-                    onSaveAgentSettings({ ...agentSettings, systemPrompt: e.target.value })
-                  }
-                  rows={4}
-                  className="mt-1 resize-none"
-                />
-              </label>
+            <div
+              data-testid="agent-circuit-breaker-info"
+              className="space-y-2 rounded-xl border border-hairline p-3"
+            >
+              <h3 className="text-sm font-medium text-ink">{t('settings.agent.circuitBreakerTitle')}</h3>
+              <p className="text-xs leading-relaxed text-mute">{t('settings.agent.circuitBreakerDesc')}</p>
+              <p className="rounded-lg bg-surface-soft px-3 py-2 text-xs leading-relaxed text-mute">
+                {t('settings.agent.circuitBreakerHint')}
+              </p>
             </div>
           )}
 
@@ -423,6 +521,71 @@ export function SettingsPanel({
                     </label>
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'jev' && (
+            <div className="max-w-xl space-y-4">
+              <div>
+                <h3 className="text-sm font-medium text-ink">{t('settings.jev.title')}</h3>
+                <p className="mt-1 text-xs leading-relaxed text-mute">{t('settings.jev.description')}</p>
+              </div>
+
+              <label className="block">
+                <span className="text-sm text-mute">{t('settings.jev.apiKey')}</span>
+                <SettingsInput
+                  type="password"
+                  autoComplete="off"
+                  aria-label={t('settings.jev.apiKey')}
+                  data-testid="jev-api-key-input"
+                  value={jevApiKeyInput}
+                  onChange={(event) => {
+                    setJevApiKeyInput(event.target.value);
+                    setJevSaveStatus(null);
+                  }}
+                  placeholder={t('settings.jev.apiKeyPlaceholder')}
+                  className="mt-1"
+                />
+              </label>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveJevApiKey}
+                  disabled={!jevApiKeyInput.trim()}
+                  className="rounded-md bg-primary px-3 py-1.5 text-sm text-on-primary hover:bg-primary-active disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t('settings.jev.saveApiKey')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearJevApiKey}
+                  disabled={!jevSettings.apiKey}
+                  className="rounded-md border border-hairline px-3 py-1.5 text-sm text-mute hover:bg-surface-soft disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t('settings.jev.clearApiKey')}
+                </button>
+              </div>
+
+              <label className="flex items-center gap-2">
+                <SettingsSwitch
+                  checked={jevSettings.enabled}
+                  disabled={!jevSettings.apiKey}
+                  aria-label={t('settings.jev.enabled')}
+                  onClick={handleToggleJev}
+                />
+                <span className="text-sm font-medium text-ink">{t('settings.jev.enabled')}</span>
+              </label>
+
+              <p className="text-xs leading-relaxed text-mute">{t('settings.jev.dataDisclosure')}</p>
+              <p className="rounded-lg bg-surface-soft px-3 py-2 text-xs leading-relaxed text-mute">
+                {t('settings.jev.storageDisclosure')}
+              </p>
+              {jevSaveStatus && (
+                <p role="status" className={jevSaveStatus === 'saved' ? 'text-xs text-success' : 'text-xs text-danger'}>
+                  {t(jevSaveStatus === 'saved' ? 'settings.jev.saved' : 'settings.jev.saveFailed')}
+                </p>
               )}
             </div>
           )}

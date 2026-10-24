@@ -36,24 +36,6 @@ turndown.addRule('articleHeadings', {
   },
 });
 
-turndown.addRule('preCodeBlock', {
-  filter(node) {
-    const firstChild = node.firstChild as HTMLElement | null;
-    return (
-      node.nodeName === 'PRE' &&
-      firstChild?.nodeName === 'CODE' &&
-      !firstChild.className &&
-      !!(node as HTMLElement).className
-    );
-  },
-  replacement(_content, node) {
-    const pre = node as HTMLElement;
-    const language = (pre.className.match(/language-(\S+)/) || [])[1] || '';
-    const code = pre.textContent || '';
-    return `\n\n\`\`\`${language}\n${code}\n\`\`\`\n\n`;
-  },
-});
-
 turndown.addRule('figcaption', {
   filter: 'figcaption',
   replacement(content) {

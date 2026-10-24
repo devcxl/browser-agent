@@ -1,5 +1,9 @@
 # 开发文档: T15 - Agent Runtime
 
+> **历史方案**：本文记录初版 `AgentLoop` / `ContextBuilder` 实现方案，已由
+> [AI SDK v7 迁移 ADR](../adr/2026-07-17-ai-sdk-migration.md) 取代，代码片段不是当前运行时的实现说明。
+> 当前 system message 由 `ToolLoopAdapter.buildSystemMessage()` 构造；旧的默认提示词未被运行时使用，已删除，相关安全加固跟踪于 issue #198。
+
 **Project:** Browser Agent
 **Task ID:** T15
 **Slug:** agent-runtime

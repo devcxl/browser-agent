@@ -19,7 +19,7 @@
 
 ## 决策 1：vendor 引擎源码并锁定 `616c1dd`，只使用引擎类入口
 
-1. 上游 9 个文件复制到 `src/content/floating-widget/grokbot/`（`engine.ts`、`painter.ts`、`geometry.ts`、`theme.ts`、`easing.ts`、`types.ts`、`data/{expressions,shapes,states}.ts`），另加本项目 `index.ts` 桶文件统一导出。上游相对导入结构保持不变，未改上游代码。
+1. 上游 9 个文件复制到 `src/content/floating-widget/grokbot/`（`engine.ts`、`painter.ts`、`geometry.ts`、`theme.ts`、`easing.ts`、`types.ts`、`data/{expressions,shapes,states}.ts`），另加本项目 `index.ts` 桶文件统一导出。上游相对导入结构保持不变（除视线追踪纵向增益有一处显式标记的本地微调，见下文局部差异说明）。
 2. **锁 commit `616c1dd`**，commit 同时写入桶文件头注释与 `THIRD_PARTY_NOTICES.md`；不跟随 `main`。
 3. 只使用引擎类入口 `new GrokBot(canvas, options)`。**不内置** `element.ts`（`<grok-bot>` 自定义元素，自带 **open** shadow root）与 `react.tsx`。
 4. 不新增 npm / git 依赖，`package.json` 不变，运行时仍为零依赖。
@@ -148,6 +148,18 @@
 - 上游是单作者、9 个 commit、v0.1.0、视觉语言刚经历一次特性提交后随即 revert 的项目；**不锁版本会持续漂移**。本项目锁 `616c1dd`，上游后续提交不会自动进入。
 - 升级方式：手工比对上游 diff → 重放至 `grokbot/` → 跑 `status-map` / `bot-state-controller` / `widget-status` / `useEmbeddedStatusBridge` 测试 → 人工视觉验收 → 同步 `THIRD_PARTY_NOTICES.md` 的 commit 与文件清单。
 - 代价：无法自动获得上游修复；vendored 副本自包含，即使上游弃更也不影响现状。
+
+### 局部差异披露（vendored 代码微调）
+
+- **`geometry.ts` 中的视线纵向增益**：
+  在 `mapNormalizedGaze` 中，上游锁定版本 `616c1dd` 的 y 增益为 `8.4`，x 增益为 `13.2`。在上游该参数下，眼球在纵向的运动行程明显小于横向（仅约 63%），导致视线上下追踪时光标已至视口边缘而眼球位移不显著。
+  本项目在 `src/content/floating-widget/grokbot/geometry.ts` 中将 y 增益由 `8.4` 局部微调至 `13.2`，使得视线在横纵方向具有等幅的视觉运动范围。
+  **特别说明**：此改动为本项目根据悬浮球全视口视线追踪需求所做的**本地偏离（local deviation）**，锁定上游版本仍为 `616c1dd`，不代表或暗示上游已变更。后续升级上游时需保留此本地微调。
+
+- **`geometry.ts` 与 `painter.ts` 中的真实球面俯仰投影（True Spherical Pitch）**：
+  上游仅实现了基于经度（longitude）的转头（turn）与平面平移的 gaze，没有纬度俯仰（pitch）。这导致向下看（bottom-center / bottom-left）时，基准高位表情（如 idle 的 expression 0，自然眼位偏上约 52 像素）仅靠平移无法移入球体下半球；而单纯在 DOM 容器做 CSS rotateX 倾斜则会破坏球体正圆形状（变成椭圆）且无相对透视位移。
+  本项目在 `geometry.ts` 中为 `projectEye` 扩展了可选的 `pitch` 纬度投影与垂直透视缩放（`pitch = 0` 时与上游逐位一致），并在 `painter.ts` 引入 `calculateTargetPitch` 与跨双眼共享的每帧 `clampSafePitch` 安全钳制，保证球体保持正圆、双眼在向下注视时能真实越过中轴俯视且无边缘裁切。
+  **特别说明**：此改动为本项目本地几何增强，锁定上游版本仍为 `616c1dd`，后续升级上游时需保留此本地扩展。
 
 ### 已知限制
 

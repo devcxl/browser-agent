@@ -205,6 +205,57 @@ describe('FloatingWidget', () => {
       expect(btn.style.top).toBe('88px');
     });
 
+    // 回归：保存位置来自更高视口或异常配置，窗口变矮/刷新后可能越界，
+    // 直接渲染会让按钮落在视口外、无法点击。
+    it('保存的 top 超出视口时 mount 后仍位于视口内，且不回写配置', () => {
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(720);
+      const shadow = mountWithShadow({
+        ...baseSettings,
+        position: { side: 'right', top: 2000 },
+      });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      // 720 - 60（按钮高）- 8（边距）
+      expect(btn.style.top).toBe('652px');
+      expect(btn.style.right).toBe('0px');
+      // 仅修正渲染位置，不静默改写持久化设置
+      expect(currentBrowser.local.set).not.toHaveBeenCalled();
+    });
+
+    it('apply 传入超出视口的 top 时渲染位置被 clamp 到视口内', () => {
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(720);
+      const shadow = mountWithShadow({
+        ...baseSettings,
+        position: { side: 'left', top: 120 },
+      });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      const alive = widget?.apply({
+        ...baseSettings,
+        position: { side: 'left', top: 2000 },
+      });
+
+      expect(alive).toBe(true);
+      expect(btn.style.top).toBe('652px');
+      expect(currentBrowser.local.set).not.toHaveBeenCalled();
+    });
+
+    it('保存位置越界时拖拽基准仍为 clamp 后的可见位置', () => {
+      vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(720);
+      const shadow = mountWithShadow({
+        ...baseSettings,
+        position: { side: 'right', top: 2000 },
+      });
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+
+      firePointer(btn, 'pointerdown', 100, 100);
+      firePointer(btn, 'pointermove', 120, 130);
+
+      // 基准 top 不得回落到越界的 2000，否则拖拽中按钮会跳出视口
+      expect(btn.style.top).toBe('652px');
+      expect(btn.style.transform).toBe('translate(20px, 30px)');
+    });
+
     it('apply 位置为 null（清除保存位置）时保持当前定位返回 true', () => {
       const shadow = mountWithShadow({
         ...baseSettings,
@@ -550,6 +601,41 @@ describe('FloatingWidget', () => {
         },
       });
       expect(document.getElementById('ba-floating-host')).toBeNull();
+    });
+  });
+
+  describe('健壮性分支', () => {
+    it('未按下拖拽时 pointermove / pointerup 不移动按钮', () => {
+      const shadow = mountWithShadow();
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+      const before = btn.style.transform;
+
+      firePointer(btn, 'pointermove', 400, 300);
+      firePointer(btn, 'pointerup', 400, 300);
+
+      expect(btn.style.transform).toBe(before);
+    });
+
+    it('Canvas 不可用时按钮兜底底色跟随主色变更', () => {
+      vi.mocked(HTMLCanvasElement.prototype.getContext).mockReturnValue(null);
+      const shadow = mountWithShadow();
+      const btn = shadow.querySelector('button.float-btn') as HTMLButtonElement;
+      // 降级时立即写入主色，避免透明按钮不可见
+      expect(btn.style.background).toBe('rgb(194, 65, 12)');
+
+      const calls = currentBrowser.browser.storage.onChanged.addListener.mock.calls;
+      const handler = calls[calls.length - 1]![0] as (changes: Record<string, { newValue?: unknown }>) => void;
+      handler({ preferences: { newValue: { accentColor: '#2563eb' } } });
+
+      expect(btn.style.background).toBe('rgb(37, 99, 235)');
+    });
+
+    it('storage 监听注册失败时仍能挂载', () => {
+      vi.spyOn(ConfigStore.prototype, 'onChange').mockImplementation(() => {
+        throw new Error('storage unavailable');
+      });
+
+      expect(() => mountWithShadow()).not.toThrow();
     });
   });
 });

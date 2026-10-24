@@ -96,7 +96,6 @@ export class Database {
     const db = await this.getDB();
     await db.delete(StoreNames.CONVERSATIONS, id);
     await this.deleteMessagesByConversation(id);
-    await this.deleteToolCallLogsByConversation(id);
   }
 
   async listConversationsByUpdatedAt(): Promise<BrowserAgentDB['conversations']['value'][]> {
@@ -109,6 +108,72 @@ export class Database {
   async putMessage(msg: BrowserAgentDB['messages']['value']): Promise<void> {
     const db = await this.getDB();
     await db.put(StoreNames.MESSAGES, msg);
+  }
+
+  /**
+   * 追加一批消息（同一会话），单事务原子写入并分配递增逻辑时间戳。
+   *
+   * 传入的 timestamp 只作为下限：实际写入 max(请求值, 该会话上一条 + 1)。
+   * 这样即使同一毫秒内写入多行（或调用方传入相同/回退的时间戳），
+   * byConversationAndTime 索引顺序仍等于追加顺序。
+   *
+   * 返回实际写入的行（含分配后的 timestamp），便于调用方复用。
+   * putMessage 保持原样不做规整，以兼容既有调用方。
+   */
+  async appendMessages(
+    messages: BrowserAgentDB['messages']['value'][],
+  ): Promise<BrowserAgentDB['messages']['value'][]> {
+    const first = messages[0];
+    if (!first) return [];
+
+    const conversationId = first.conversationId;
+    // 写入前校验：事务内抛出的 JS 异常不会自动回滚，先挡住可预见的非法行。
+    for (const msg of messages) {
+      if (msg.conversationId !== conversationId) {
+        throw new Error('appendMessages 只接受同一会话的消息');
+      }
+      if (!msg.id) {
+        throw new Error('appendMessages 需要非空消息 id');
+      }
+      if (!Number.isFinite(msg.timestamp)) {
+        throw new Error('appendMessages 需要有限数值 timestamp');
+      }
+    }
+
+    const db = await this.getDB();
+    const tx = db.transaction(StoreNames.MESSAGES, 'readwrite');
+    try {
+      const index = tx.store.index('byConversationAndTime');
+      // 该会话时间戳最大的那一行（cursor 倒序第一条）
+      const lastCursor = await index.openCursor(
+        IDBKeyRange.bound([conversationId, 0], [conversationId, Number.MAX_SAFE_INTEGER]),
+        'prev',
+      );
+      let lastTimestamp = lastCursor ? lastCursor.value.timestamp : null;
+
+      const written: BrowserAgentDB['messages']['value'][] = [];
+      for (const msg of messages) {
+        const timestamp =
+          lastTimestamp === null ? msg.timestamp : Math.max(msg.timestamp, lastTimestamp + 1);
+        const row = { ...msg, timestamp };
+        await tx.store.put(row);
+        lastTimestamp = timestamp;
+        written.push(row);
+      }
+
+      await tx.done;
+      return written;
+    } catch (error) {
+      // 显式 abort：否则已排队的前半批写入仍会提交
+      try {
+        tx.abort();
+      } catch {
+        // 事务可能已自行结束（request 失败会自动 abort）
+      }
+      // 消费 tx.done 的 AbortError，避免未处理的 rejection
+      await tx.done.catch(() => {});
+      throw error;
+    }
   }
 
   async getMessage(id: string): Promise<BrowserAgentDB['messages']['value'] | undefined> {
@@ -137,8 +202,10 @@ export class Database {
     const db = await this.getDB();
     const tx = db.transaction(StoreNames.MESSAGES);
     const index = tx.store.index('byConversationAndTime');
+    // 上界不能用 Date.now()：appendMessages 分配的是逻辑时间戳，
+    // 同一毫秒内追加时可能递增到当前时钟之后。
     const all = await index.getAll(
-      IDBKeyRange.bound([conversationId, 0], [conversationId, Date.now()]),
+      IDBKeyRange.bound([conversationId, 0], [conversationId, Number.MAX_SAFE_INTEGER]),
     );
     // Chat Completions 历史消息必须按旧到新排列，最后一条才是最新用户输入。
     return all.slice(-count);
@@ -164,61 +231,6 @@ export class Database {
   async countMessagesByConversation(conversationId: string): Promise<number> {
     const db = await this.getDB();
     return db.countFromIndex(StoreNames.MESSAGES, 'byConversation', conversationId);
-  }
-
-  // ── ToolCallLogs CRUD ───────────────────────────────
-
-  async putToolCallLog(log: BrowserAgentDB['toolCallLogs']['value']): Promise<void> {
-    const db = await this.getDB();
-    await db.put(StoreNames.TOOL_CALL_LOGS, log);
-  }
-
-  async getToolCallLogsByConversation(
-    conversationId: string,
-  ): Promise<BrowserAgentDB['toolCallLogs']['value'][]> {
-    const db = await this.getDB();
-    return db.getAllFromIndex(StoreNames.TOOL_CALL_LOGS, 'byConversation', conversationId);
-  }
-
-  async deleteToolCallLogsByConversation(conversationId: string): Promise<void> {
-    const db = await this.getDB();
-    const tx = db.transaction(StoreNames.TOOL_CALL_LOGS, 'readwrite');
-    const index = tx.store.index('byConversation');
-    let cursor = await index.openCursor(conversationId);
-    while (cursor) {
-      cursor.delete();
-      cursor = await cursor.continue();
-    }
-    await tx.done;
-  }
-
-  // ── Snapshots CRUD ──────────────────────────────────
-
-  async putSnapshot(snapshot: BrowserAgentDB['snapshots']['value']): Promise<void> {
-    const db = await this.getDB();
-    await db.put(StoreNames.SNAPSHOTS, snapshot);
-  }
-
-  async getSnapshotsByTimeRange(
-    startTime: number,
-    endTime: number,
-  ): Promise<BrowserAgentDB['snapshots']['value'][]> {
-    const db = await this.getDB();
-    const tx = db.transaction(StoreNames.SNAPSHOTS);
-    const index = tx.store.index('byCapturedAt');
-    return index.getAll(IDBKeyRange.bound(startTime, endTime));
-  }
-
-  async deleteOldSnapshots(beforeTime: number): Promise<void> {
-    const db = await this.getDB();
-    const tx = db.transaction(StoreNames.SNAPSHOTS, 'readwrite');
-    const index = tx.store.index('byCapturedAt');
-    let cursor = await index.openCursor(IDBKeyRange.upperBound(beforeTime, true));
-    while (cursor) {
-      cursor.delete();
-      cursor = await cursor.continue();
-    }
-    await tx.done;
   }
 
   // ── 事务操作 ────────────────────────────────────────
