@@ -1,18 +1,20 @@
 import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
 import {
-  createBookmarksSearchTool,
-  createBookmarksCreateTool,
-  createBookmarksUpdateTool,
-  createBookmarksDeleteTool,
-  createBookmarksGetTreeTool,
+  createBookmarkSearchTool,
+  createBookmarkAddTool,
+  createBookmarkEditTool,
+  createBookmarkMoveTool,
+  createBookmarkRemoveTool,
+  createBookmarkTreeTool,
 } from './bookmarks-tools';
 
 export function createBookmarksTools(rpc: IJsonRpcClient): ToolDefinition[] {
   return [
-    createBookmarksSearchTool(rpc),
-    createBookmarksCreateTool(rpc),
-    createBookmarksUpdateTool(rpc),
-    createBookmarksDeleteTool(rpc),
-    createBookmarksGetTreeTool(rpc),
+    createBookmarkSearchTool(rpc),
+    createBookmarkAddTool(rpc),
+    createBookmarkEditTool(rpc),
+    createBookmarkMoveTool(rpc),
+    createBookmarkRemoveTool(rpc),
+    createBookmarkTreeTool(rpc),
   ];
 }

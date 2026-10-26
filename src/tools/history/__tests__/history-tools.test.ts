@@ -31,29 +31,29 @@ describe('History tools', () => {
       }
     });
 
-    it('history_search: riskLevel medium, confirmationRequired false', () => {
+    it('history_search: riskLevel low, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createHistoryTools(rpc);
       const tool = tools.find((t) => t.name === 'history_search')!;
       expect(tool).toBeDefined();
-      expect(tool.riskLevel).toBe('medium');
+      expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('history_delete: riskLevel high, confirmationRequired true, 有 preflight', () => {
+    it('history_remove: riskLevel high, confirmationRequired true, 有 preflight', () => {
       const rpc = createMockRpc();
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const tool = tools.find((t) => t.name === 'history_remove')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('high');
       expect(tool.confirmationRequired).toBe(true);
       expect(tool.preflight).toBeDefined();
     });
 
-    it('history_deleteAll: riskLevel critical, confirmationRequired true, 有 preflight', () => {
+    it('history_clear: riskLevel critical, confirmationRequired true, 有 preflight', () => {
       const rpc = createMockRpc();
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_deleteAll')!;
+      const tool = tools.find((t) => t.name === 'history_clear')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('critical');
       expect(tool.confirmationRequired).toBe(true);
@@ -82,34 +82,34 @@ describe('History tools', () => {
       expect(rpc.request).toHaveBeenCalledWith('history.search', { maxResults: 10, text: 'test' });
     });
 
-    it('history_delete execute 调用 rpc.request("history.delete")', async () => {
+    it('history_remove execute 调用 rpc.request("history.delete")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
 
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const tool = tools.find((t) => t.name === 'history_remove')!;
       const result = await tool.execute({ url: 'https://example.com' });
 
       expect(rpc.request).toHaveBeenCalledWith('history.delete', { url: 'https://example.com' });
       expect(result).toEqual({ success: true });
     });
 
-    it('history_deleteAll execute 调用 rpc.request("history.deleteAll")', async () => {
+    it('history_clear execute 调用 rpc.request("history.deleteAll")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
 
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_deleteAll')!;
+      const tool = tools.find((t) => t.name === 'history_clear')!;
       const result = await tool.execute({});
 
       expect(rpc.request).toHaveBeenCalledWith('history.deleteAll', {});
       expect(result).toEqual({ success: true });
     });
 
-    it('history_deleteAll preflight 返回正确格式', async () => {
+    it('history_clear preflight 返回正确格式', async () => {
       const rpc = createMockRpc();
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_deleteAll')!;
+      const tool = tools.find((t) => t.name === 'history_clear')!;
       const result = await tool.preflight!({});
 
       expect(result.affectedObjects).toHaveLength(1);
@@ -117,10 +117,10 @@ describe('History tools', () => {
       expect(result.warnings.length).toBeGreaterThan(0);
     });
 
-    it('history_delete preflight 携带 url 时返回对应受影响对象', async () => {
+    it('history_remove preflight 携带 url 时返回对应受影响对象', async () => {
       const rpc = createMockRpc();
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const tool = tools.find((t) => t.name === 'history_remove')!;
       const result = await tool.preflight!({ url: 'https://example.com/page' });
 
       expect(result.warnings).toEqual([]);
@@ -132,10 +132,10 @@ describe('History tools', () => {
       expect(result.affectedObjects[0]?.reason).toContain('此 URL');
     });
 
-    it('history_delete preflight 携带时间范围时返回时间范围受影响对象', async () => {
+    it('history_remove preflight 携带时间范围时返回时间范围受影响对象', async () => {
       const rpc = createMockRpc();
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const tool = tools.find((t) => t.name === 'history_remove')!;
       const startTime = new Date('2026-01-01T00:00:00.000Z').getTime();
       const endTime = new Date('2026-01-02T00:00:00.000Z').getTime();
       const result = await tool.preflight!({ startTime, endTime });
@@ -149,10 +149,10 @@ describe('History tools', () => {
       expect(obj.reason).toContain('2026-01-02T00:00:00.000Z');
     });
 
-    it('history_delete preflight 同时携带 url 与仅 startTime 时返回两个受影响对象', async () => {
+    it('history_remove preflight 同时携带 url 与仅 startTime 时返回两个受影响对象', async () => {
       const rpc = createMockRpc();
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const tool = tools.find((t) => t.name === 'history_remove')!;
       const startTime = new Date('2026-01-01T00:00:00.000Z').getTime();
       const result = await tool.preflight!({ url: 'https://example.com', startTime });
 
@@ -162,10 +162,10 @@ describe('History tools', () => {
       expect(result.affectedObjects[1]?.reason).not.toContain('结束:');
     });
 
-    it('history_delete preflight 空参数返回空 affectedObjects 与空 warnings', async () => {
+    it('history_remove preflight 空参数返回空 affectedObjects 与空 warnings', async () => {
       const rpc = createMockRpc();
       const tools = createHistoryTools(rpc);
-      const tool = tools.find((t) => t.name === 'history_delete')!;
+      const tool = tools.find((t) => t.name === 'history_remove')!;
       const result = await tool.preflight!({});
 
       expect(result.affectedObjects).toEqual([]);

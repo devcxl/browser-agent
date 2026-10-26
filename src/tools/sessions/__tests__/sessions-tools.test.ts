@@ -31,71 +31,71 @@ describe('Sessions tools', () => {
       }
     });
 
-    it('sessions_save: riskLevel low, confirmationRequired false', () => {
+    it('session_save: riskLevel low, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_save')!;
+      const tool = tools.find((t) => t.name === 'session_save')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('sessions_restore: riskLevel medium, confirmationRequired true', () => {
+    it('session_restore: riskLevel medium, confirmationRequired true', () => {
       const rpc = createMockRpc();
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_restore')!;
+      const tool = tools.find((t) => t.name === 'session_restore')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('medium');
       expect(tool.confirmationRequired).toBe(true);
     });
 
-    it('sessions_list: riskLevel low, confirmationRequired false', () => {
+    it('session_list: riskLevel low, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_list')!;
+      const tool = tools.find((t) => t.name === 'session_list')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('sessions_delete: riskLevel medium, confirmationRequired false, 有 preflight', () => {
+    it('session_remove: riskLevel medium, confirmationRequired false, 有 preflight', () => {
       const rpc = createMockRpc();
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_delete')!;
+      const tool = tools.find((t) => t.name === 'session_remove')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('medium');
       expect(tool.confirmationRequired).toBe(false);
       expect(tool.preflight).toBeDefined();
     });
 
-    it('sessions_save execute 调用 rpc.request("sessions.save")', async () => {
+    it('session_save execute 调用 rpc.request("sessions.save")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue({ id: 'snap-1', tabs: [] });
 
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_save')!;
+      const tool = tools.find((t) => t.name === 'session_save')!;
       const result = await tool.execute({});
 
       expect(rpc.request).toHaveBeenCalledWith('sessions.save', {});
       expect(result).toEqual({ success: true, data: { id: 'snap-1', tabs: [] } });
     });
 
-    it('sessions_restore execute 调用 rpc.request("sessions.restore")', async () => {
+    it('session_restore execute 调用 rpc.request("sessions.restore")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue({ id: 'snap-1', restored: true });
 
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_restore')!;
+      const tool = tools.find((t) => t.name === 'session_restore')!;
       const result = await tool.execute({ sessionId: 'snap-1' });
 
       expect(rpc.request).toHaveBeenCalledWith('sessions.restore', { sessionId: 'snap-1' });
       expect(result).toEqual({ success: true, data: { id: 'snap-1', restored: true } });
     });
 
-    it('sessions_delete preflight 返回正确格式', async () => {
+    it('session_remove preflight 返回正确格式', async () => {
       const rpc = createMockRpc();
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_delete')!;
+      const tool = tools.find((t) => t.name === 'session_remove')!;
       const result = await tool.preflight!({ sessionId: 'snap-1' });
 
       expect(result.affectedObjects).toHaveLength(1);
@@ -103,24 +103,24 @@ describe('Sessions tools', () => {
       expect(result.affectedObjects[0]?.reason).toContain('删除会话快照');
     });
 
-    it('sessions_list execute 调用 rpc.request("sessions.list")', async () => {
+    it('session_list execute 调用 rpc.request("sessions.list")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue([{ id: 'snap-1' }]);
 
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_list')!;
+      const tool = tools.find((t) => t.name === 'session_list')!;
       const result = await tool.execute({});
 
       expect(rpc.request).toHaveBeenCalledWith('sessions.list', {});
       expect(result).toEqual({ success: true, data: [{ id: 'snap-1' }] });
     });
 
-    it('sessions_delete execute 调用 rpc.request("sessions.delete")', async () => {
+    it('session_remove execute 调用 rpc.request("sessions.delete")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
 
       const tools = createSessionsTools(rpc);
-      const tool = tools.find((t) => t.name === 'sessions_delete')!;
+      const tool = tools.find((t) => t.name === 'session_remove')!;
       const result = await tool.execute({ sessionId: 'snap-1' });
 
       expect(rpc.request).toHaveBeenCalledWith('sessions.delete', { sessionId: 'snap-1' });

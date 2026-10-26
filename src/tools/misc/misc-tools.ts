@@ -55,9 +55,9 @@ export function createClipboardWriteTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 }
 
-export function createNotificationsCreateTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createNotificationCreateTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'notifications_create',
+    name: 'notification_create',
     description: '创建浏览器桌面通知',
     category: 'notifications',
     riskLevel: 'low',
@@ -86,7 +86,7 @@ export function createNotificationsCreateTool(rpc: IJsonRpcClient): ToolDefiniti
   };
 }
 
-export function createStorageLocalGetTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createStorageReadTool(rpc: IJsonRpcClient): ToolDefinition {
   /** 敏感键黑名单 —— 禁止 LLM 直接读取 */
   const BLOCKED_KEYS = [
     'providers',           // 含 LLM API Key
@@ -103,7 +103,7 @@ export function createStorageLocalGetTool(rpc: IJsonRpcClient): ToolDefinition {
     BLOCKED_KEYS.includes(k) || BLOCKED_PREFIXES.some((p) => k.startsWith(p));
 
   return {
-    name: 'storage_local_get',
+    name: 'storage_read',
     description: '读取浏览器 local storage 中指定键的数据。出于安全考虑，无法读取 API Key、技能定义等敏感键。',
     category: 'storage',
     riskLevel: 'high',
@@ -145,7 +145,7 @@ export function createStorageLocalGetTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 }
 
-export function createStorageLocalSetTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createStorageWriteTool(rpc: IJsonRpcClient): ToolDefinition {
   /** 禁止通过工具写入的敏感键 */
   const BLOCKED_KEYS = [
     'providers',
@@ -157,7 +157,7 @@ export function createStorageLocalSetTool(rpc: IJsonRpcClient): ToolDefinition {
   ];
 
   return {
-    name: 'storage_local_set',
+    name: 'storage_write',
     description: '写入数据到浏览器 local storage。出于安全考虑，无法修改 API Key、技能定义等敏感配置。',
     category: 'storage',
     riskLevel: 'high',
@@ -186,7 +186,7 @@ export function createStorageLocalSetTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 }
 
-export function createStorageLocalRemoveTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createStorageRemoveTool(rpc: IJsonRpcClient): ToolDefinition {
   /** 禁止通过工具删除的敏感键 */
   const BLOCKED_KEYS = [
     'providers',
@@ -213,7 +213,7 @@ export function createStorageLocalRemoveTool(rpc: IJsonRpcClient): ToolDefinitio
   };
 
   return {
-    name: 'storage_local_remove',
+    name: 'storage_remove',
     description: '删除浏览器 local storage 中的数据。出于安全考虑，无法删除敏感配置键。',
     category: 'storage',
     riskLevel: 'high',

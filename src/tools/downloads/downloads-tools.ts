@@ -1,11 +1,14 @@
 import type { IJsonRpcClient, ToolDefinition, PreflightResult } from '@/shared/types';
 
-export function createDownloadsSearchTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * download_search：按条件搜索下载记录。
+ */
+export function createDownloadSearchTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'downloads_search',
-    description: '搜索浏览器下载记录，可按关键字和状态过滤',
+    name: 'download_search',
+    description: '搜索浏览器下载记录，可按关键字、状态、时间、大小等条件过滤。需要下载项 ID 时先从这里查。',
     category: 'downloads',
-    riskLevel: 'medium',
+    riskLevel: 'low',
     confirmationRequired: false,
     resultSensitivity: 'low',
     schema: {
@@ -31,16 +34,34 @@ export function createDownloadsSearchTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      const data = await rpc.request('downloads.search', params);
-      return { success: true, data };
+      try {
+        const data = await rpc.request('downloads.search', params);
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createDownloadsDownloadTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * download_start：开始下载文件（高风险，preflight 展示来源 URL）。
+ */
+export function createDownloadStartTool(rpc: IJsonRpcClient): ToolDefinition {
+  const preflight = async (params: Record<string, unknown>): Promise<PreflightResult> => ({
+    affectedObjects: [
+      {
+        type: 'download',
+        id: typeof params.url === 'string' ? params.url : undefined,
+        reason: `即将下载文件${typeof params.filename === 'string' ? `并保存为 ${params.filename}` : ''}`,
+      },
+    ],
+    warnings: ['将从外部 URL 下载文件到本地下载目录。'],
+  });
+
   return {
-    name: 'downloads_download',
-    description: '下载文件到默认下载目录',
+    name: 'download_start',
+    description: '下载文件到本地下载目录。从网络获取文件有风险，需用户确认。',
     category: 'downloads',
     riskLevel: 'high',
     confirmationRequired: true,
@@ -62,14 +83,22 @@ export function createDownloadsDownloadTool(rpc: IJsonRpcClient): ToolDefinition
       required: ['url'],
     },
     requireBackground: true,
+    preflight,
     execute: async (params) => {
-      const data = await rpc.request('downloads.download', params);
-      return { success: true, data };
+      try {
+        const data = await rpc.request('downloads.download', params);
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createDownloadsEraseTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * download_clear：清除下载记录（不删文件，高风险，保留 preflight）。
+ */
+export function createDownloadClearTool(rpc: IJsonRpcClient): ToolDefinition {
   const preflight = async (params: Record<string, unknown>): Promise<PreflightResult> => {
     const affectedObjects: { type: 'download'; reason: string }[] = [];
     const parts: string[] = [];
@@ -91,8 +120,8 @@ export function createDownloadsEraseTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 
   return {
-    name: 'downloads_erase',
-    description: '清除浏览器下载记录。高风险操作，需用户确认。',
+    name: 'download_clear',
+    description: '清除浏览器下载记录（不删除已下载的文件本身）。记录清除后不可恢复，需用户确认。',
     category: 'downloads',
     riskLevel: 'high',
     confirmationRequired: true,
@@ -110,16 +139,23 @@ export function createDownloadsEraseTool(rpc: IJsonRpcClient): ToolDefinition {
     requireBackground: true,
     preflight,
     execute: async (params) => {
-      await rpc.request('downloads.erase', params);
-      return { success: true };
+      try {
+        const data = await rpc.request('downloads.erase', params);
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createDownloadsOpenTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * download_open：打开已下载的文件。
+ */
+export function createDownloadOpenTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'downloads_open',
-    description: '打开已下载的文件',
+    name: 'download_open',
+    description: '用系统默认程序打开已下载完成的文件。',
     category: 'downloads',
     riskLevel: 'low',
     confirmationRequired: false,
@@ -133,16 +169,23 @@ export function createDownloadsOpenTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      await rpc.request('downloads.open', params);
-      return { success: true };
+      try {
+        await rpc.request('downloads.open', params);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createDownloadsCancelTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * download_cancel：取消进行中的下载。
+ */
+export function createDownloadCancelTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'downloads_cancel',
-    description: '取消正在进行的下载',
+    name: 'download_cancel',
+    description: '取消正在进行的下载。',
     category: 'downloads',
     riskLevel: 'low',
     confirmationRequired: false,
@@ -156,16 +199,23 @@ export function createDownloadsCancelTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      await rpc.request('downloads.cancel', params);
-      return { success: true };
+      try {
+        await rpc.request('downloads.cancel', params);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createDownloadsPauseTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * download_pause：暂停进行中的下载。
+ */
+export function createDownloadPauseTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'downloads_pause',
-    description: '暂停正在进行的下载',
+    name: 'download_pause',
+    description: '暂停正在进行的下载（可用 download_resume 恢复）。',
     category: 'downloads',
     riskLevel: 'low',
     confirmationRequired: false,
@@ -179,16 +229,23 @@ export function createDownloadsPauseTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      await rpc.request('downloads.pause', params);
-      return { success: true };
+      try {
+        await rpc.request('downloads.pause', params);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createDownloadsResumeTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * download_resume：恢复已暂停的下载。
+ */
+export function createDownloadResumeTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'downloads_resume',
-    description: '恢复已暂停的下载',
+    name: 'download_resume',
+    description: '恢复已暂停的下载。',
     category: 'downloads',
     riskLevel: 'low',
     confirmationRequired: false,
@@ -202,8 +259,12 @@ export function createDownloadsResumeTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      await rpc.request('downloads.resume', params);
-      return { success: true };
+      try {
+        await rpc.request('downloads.resume', params);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }

@@ -1,16 +1,16 @@
 import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
 import {
-  createSessionsSaveTool,
-  createSessionsRestoreTool,
-  createSessionsListTool,
-  createSessionsDeleteTool,
+  createSessionSaveTool,
+  createSessionRestoreTool,
+  createSessionListTool,
+  createSessionRemoveTool,
 } from './sessions-tools';
 
 export function createSessionsTools(rpc: IJsonRpcClient): ToolDefinition[] {
   return [
-    createSessionsSaveTool(rpc),
-    createSessionsRestoreTool(rpc),
-    createSessionsListTool(rpc),
-    createSessionsDeleteTool(rpc),
+    createSessionSaveTool(rpc),
+    createSessionRestoreTool(rpc),
+    createSessionListTool(rpc),
+    createSessionRemoveTool(rpc),
   ];
 }

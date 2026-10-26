@@ -31,98 +31,109 @@ describe('Downloads tools', () => {
       }
     });
 
-    it('downloads_search: riskLevel medium, confirmationRequired false', () => {
+    it('download_search: riskLevel low, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_search')!;
+      const tool = tools.find((t) => t.name === 'download_search')!;
       expect(tool).toBeDefined();
-      expect(tool.riskLevel).toBe('medium');
+      expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('downloads_download: riskLevel high, confirmationRequired true', () => {
+    it('download_start: riskLevel high, confirmationRequired true', () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_download')!;
+      const tool = tools.find((t) => t.name === 'download_start')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('high');
       expect(tool.confirmationRequired).toBe(true);
     });
 
-    it('downloads_erase: riskLevel high, confirmationRequired true, 有 preflight', () => {
+    it('download_clear: riskLevel high, confirmationRequired true, 有 preflight', () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_erase')!;
+      const tool = tools.find((t) => t.name === 'download_clear')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('high');
       expect(tool.confirmationRequired).toBe(true);
       expect(tool.preflight).toBeDefined();
     });
 
-    it('downloads_open: riskLevel low, confirmationRequired false', () => {
+    it('download_open: riskLevel low, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_open')!;
+      const tool = tools.find((t) => t.name === 'download_open')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('downloads_cancel: riskLevel low, confirmationRequired false', () => {
+    it('download_cancel: riskLevel low, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_cancel')!;
+      const tool = tools.find((t) => t.name === 'download_cancel')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('downloads_pause: riskLevel low, confirmationRequired false', () => {
+    it('download_pause: riskLevel low, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_pause')!;
+      const tool = tools.find((t) => t.name === 'download_pause')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('downloads_resume: riskLevel low, confirmationRequired false', () => {
+    it('download_resume: riskLevel low, confirmationRequired false', () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_resume')!;
+      const tool = tools.find((t) => t.name === 'download_resume')!;
       expect(tool).toBeDefined();
       expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
     });
 
-    it('downloads_search execute 调用 rpc.request("downloads.search")', async () => {
+    it('download_search execute 调用 rpc.request("downloads.search")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue([{ id: 1, filename: 'test.pdf' }]);
 
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_search')!;
+      const tool = tools.find((t) => t.name === 'download_search')!;
       const result = await tool.execute({ query: 'test' });
 
       expect(rpc.request).toHaveBeenCalledWith('downloads.search', { query: 'test' });
       expect(result).toEqual({ success: true, data: [{ id: 1, filename: 'test.pdf' }] });
     });
 
-    it('downloads_download execute 调用 rpc.request("downloads.download")', async () => {
+    it('download_start execute 调用 rpc.request("downloads.download")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue({ id: 42 });
 
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_download')!;
+      const tool = tools.find((t) => t.name === 'download_start')!;
       const result = await tool.execute({ url: 'https://example.com/file.pdf' });
 
       expect(rpc.request).toHaveBeenCalledWith('downloads.download', { url: 'https://example.com/file.pdf' });
       expect(result).toEqual({ success: true, data: { id: 42 } });
     });
 
-    it('downloads_erase preflight 返回正确格式', async () => {
+    it('download_start preflight 展示来源 URL 与警告', async () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_erase')!;
+      const tool = tools.find((t) => t.name === 'download_start')!;
+
+      const result = await tool.preflight!({ url: 'https://example.com/file.pdf', filename: 'file.pdf' });
+
+      expect(result.affectedObjects[0]?.id).toBe('https://example.com/file.pdf');
+      expect(result.warnings.length).toBeGreaterThan(0);
+    });
+
+    it('download_clear preflight 返回正确格式', async () => {
+      const rpc = createMockRpc();
+      const tools = createDownloadsTools(rpc);
+      const tool = tools.find((t) => t.name === 'download_clear')!;
       const result = await tool.preflight!({});
 
       expect(result.affectedObjects).toHaveLength(1);
@@ -130,10 +141,10 @@ describe('Downloads tools', () => {
       expect(result.warnings.length).toBeGreaterThan(0);
     });
 
-    it('downloads_erase preflight 携带过滤条件时拼接条件描述', async () => {
+    it('download_clear preflight 携带过滤条件时拼接条件描述', async () => {
       const rpc = createMockRpc();
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_erase')!;
+      const tool = tools.find((t) => t.name === 'download_clear')!;
       const startedBefore = new Date('2026-01-01T00:00:00.000Z').getTime();
       const startedAfter = new Date('2025-01-01T00:00:00.000Z').getTime();
       const result = await tool.preflight!({
@@ -153,60 +164,60 @@ describe('Downloads tools', () => {
       expect(reason).toContain('URL 匹配: .*\\.pdf$');
     });
 
-    it('downloads_erase execute 调用 rpc.request("downloads.erase")', async () => {
+    it('download_clear execute 调用 rpc.request("downloads.erase")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
 
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_erase')!;
+      const tool = tools.find((t) => t.name === 'download_clear')!;
       const result = await tool.execute({ urlRegex: '.*' });
 
       expect(rpc.request).toHaveBeenCalledWith('downloads.erase', { urlRegex: '.*' });
       expect(result).toEqual({ success: true });
     });
 
-    it('downloads_open execute 调用 rpc.request("downloads.open")', async () => {
+    it('download_open execute 调用 rpc.request("downloads.open")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
 
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_open')!;
+      const tool = tools.find((t) => t.name === 'download_open')!;
       const result = await tool.execute({ downloadId: 1 });
 
       expect(rpc.request).toHaveBeenCalledWith('downloads.open', { downloadId: 1 });
       expect(result).toEqual({ success: true });
     });
 
-    it('downloads_cancel execute 调用 rpc.request("downloads.cancel")', async () => {
+    it('download_cancel execute 调用 rpc.request("downloads.cancel")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
 
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_cancel')!;
+      const tool = tools.find((t) => t.name === 'download_cancel')!;
       const result = await tool.execute({ downloadId: 2 });
 
       expect(rpc.request).toHaveBeenCalledWith('downloads.cancel', { downloadId: 2 });
       expect(result).toEqual({ success: true });
     });
 
-    it('downloads_pause execute 调用 rpc.request("downloads.pause")', async () => {
+    it('download_pause execute 调用 rpc.request("downloads.pause")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
 
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_pause')!;
+      const tool = tools.find((t) => t.name === 'download_pause')!;
       const result = await tool.execute({ downloadId: 3 });
 
       expect(rpc.request).toHaveBeenCalledWith('downloads.pause', { downloadId: 3 });
       expect(result).toEqual({ success: true });
     });
 
-    it('downloads_resume execute 调用 rpc.request("downloads.resume")', async () => {
+    it('download_resume execute 调用 rpc.request("downloads.resume")', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue(undefined);
 
       const tools = createDownloadsTools(rpc);
-      const tool = tools.find((t) => t.name === 'downloads_resume')!;
+      const tool = tools.find((t) => t.name === 'download_resume')!;
       const result = await tool.execute({ downloadId: 4 });
 
       expect(rpc.request).toHaveBeenCalledWith('downloads.resume', { downloadId: 4 });

@@ -1,8 +1,8 @@
 import type { IJsonRpcClient, ToolDefinition, PreflightResult } from '@/shared/types';
 
-export function createSessionsSaveTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createSessionSaveTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'sessions_save',
+    name: 'session_save',
     description: '保存当前浏览器会话快照，包含打开的标签页和窗口信息',
     category: 'sessions',
     riskLevel: 'low',
@@ -20,9 +20,9 @@ export function createSessionsSaveTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 }
 
-export function createSessionsRestoreTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createSessionRestoreTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'sessions_restore',
+    name: 'session_restore',
     description: '恢复指定的会话快照',
     category: 'sessions',
     riskLevel: 'medium',
@@ -43,9 +43,9 @@ export function createSessionsRestoreTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 }
 
-export function createSessionsListTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createSessionListTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'sessions_list',
+    name: 'session_list',
     description: '列出所有保存的会话快照',
     category: 'sessions',
     riskLevel: 'low',
@@ -63,7 +63,7 @@ export function createSessionsListTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 }
 
-export function createSessionsDeleteTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createSessionRemoveTool(rpc: IJsonRpcClient): ToolDefinition {
   const preflight = async (params: Record<string, unknown>): Promise<PreflightResult> => {
     return {
       affectedObjects: [
@@ -78,7 +78,7 @@ export function createSessionsDeleteTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 
   return {
-    name: 'sessions_delete',
+    name: 'session_remove',
     description: '删除指定的会话快照',
     category: 'sessions',
     riskLevel: 'medium',
