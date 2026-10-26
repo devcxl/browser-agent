@@ -1,16 +1,16 @@
 import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
 import {
-  createWindowsGetAllTool,
-  createWindowsGetTool,
-  createWindowsCreateTool,
-  createWindowsRemoveTool,
+  createWindowListTool,
+  createWindowNewTool,
+  createWindowFocusTool,
+  createWindowCloseTool,
 } from './windows-tools';
 
 export function createWindowsTools(rpc: IJsonRpcClient): ToolDefinition[] {
   return [
-    createWindowsGetAllTool(rpc),
-    createWindowsGetTool(rpc),
-    createWindowsCreateTool(rpc),
-    createWindowsRemoveTool(rpc),
+    createWindowListTool(rpc),
+    createWindowNewTool(rpc),
+    createWindowFocusTool(rpc),
+    createWindowCloseTool(rpc),
   ];
 }

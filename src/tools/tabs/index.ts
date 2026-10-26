@@ -1,7 +1,21 @@
 import type { IJsonRpcClient } from "../../shared/types";
 import type { ToolDefinition } from "../../shared/types";
-import { createTabsQueryTool, createTabsManageTool, createTabsRemoveTool } from "./tabs-tools";
+import {
+  createTabSearchTool,
+  createTabOpenTool,
+  createTabNavigateTool,
+  createTabFocusTool,
+  createTabSetTool,
+  createTabCloseTool,
+} from "./tabs-tools";
 
 export function createTabsTools(rpc: IJsonRpcClient): ToolDefinition[] {
-  return [createTabsQueryTool(rpc), createTabsManageTool(rpc), createTabsRemoveTool(rpc)];
+  return [
+    createTabSearchTool(rpc),
+    createTabOpenTool(rpc),
+    createTabNavigateTool(rpc),
+    createTabFocusTool(rpc),
+    createTabSetTool(rpc),
+    createTabCloseTool(rpc),
+  ];
 }
