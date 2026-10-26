@@ -476,6 +476,18 @@
   "settings_agent_maxToolRounds": {
     "message": "单次任务最大执行步数"
   },
+  "settings_agent_systemPrompt": {
+    "message": "系统提示词"
+  },
+  "settings_agent_systemPromptHint": {
+    "message": "自定义 AI 的角色与行为说明，保存后作为系统提示发送给模型。留空保存将恢复默认。"
+  },
+  "settings_agent_systemPromptReset": {
+    "message": "恢复默认"
+  },
+  "settings_agent_systemPromptSaved": {
+    "message": "已保存"
+  },
   "settings_agent_circuitBreakerTitle": {
     "message": "智能执行保护"
   },

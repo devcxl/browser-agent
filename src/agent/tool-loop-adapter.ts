@@ -32,6 +32,7 @@ import { TOOL_CATEGORY_DESCRIPTIONS } from '@/shared/tool-categories';
 import type { ToolCategory } from '@/shared/types/tool';
 import { reconstructToolProtocol } from '@/shared/tool-protocol';
 import { DEFAULT_AGENT_CONFIG } from './agent-config';
+import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
 
 /** 常驻类别：高频操作不参与懒加载过滤，分类失效时仍有核心能力可用 */
 const CORE_TOOL_CATEGORIES: readonly ToolCategory[] = [
@@ -723,15 +724,17 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
   /**
    * 静态 system message：仅含固定指令与工具类别索引。
+   * 角色描述来自用户自定义系统提示词（默认 DEFAULT_SYSTEM_PROMPT），
    * 内容不随会话变化，保证 provider 端 prompt caching 命中前缀。
    */
   private buildSystemMessage(): ModelMessage {
+    const persona = this.agentConfig.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
     const categoryIndex = (Object.keys(TOOL_CATEGORY_DESCRIPTIONS) as ToolCategory[])
       .map((category) => `- ${category}: ${TOOL_CATEGORY_DESCRIPTIONS[category]}`)
       .join('\n');
 
     const content = [
-      `你是浏览器助手，可以管理用户的标签页、窗口、标签组等。`,
+      persona,
       ``,
       `## 可用工具类别`,
       categoryIndex,

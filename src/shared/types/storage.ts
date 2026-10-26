@@ -42,7 +42,12 @@ export interface AgentSettings {
   maxToolRounds: number;
   /** 模型上下文窗口 token 上限，默认 128000 */
   contextWindowTokens: number;
+  /** 自定义系统提示词；空串表示使用默认值 */
+  systemPrompt: string;
 }
+
+/** 默认系统提示词：用户未自定义（留空）时使用 */
+export const DEFAULT_SYSTEM_PROMPT = '你是一个浏览器中的ai助手';
 
 export interface ExpertModeSettings {
   enabled: boolean;

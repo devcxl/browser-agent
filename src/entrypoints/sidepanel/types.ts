@@ -63,6 +63,8 @@ export interface ConversationSummary {
 export interface AgentSettings {
   maxToolRounds: number;
   contextWindowTokens: number;
+  /** 自定义系统提示词；空串表示使用默认值 */
+  systemPrompt: string;
 }
 
 export interface ExpertModeSettings {
