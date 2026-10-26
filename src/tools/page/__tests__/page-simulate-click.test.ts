@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createPageSimulateClickTool } from '../page-simulate-click';
 
-describe('page_simulateClick tool', () => {
+describe('page_click tool', () => {
   it('should return tool definition with correct metadata', () => {
     const executeFn = vi.fn();
     const tool = createPageSimulateClickTool(executeFn);
 
-    expect(tool.name).toBe('page_simulateClick');
+    expect(tool.name).toBe('page_click');
     expect(tool.category).toBe('page');
     expect(tool.riskLevel).toBe('high');
     expect(tool.confirmationRequired).toBe(true);

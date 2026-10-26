@@ -4,7 +4,7 @@ export function createPageGetMetadataTool(
   executeFn: (params: Record<string, unknown>) => Promise<ToolResult>,
 ): ToolDefinition {
   return {
-    name: 'page_getMetadata',
+    name: 'page_read_metadata',
     description: '获取当前页面的元数据信息（标题、URL、描述、OG 图片等）。',
     schema: {
       type: 'object',

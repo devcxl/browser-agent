@@ -3,7 +3,7 @@ import type { IJsonRpcClient } from '@/shared/types/jsonrpc';
 
 export function createPageGetScreenshotTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'page_getScreenshot',
+    name: 'page_take_screenshot',
     description: '获取当前标签页的可视区域截图，返回 base64 编码的 PNG 图片',
     schema: {
       type: 'object',

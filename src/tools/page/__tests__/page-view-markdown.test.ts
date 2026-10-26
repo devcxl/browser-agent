@@ -11,12 +11,12 @@ function createMockRpc(): IJsonRpcClient {
   } as unknown as IJsonRpcClient;
 }
 
-describe('page_viewMarkdown tool', () => {
+describe('page_view_markdown tool', () => {
   it('should return tool definition with correct metadata', () => {
     const rpc = createMockRpc();
     const tool = createPageViewMarkdownTool(rpc);
 
-    expect(tool.name).toBe('page_viewMarkdown');
+    expect(tool.name).toBe('page_view_markdown');
     expect(tool.category).toBe('page');
     expect(tool.riskLevel).toBe('low');
     expect(tool.confirmationRequired).toBe(false);

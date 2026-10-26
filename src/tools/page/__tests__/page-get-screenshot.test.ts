@@ -14,12 +14,12 @@ function createMockRpc(): IJsonRpcClient {
   } as unknown as IJsonRpcClient;
 }
 
-describe('page_getScreenshot tool', () => {
+describe('page_take_screenshot tool', () => {
   it('should return tool definition with correct metadata', () => {
     const rpc = createMockRpc();
     const tool = createPageGetScreenshotTool(rpc);
 
-    expect(tool.name).toBe('page_getScreenshot');
+    expect(tool.name).toBe('page_take_screenshot');
     expect(tool.category).toBe('page');
     expect(tool.riskLevel).toBe('high');
     expect(tool.confirmationRequired).toBe(true);

@@ -4,7 +4,7 @@ export function createPageGetContentTool(
   executeFn: (params: Record<string, unknown>) => Promise<ToolResult>,
 ): ToolDefinition {
   return {
-    name: 'page_getContent',
+    name: 'page_read_content',
     description: '提取当前页面的正文内容。',
     schema: {
       type: 'object',

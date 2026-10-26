@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createPageGetMetadataTool } from '../page-get-metadata';
 
-describe('page_getMetadata tool', () => {
+describe('page_read_metadata tool', () => {
   it('should return tool definition with correct metadata', () => {
     const executeFn = vi.fn();
     const tool = createPageGetMetadataTool(executeFn);
 
-    expect(tool.name).toBe('page_getMetadata');
+    expect(tool.name).toBe('page_read_metadata');
     expect(tool.category).toBe('page');
     expect(tool.riskLevel).toBe('low');
     expect(tool.confirmationRequired).toBe(false);

@@ -3,7 +3,7 @@ import type { IJsonRpcClient } from '@/shared/types/jsonrpc';
 
 export function createPageViewMarkdownTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'page_viewMarkdown',
+    name: 'page_view_markdown',
     description: '将 Markdown 内容在新标签页中渲染为格式化页面',
     schema: {
       type: 'object',

@@ -4,7 +4,7 @@ export function createPageGetSelectionTool(
   executeFn: (params: Record<string, unknown>) => Promise<ToolResult>,
 ): ToolDefinition {
   return {
-    name: 'page_getSelection',
+    name: 'page_read_selection',
     description: '获取当前页面中被选中的文本内容。',
     schema: {
       type: 'object',
