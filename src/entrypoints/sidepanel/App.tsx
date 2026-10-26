@@ -7,6 +7,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useI18n } from './i18n/useI18n';
+import { uid } from './utils';
 import { useEmbeddedStatusBridge } from './hooks/useEmbeddedStatusBridge';
 import { ConfigStore } from '@/shared/storage';
 import { ProviderCatalog } from '@/provider/provider-catalog';
@@ -50,6 +51,9 @@ function ChatLayout() {
   // 嵌入 iframe 时把 agent 状态同步给外层悬浮球（T3 协议，T4 消费）
   // lastRunOutcome 仅在 idle 时随消息发送，让外层区分完成/出错/中止
   useEmbeddedStatusBridge(isEmbedded, agent.status, agent.lastRunOutcome ?? undefined);
+  // 消息队列：agent 运行期间发送的消息按序挂起，回合结束后依次发出
+  const [pendingQueue, setPendingQueue] = useState<Array<{ id: string; conversationId: string; text: string }>>([]);
+  const dequeueLockRef = useRef(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [providersLoaded, setProvidersLoaded] = useState(false);
@@ -213,21 +217,56 @@ function ChatLayout() {
     }));
   }, [activeProvider, activeModel, persistProviderSelection]);
 
-  const handleSend = useCallback(
-    (text: string) => {
+  const runMessage = useCallback(
+    (conversationId: string, text: string) => {
       if (!activeProvider || !activeModel) return;
-      const model = activeModel.id;
-
-      if (!conversations.activeId) {
-        conversations.create().then((id) => {
-          agent.run(id, text, activeProvider, model, reasoningEffort, activeModel);
-        });
-        return;
-      }
-      agent.run(conversations.activeId, text, activeProvider, model, reasoningEffort, activeModel);
+      agent.run(conversationId, text, activeProvider, activeModel.id, reasoningEffort, activeModel);
     },
     [conversations, agent, activeProvider, activeModel, reasoningEffort],
   );
+
+  const handleSend = useCallback(
+    (text: string) => {
+      if (!activeProvider || !activeModel) return;
+
+      // 回复进行中：入队，由队列调度在回合结束后发出
+      if (agent.status !== 'idle') {
+        if (!conversations.activeId) return;
+        setPendingQueue((prev) => [...prev, { id: uid(), conversationId: conversations.activeId!, text }]);
+        return;
+      }
+
+      if (!conversations.activeId) {
+        conversations.create().then((id) => {
+          runMessage(id, text);
+        });
+        return;
+      }
+      runMessage(conversations.activeId, text);
+    },
+    [conversations, agent, activeProvider, activeModel, reasoningEffort, runMessage],
+  );
+
+  // 队列调度：回合结束后按序出队；队首属于其他会话时先切换过去，
+  // 并等待其历史装载完成后再发送，避免流式气泡被装载覆盖
+  useEffect(() => {
+    if (agent.status !== 'idle') {
+      dequeueLockRef.current = false;
+      return;
+    }
+    if (pendingQueue.length === 0 || dequeueLockRef.current) return;
+
+    const next = pendingQueue[0]!;
+    if (next.conversationId !== conversations.activeId) {
+      conversations.select(next.conversationId);
+      return;
+    }
+    if (messagesLoading) return;
+
+    dequeueLockRef.current = true;
+    setPendingQueue((prev) => prev.slice(1));
+    runMessage(next.conversationId, next.text);
+  }, [agent.status, pendingQueue, conversations.activeId, messagesLoading, runMessage, conversations]);
 
   const handleTestConnection = useCallback(
     (provider: ProviderConfig): Promise<ConnectionTestResult> => testProviderConnection(
@@ -284,7 +323,8 @@ function ChatLayout() {
   const inputProps = {
     onSend: handleSend,
     onAbort: agent.abort,
-    disabled: agent.status !== 'idle' || !activeProvider,
+    disabled: !activeProvider,
+    queuedCount: pendingQueue.length,
     isRunning: agent.status !== 'idle',
     providers: completeProviders,
     selectedProviderId: activeProvider?.id ?? '',

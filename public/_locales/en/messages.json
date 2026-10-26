@@ -116,6 +116,12 @@
   "chat_input_disabledPlaceholder": {
     "message": "Agent is running..."
   },
+  "chat_input_queuedPlaceholder": {
+    "message": "Reply in progress — new messages will be queued…"
+  },
+  "chat_input_queuedChip": {
+    "message": "{count} message(s) queued"
+  },
   "chat_input_abort": {
     "message": "Abort"
   },

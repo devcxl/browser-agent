@@ -25,6 +25,8 @@ interface Props {
   tokenUsage?: TokenUsage;
   /** 上下文窗口上限（agentSettings.contextWindowTokens；默认 128000） */
   contextWindowTokens?: number;
+  /** 排队中的消息数（agent 运行期间发送的消息；>0 时显示排队提示） */
+  queuedCount?: number;
 }
 
 const SpinnerIcon = (
@@ -35,7 +37,7 @@ const SpinnerIcon = (
 );
 
 export function MessageInput({
-  onSend, onAbort, disabled, isRunning,
+  onSend, onAbort, disabled, isRunning, queuedCount = 0,
   providers, selectedProviderId = '', onSelectProvider = () => {}, selectedModelId = '', onSelectModel = () => {},
   reasoningEffort, onReasoningEffortChange = () => {},
   variant = 'chat',
@@ -175,6 +177,18 @@ export function MessageInput({
 
   return (
     <div className={cn(!isHome && 'border-t border-hairline bg-canvas px-3 pt-2 pb-3')}>
+      {/* 排队提示：agent 运行期间发送的消息将按序发出 */}
+      {queuedCount > 0 && (
+        <div
+          data-testid="queued-messages-chip"
+          className="mb-1.5 flex items-center gap-1.5 px-1 text-xs text-mute"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+          </svg>
+          {t('chat.input.queuedChip', { count: queuedCount })}
+        </div>
+      )}
       {/* Composer 容器 */}
       <div
         className={cn(
@@ -190,7 +204,13 @@ export function MessageInput({
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={disabled}
-          placeholder={disabled ? t('chat.input.disabledPlaceholder') : t('chat.input.placeholder')}
+          placeholder={
+            disabled
+              ? t('chat.input.disabledPlaceholder')
+              : isRunning
+                ? t('chat.input.queuedPlaceholder')
+                : t('chat.input.placeholder')
+          }
           rows={isHome ? 3 : 1}
           className={cn(
             'w-full resize-none bg-transparent text-ink text-[13.5px] leading-relaxed',
