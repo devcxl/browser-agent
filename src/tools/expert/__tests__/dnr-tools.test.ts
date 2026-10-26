@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { IJsonRpcClient } from '@/shared/types/jsonrpc';
 import {
-  createDnrGetDynamicRulesTool,
-  createDnrAddDynamicRulesTool,
-  createDnrRemoveDynamicRulesTool,
+  createDnrListTool,
+  createDnrAddTool,
+  createDnrRemoveTool,
 } from '../dnr-tools';
 
 function createMockRpc(): IJsonRpcClient {
@@ -27,13 +27,13 @@ const redirectRule = {
 };
 
 describe('dnr tools', () => {
-  describe('dnr_getDynamicRules', () => {
+  describe('dnr_list', () => {
     it('should have correct metadata', () => {
-      const tool = createDnrGetDynamicRulesTool(createMockRpc());
+      const tool = createDnrListTool(createMockRpc());
 
-      expect(tool.name).toBe('dnr_getDynamicRules');
+      expect(tool.name).toBe('dnr_list');
       expect(tool.category).toBe('declarativeNetRequest');
-      expect(tool.riskLevel).toBe('medium');
+      expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
       expect(tool.resultSensitivity).toBe('sensitive');
       expect(tool.expertOnly).toBe(true);
@@ -47,7 +47,7 @@ describe('dnr tools', () => {
       const rpc = createMockRpc();
       const rules = [blockRule];
       vi.mocked(rpc.request).mockResolvedValue(rules);
-      const tool = createDnrGetDynamicRulesTool(rpc);
+      const tool = createDnrListTool(rpc);
 
       const result = await tool.execute({});
 
@@ -56,11 +56,11 @@ describe('dnr tools', () => {
     });
   });
 
-  describe('dnr_addDynamicRules', () => {
+  describe('dnr_add', () => {
     it('should have correct metadata', () => {
-      const tool = createDnrAddDynamicRulesTool(createMockRpc());
+      const tool = createDnrAddTool(createMockRpc());
 
-      expect(tool.name).toBe('dnr_addDynamicRules');
+      expect(tool.name).toBe('dnr_add');
       expect(tool.category).toBe('declarativeNetRequest');
       expect(tool.riskLevel).toBe('critical');
       expect(tool.confirmationRequired).toBe(true);
@@ -72,13 +72,13 @@ describe('dnr tools', () => {
     });
 
     it('should require rules in schema', () => {
-      const tool = createDnrAddDynamicRulesTool(createMockRpc());
+      const tool = createDnrAddTool(createMockRpc());
       expect(tool.schema.required).toContain('rules');
     });
 
     it('should call rpc.request("dnr.addDynamicRules", params)', async () => {
       const rpc = createMockRpc();
-      const tool = createDnrAddDynamicRulesTool(rpc);
+      const tool = createDnrAddTool(rpc);
       const params = { rules: [blockRule] };
 
       const result = await tool.execute(params);
@@ -89,7 +89,7 @@ describe('dnr tools', () => {
 
     describe('preflight', () => {
       it('should warn for both block and redirect rules', async () => {
-        const tool = createDnrAddDynamicRulesTool(createMockRpc());
+        const tool = createDnrAddTool(createMockRpc());
 
         const preflight = await tool.preflight!({ rules: [blockRule, redirectRule] });
 
@@ -101,7 +101,7 @@ describe('dnr tools', () => {
       });
 
       it('should warn only for block rules', async () => {
-        const tool = createDnrAddDynamicRulesTool(createMockRpc());
+        const tool = createDnrAddTool(createMockRpc());
 
         const preflight = await tool.preflight!({ rules: [blockRule, blockRule] });
 
@@ -109,7 +109,7 @@ describe('dnr tools', () => {
       });
 
       it('should warn only for redirect rules', async () => {
-        const tool = createDnrAddDynamicRulesTool(createMockRpc());
+        const tool = createDnrAddTool(createMockRpc());
 
         const preflight = await tool.preflight!({ rules: [redirectRule] });
 
@@ -117,7 +117,7 @@ describe('dnr tools', () => {
       });
 
       it('should return empty warnings for non block/redirect rules', async () => {
-        const tool = createDnrAddDynamicRulesTool(createMockRpc());
+        const tool = createDnrAddTool(createMockRpc());
 
         const preflight = await tool.preflight!({
           rules: [{ id: 9, action: { type: 'allow' }, condition: { urlFilter: '*' } }],
@@ -130,7 +130,7 @@ describe('dnr tools', () => {
       });
 
       it('should tolerate rules without action type', async () => {
-        const tool = createDnrAddDynamicRulesTool(createMockRpc());
+        const tool = createDnrAddTool(createMockRpc());
 
         const preflight = await tool.preflight!({ rules: [{ id: 1 }] });
 
@@ -142,11 +142,11 @@ describe('dnr tools', () => {
     });
   });
 
-  describe('dnr_removeDynamicRules', () => {
+  describe('dnr_remove', () => {
     it('should have correct metadata', () => {
-      const tool = createDnrRemoveDynamicRulesTool(createMockRpc());
+      const tool = createDnrRemoveTool(createMockRpc());
 
-      expect(tool.name).toBe('dnr_removeDynamicRules');
+      expect(tool.name).toBe('dnr_remove');
       expect(tool.category).toBe('declarativeNetRequest');
       expect(tool.riskLevel).toBe('high');
       expect(tool.confirmationRequired).toBe(true);
@@ -158,13 +158,13 @@ describe('dnr tools', () => {
     });
 
     it('should require ruleIds in schema', () => {
-      const tool = createDnrRemoveDynamicRulesTool(createMockRpc());
+      const tool = createDnrRemoveTool(createMockRpc());
       expect(tool.schema.required).toContain('ruleIds');
     });
 
     it('should call rpc.request("dnr.removeDynamicRules", params)', async () => {
       const rpc = createMockRpc();
-      const tool = createDnrRemoveDynamicRulesTool(rpc);
+      const tool = createDnrRemoveTool(rpc);
       const params = { ruleIds: [1, 2, 3] };
 
       const result = await tool.execute(params);

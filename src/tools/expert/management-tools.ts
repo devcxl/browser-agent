@@ -3,10 +3,10 @@ import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
 export function createManagementListTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
     name: 'management_list',
-    description: '列出所有已安装的扩展程序，包含启用状态、版本、权限等信息',
+    description: '列出所有已安装的扩展程序，包含启用状态、版本、权限等信息。',
     category: 'management',
-    riskLevel: 'high',
-    confirmationRequired: true,
+    riskLevel: 'low',
+    confirmationRequired: false,
     resultSensitivity: 'sensitive',
     expertOnly: true,
     expertSwitch: 'management',
@@ -22,9 +22,9 @@ export function createManagementListTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 }
 
-export function createManagementToggleTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createManagementSetTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'management_toggle',
+    name: 'management_set',
     description: '启用或禁用指定的扩展程序',
     category: 'management',
     riskLevel: 'critical',

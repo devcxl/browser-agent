@@ -1,11 +1,11 @@
 import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
 
-export function createProxyGetSettingsTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createProxyReadTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'proxy_getSettings',
+    name: 'proxy_read',
     description: '读取当前代理设置',
     category: 'proxy',
-    riskLevel: 'medium',
+    riskLevel: 'low',
     confirmationRequired: false,
     resultSensitivity: 'low',
     expertOnly: true,
@@ -19,9 +19,9 @@ export function createProxyGetSettingsTool(rpc: IJsonRpcClient): ToolDefinition 
   };
 }
 
-export function createProxySetSettingsTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createProxySetTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'proxy_setSettings',
+    name: 'proxy_set',
     description: '设置浏览器代理。代理模式可选：system（系统代理）、none（直连）、fixed_servers（固定代理）、pac_script（PAC 脚本）',
     category: 'proxy',
     riskLevel: 'critical',

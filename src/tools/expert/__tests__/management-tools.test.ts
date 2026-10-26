@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { IJsonRpcClient } from '@/shared/types/jsonrpc';
 import {
   createManagementListTool,
-  createManagementToggleTool,
+  createManagementSetTool,
 } from '../management-tools';
 
 function createMockRpc(): IJsonRpcClient {
@@ -21,8 +21,8 @@ describe('management tools', () => {
 
       expect(tool.name).toBe('management_list');
       expect(tool.category).toBe('management');
-      expect(tool.riskLevel).toBe('high');
-      expect(tool.confirmationRequired).toBe(true);
+      expect(tool.riskLevel).toBe('low');
+      expect(tool.confirmationRequired).toBe(false);
       expect(tool.resultSensitivity).toBe('sensitive');
       expect(tool.expertOnly).toBe(true);
       expect(tool.expertSwitch).toBe('management');
@@ -44,11 +44,11 @@ describe('management tools', () => {
     });
   });
 
-  describe('management_toggle', () => {
+  describe('management_set', () => {
     it('should have correct metadata', () => {
-      const tool = createManagementToggleTool(createMockRpc());
+      const tool = createManagementSetTool(createMockRpc());
 
-      expect(tool.name).toBe('management_toggle');
+      expect(tool.name).toBe('management_set');
       expect(tool.category).toBe('management');
       expect(tool.riskLevel).toBe('critical');
       expect(tool.confirmationRequired).toBe(true);
@@ -60,14 +60,14 @@ describe('management tools', () => {
     });
 
     it('should require id and enabled in schema', () => {
-      const tool = createManagementToggleTool(createMockRpc());
+      const tool = createManagementSetTool(createMockRpc());
       expect(tool.schema.required).toContain('id');
       expect(tool.schema.required).toContain('enabled');
     });
 
     it('should call rpc.request("management.setEnabled", params)', async () => {
       const rpc = createMockRpc();
-      const tool = createManagementToggleTool(rpc);
+      const tool = createManagementSetTool(rpc);
       const params = { id: 'ext-2', enabled: false };
 
       const result = await tool.execute(params);

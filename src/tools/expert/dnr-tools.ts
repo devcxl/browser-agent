@@ -1,11 +1,11 @@
 import type { IJsonRpcClient, ToolDefinition, PreflightResult } from '@/shared/types';
 
-export function createDnrGetDynamicRulesTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createDnrListTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'dnr_getDynamicRules',
+    name: 'dnr_list',
     description: '获取当前所有动态规则的列表，包含规则 ID、优先级、操作类型和条件',
     category: 'declarativeNetRequest',
-    riskLevel: 'medium',
+    riskLevel: 'low',
     confirmationRequired: false,
     resultSensitivity: 'sensitive',
     expertOnly: true,
@@ -19,9 +19,9 @@ export function createDnrGetDynamicRulesTool(rpc: IJsonRpcClient): ToolDefinitio
   };
 }
 
-export function createDnrAddDynamicRulesTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createDnrAddTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'dnr_addDynamicRules',
+    name: 'dnr_add',
     description: '添加动态规则用于屏蔽或重定向网络请求。每条规则包含唯一的 ID、优先级、条件和操作',
     category: 'declarativeNetRequest',
     riskLevel: 'critical',
@@ -84,9 +84,9 @@ export function createDnrAddDynamicRulesTool(rpc: IJsonRpcClient): ToolDefinitio
   };
 }
 
-export function createDnrRemoveDynamicRulesTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createDnrRemoveTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'dnr_removeDynamicRules',
+    name: 'dnr_remove',
     description: '移除指定的动态规则，传入规则 ID 列表',
     category: 'declarativeNetRequest',
     riskLevel: 'high',
