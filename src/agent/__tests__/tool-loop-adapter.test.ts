@@ -587,7 +587,8 @@ describe('ToolLoopAdapter', () => {
       }),
     ]));
     expect(JSON.stringify(sentMessages)).not.toContain('old-0-');
-    expect(estimateTokens(JSON.stringify(sentMessages))).toBeLessThanOrEqual(990);
+    // 上限 = 静态 system message（默认英文操作指南约 1KB）+ 摘要 + 最近 4 轮原始上下文
+    expect(estimateTokens(JSON.stringify(sentMessages))).toBeLessThanOrEqual(1_500);
 
     await compactingAdapter.run({ ...basicInput, userMessage: '继续' });
     expect(mockGenerateText).toHaveBeenCalledTimes(1);
