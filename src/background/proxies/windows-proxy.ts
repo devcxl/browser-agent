@@ -15,6 +15,10 @@ export class WindowsProxy {
     return this.adapter.windows.create(params?.createData as any);
   }
 
+  async update(params: { windowId: number; updateInfo: Record<string, unknown> }) {
+    return this.adapter.windows.update(params.windowId, params.updateInfo as any);
+  }
+
   async remove(params: { windowId: number }) {
     await this.adapter.windows.remove(params.windowId);
   }

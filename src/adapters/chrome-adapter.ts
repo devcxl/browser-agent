@@ -167,6 +167,13 @@ export class ChromeAdapter implements IBrowserAdapter {
     update: (id: string, changes: BookmarkChangesArg): Promise<BookmarkTreeNode> =>
       chrome.bookmarks.update(id, changes) as Promise<BookmarkTreeNode>,
 
+    get: (id: string): Promise<BookmarkTreeNode> =>
+      // chrome.bookmarks.get 类型签名为数组，运行时对单个 id 也返回数组
+      chrome.bookmarks.get(id).then((nodes) => nodes[0]!) as Promise<BookmarkTreeNode>,
+
+    move: (id: string, destination: { parentId?: string; index?: number }): Promise<BookmarkTreeNode> =>
+      chrome.bookmarks.move(id, destination) as Promise<BookmarkTreeNode>,
+
     remove: (id: string): Promise<void> =>
       chrome.bookmarks.remove(id),
 

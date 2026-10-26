@@ -20,6 +20,14 @@ export class BookmarksProxy {
     return this.adapter.bookmarks.update(params.id, params.changes);
   }
 
+  async get(params: { id: string }) {
+    return this.adapter.bookmarks.get(params.id);
+  }
+
+  async move(params: { id: string; destination: { parentId?: string; index?: number } }) {
+    return this.adapter.bookmarks.move(params.id, params.destination);
+  }
+
   async remove(params: { id: string }) {
     await this.adapter.bookmarks.remove(params.id);
     return { success: true };

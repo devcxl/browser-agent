@@ -128,9 +128,12 @@ export interface IBrowserAdapter {
   bookmarks: {
     search(query: string | BookmarkSearchQuery): Promise<BookmarkTreeNode[]>;
     create(bookmark: BookmarkCreateArg): Promise<BookmarkTreeNode>;
+    get(id: string): Promise<BookmarkTreeNode>;
     update(id: string, changes: BookmarkChangesArg): Promise<BookmarkTreeNode>;
     remove(id: string): Promise<void>;
     getTree(): Promise<BookmarkTreeNode[]>;
+    /** 移动书签/文件夹到其他位置 */
+    move(id: string, destination: { parentId?: string; index?: number }): Promise<BookmarkTreeNode>;
   };
 
   // ── Downloads ───────────────────────────────────────

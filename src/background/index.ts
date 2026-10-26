@@ -70,6 +70,7 @@ export function initBackground(): {
   router.register('windows.getAll', (p) => windowsProxy.getAll(p as any));
   router.register('windows.get', (p) => windowsProxy.get(p as any));
   router.register('windows.create', (p) => windowsProxy.create(p as any));
+  router.register('windows.update', (p) => windowsProxy.update(p as any));
   router.register('windows.remove', (p) => windowsProxy.remove(p as any));
 
   // ── TabGroups ───────────────────────────────────────
@@ -85,6 +86,8 @@ export function initBackground(): {
   router.register('bookmarks.search', (p) => bookmarksProxy.search(p as any));
   router.register('bookmarks.create', (p) => bookmarksProxy.create(p as any));
   router.register('bookmarks.update', (p) => bookmarksProxy.update(p as any));
+  router.register('bookmarks.get', (p) => bookmarksProxy.get(p as any));
+  router.register('bookmarks.move', (p) => bookmarksProxy.move(p as any));
   router.register('bookmarks.delete', (p) => bookmarksProxy.remove(p as any));
   router.register('bookmarks.getTree', () => bookmarksProxy.getTree());
 
