@@ -60,7 +60,7 @@ export function ConversationSidebar({
         data-testid="drawer-mask"
         onClick={onClose}
         className={cn(
-          'absolute inset-0 bg-black/25 z-20 transition-opacity duration-150',
+          'absolute inset-0 bg-black/25 z-[55] transition-opacity duration-150',
           open ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
       />
@@ -69,7 +69,9 @@ export function ConversationSidebar({
       <div
         data-testid="conversation-sidebar"
         className={cn(
-          'absolute top-0 left-0 bottom-0 w-[280px] z-30',
+          // z-[60]：内嵌模式下需盖过 EmbeddedHeader（z-50, h-10），
+          // 否则抽屉头部的「新建会话」按钮会被其遮盖
+          'absolute top-0 left-0 bottom-0 w-[280px] z-[60]',
           'bg-surface-card border-r border-hairline shadow-xl',
           'flex flex-col transition-transform duration-200 ease-out',
           open ? 'translate-x-0' : '-translate-x-full',
