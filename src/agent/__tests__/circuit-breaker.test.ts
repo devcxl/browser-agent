@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CircuitBreaker,
   CIRCUIT_BREAKER_THRESHOLD,
+  DUPLICATE_TRIP_THRESHOLD,
   buildToolCallSignature,
   formatInterruptionMessage,
   normalizeToolInput,
@@ -73,35 +74,40 @@ describe('normalizeToolInput', () => {
 // ==================== 重复调用死循环 ====================
 
 describe('CircuitBreaker 重复工具调用检测', () => {
-  it('阈值为 3', () => {
+  it('阈值为 3，重复调用终止阈值为 6', () => {
     expect(CIRCUIT_BREAKER_THRESHOLD).toBe(3);
+    expect(DUPLICATE_TRIP_THRESHOLD).toBe(6);
   });
 
-  it('连续 3 次相同工具 + 相同参数才熔断', () => {
+  it('连续 6 次相同工具 + 相同参数才熔断（第 3 次起由软拦截注入提示）', () => {
     const breaker = new CircuitBreaker();
+    const ids = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'];
 
-    expect(breaker.recordStep(step([ok('c1')]))).toBeNull();
-    expect(breaker.isTripped).toBe(false);
-    expect(breaker.recordStep(step([ok('c2')]))).toBeNull();
-    expect(breaker.isTripped).toBe(false);
-
-    const trip = breaker.recordStep(step([ok('c3')]));
-    expect(trip).toEqual(expect.objectContaining({
-      reason: 'duplicate-tool-call',
-      toolName: 'tabs_click',
-      count: 3,
-    }));
-    expect(trip!.message).toContain('连续 3 次相同参数调用同一个工具');
-    expect(breaker.isTripped).toBe(true);
+    for (const [i, id] of ids.entries()) {
+      const trip = breaker.recordStep(step([ok(id)]));
+      if (i < 5) {
+        expect(trip).toBeNull();
+        expect(breaker.isTripped).toBe(false);
+      } else {
+        expect(trip).toEqual(expect.objectContaining({
+          reason: 'duplicate-tool-call',
+          toolName: 'tabs_click',
+          count: 6,
+        }));
+        expect(trip!.message).toContain('连续 6 次相同参数调用同一个工具');
+        expect(breaker.isTripped).toBe(true);
+      }
+    }
   });
 
   it('参数键顺序不同视为同一调用', () => {
     const breaker = new CircuitBreaker();
-    breaker.recordStep(step([{ toolCallId: 'c1', toolName: 'tabs_click', input: { a: 1, b: 2 }, output: { success: true } }]));
-    breaker.recordStep(step([{ toolCallId: 'c2', toolName: 'tabs_click', input: { b: 2, a: 1 }, output: { success: true } }]));
+    for (const id of ['c1', 'c2', 'c3', 'c4', 'c5', 'c6']) {
+      breaker.recordStep(step([{ toolCallId: id, toolName: 'tabs_click', input: { a: 1, b: 2 }, output: { success: true } }]));
+    }
 
     expect(breaker.recordStep(step([
-      { toolCallId: 'c3', toolName: 'tabs_click', input: { b: 2, a: 1 }, output: { success: true } },
+      { toolCallId: 'c7', toolName: 'tabs_click', input: { b: 2, a: 1 }, output: { success: true } },
     ]))?.reason).toBe('duplicate-tool-call');
   });
 
@@ -118,18 +124,21 @@ describe('CircuitBreaker 重复工具调用检测', () => {
     }]))).toBeNull();
     expect(breaker.isTripped).toBe(false);
 
-    breaker.recordStep(step([{ toolCallId: 'c4', toolName: 'tabs_click', input: { id: 'tab-2' }, output: { success: true } }]));
-    // c3/c4/c5 仅累计到 3 才熔断
+    // c3..c8 同参数累计到 6 才熔断
+    for (const id of ['c4', 'c5', 'c6', 'c7']) {
+      expect(breaker.recordStep(step([{ toolCallId: id, toolName: 'tabs_click', input: { id: 'tab-2' }, output: { success: true } }]))).toBeNull();
+    }
     expect(breaker.recordStep(step([
-      { toolCallId: 'c5', toolName: 'tabs_click', input: { id: 'tab-2' }, output: { success: true } },
+      { toolCallId: 'c8', toolName: 'tabs_click', input: { id: 'tab-2' }, output: { success: true } },
     ]))?.reason).toBe('duplicate-tool-call');
   });
 
   it('换工具打断重复计数', () => {
     const breaker = new CircuitBreaker();
-    breaker.recordStep(step([{ toolCallId: 'c1', toolName: 'tabs_click', input: { id: 1 }, output: { success: true } }]));
-    breaker.recordStep(step([{ toolCallId: 'c2', toolName: 'tabs_click', input: { id: 1 }, output: { success: true } }]));
-    breaker.recordStep(step([{ toolCallId: 'c3', toolName: 'tabs_remove', input: { id: 1 }, output: { success: true } }]));
+    for (const id of ['c1', 'c2', 'c3', 'c4', 'c5']) {
+      breaker.recordStep(step([{ toolCallId: id, toolName: 'tabs_click', input: { id: 1 }, output: { success: true } }]));
+    }
+    breaker.recordStep(step([{ toolCallId: 'c6', toolName: 'tabs_remove', input: { id: 1 }, output: { success: true } }]));
 
     expect(breaker.isTripped).toBe(false);
   });
@@ -141,6 +150,9 @@ describe('CircuitBreaker 重复工具调用检测', () => {
       { toolCallId: 'c1', toolName: 'tabs_click', input: { id: 1 }, output: { success: true } },
       { toolCallId: 'c2', toolName: 'tabs_click', input: { id: 1 }, output: { success: true } },
       { toolCallId: 'c3', toolName: 'tabs_click', input: { id: 1 }, output: { success: true } },
+      { toolCallId: 'c4', toolName: 'tabs_click', input: { id: 1 }, output: { success: true } },
+      { toolCallId: 'c5', toolName: 'tabs_click', input: { id: 1 }, output: { success: true } },
+      { toolCallId: 'c6', toolName: 'tabs_click', input: { id: 1 }, output: { success: true } },
     ]));
 
     expect(trip?.reason).toBe('duplicate-tool-call');
@@ -159,12 +171,31 @@ describe('CircuitBreaker 重复工具调用检测', () => {
 
   it('熔断后保持首次熔断原因，不再继续计数', () => {
     const breaker = new CircuitBreaker();
-    const first = breaker.recordStep(step([ok('c1'), ok('c2'), ok('c3')]));
-    const second = breaker.recordStep(step([ok('c4'), ok('c5'), ok('c6')]));
+    const first = breaker.recordStep(step([ok('c1'), ok('c2'), ok('c3'), ok('c4'), ok('c5'), ok('c6')]));
+    const second = breaker.recordStep(step([ok('c7'), ok('c8'), ok('c9'), ok('c10'), ok('c11'), ok('c12')]));
 
     expect(first?.reason).toBe('duplicate-tool-call');
     expect(second).toBe(first);
     expect(breaker.tripReason).toBe(first);
+  });
+
+  it('软拦截结果（duplicateBlocked）不计数也不打断连续失败计数', () => {
+    const breaker = new CircuitBreaker();
+    const blocked = (id: string) => ({
+      toolCallId: id,
+      toolName: 'tabs_click',
+      input: { id: 'tab-1' },
+      output: { success: false, error: '已连续 3 次相同参数调用', duplicateBlocked: true },
+    });
+
+    // 1 次真实失败 → 3 次软拦截（失败计数保持为 1）→ 2 次真实失败 → 第 3 次真实失败熔断
+    expect(breaker.recordStep(step([failed('f1')]))).toBeNull();
+    for (const id of ['b1', 'b2', 'b3']) {
+      expect(breaker.recordStep(step([blocked(id)]))).toBeNull();
+    }
+    expect(breaker.recordStep(step([failed('f2')]))).toBeNull();
+    const trip = breaker.recordStep(step([failed('f3')]));
+    expect(trip?.reason).toBe('consecutive-tool-errors');
   });
 });
 
@@ -254,7 +285,7 @@ describe('CircuitBreaker 通用行为', () => {
 
   it('每个实例状态独立（per-run）', () => {
     const first = new CircuitBreaker();
-    first.recordStep(step([ok('c1'), ok('c2'), ok('c3')]));
+    first.recordStep(step([ok('c1'), ok('c2'), ok('c3'), ok('c4'), ok('c5'), ok('c6')]));
     const second = new CircuitBreaker();
 
     expect(first.isTripped).toBe(true);
@@ -263,7 +294,7 @@ describe('CircuitBreaker 通用行为', () => {
 
   it('reset() 清空全部状态', () => {
     const breaker = new CircuitBreaker();
-    breaker.recordStep(step([ok('c1'), ok('c2'), ok('c3')]));
+    breaker.recordStep(step([ok('c1'), ok('c2'), ok('c3'), ok('c4'), ok('c5'), ok('c6')]));
     expect(breaker.isTripped).toBe(true);
 
     breaker.reset();
@@ -273,8 +304,8 @@ describe('CircuitBreaker 通用行为', () => {
     expect(breaker.recordStep(step([ok('c1'), ok('c2')]))).toBeNull();
   });
 
-  it('支持自定义阈值', () => {
-    const breaker = new CircuitBreaker(2);
+  it('支持自定义阈值（第二个参数覆盖重复调用终止阈值）', () => {
+    const breaker = new CircuitBreaker(CIRCUIT_BREAKER_THRESHOLD, 2);
     breaker.recordStep(step([ok('c1')]));
 
     expect(breaker.recordStep(step([ok('c2')]))?.reason).toBe('duplicate-tool-call');

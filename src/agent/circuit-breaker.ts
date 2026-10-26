@@ -2,16 +2,21 @@
  * 循环层智能熔断：替代固定步数上限，只拦真正的死循环。
  *
  * 两类信号：
- * - 重复调用：连续 3 次「同一工具 + 相同参数」。LLM 在无法推进任务时
- *   常表现为反复点同一个按钮 / 读同一个页面，参数归一化后 deep equal。
- * - 连续失败：连续 3 次工具执行失败（`success: false` 或抛错）。
+ * - 重复调用：连续 6 次「同一工具 + 相同参数」。第 3 次起由 DuplicateCallGuard
+ *   在工具层拦截并注入纠正提示（见 duplicate-call-guard.ts），模型仍未改变
+ *   行为时才在这里真正终止循环。
+ * - 连续失败：连续 3 次工具执行失败（`success: false` 或抛错）。注入的
+ *   重复调用拦截结果带 duplicateBlocked 标记，不计入连续失败。
  *
  * 状态按 run 维护：每个 CircuitBreaker 实例只服务一次运行，
  * `recordStep` 以 toolCallId 去重，因此 stopWhen 每步重扫全部 steps 也不会重复计数。
  */
 
-/** 触发熔断所需的连续次数 */
+/** 连续失败熔断所需的连续次数 */
 export const CIRCUIT_BREAKER_THRESHOLD = 3;
+
+/** 重复调用真正熔断所需的连续次数（第 3 次起已被软拦截并注入提示） */
+export const DUPLICATE_TRIP_THRESHOLD = 6;
 
 export type CircuitBreakReason = 'duplicate-tool-call' | 'consecutive-tool-errors';
 
@@ -42,7 +47,7 @@ export interface CircuitBreakerStep {
 }
 
 const TRIP_MESSAGES: Record<CircuitBreakReason, string> = {
-  'duplicate-tool-call': '检测到连续 3 次相同参数调用同一个工具，触发死循环熔断保护',
+  'duplicate-tool-call': '检测到连续 6 次相同参数调用同一个工具，纠正提示未生效，触发死循环熔断保护',
   'consecutive-tool-errors': '检测到连续工具执行失败，触发熔断保护',
 };
 
@@ -79,6 +84,15 @@ function isFailedOutput(output: unknown): boolean {
   );
 }
 
+/** 结果是否为重复调用软拦截的合成提示（不执行工具，不计入失败） */
+export function isDuplicateBlocked(output: unknown): boolean {
+  return (
+    output !== null
+    && typeof output === 'object'
+    && (output as { duplicateBlocked?: unknown }).duplicateBlocked === true
+  );
+}
+
 /** 把熔断说明拼接到已有回复之后（无前置文本时单独成句） */
 export function formatInterruptionMessage(trip: CircuitBreakTrip, precedingText = ''): string {
   return precedingText ? `${precedingText}\n\n${trip.message}` : trip.message;
@@ -91,7 +105,10 @@ export class CircuitBreaker {
   private failureStreak = 0;
   private trip: CircuitBreakTrip | null = null;
 
-  constructor(private readonly threshold: number = CIRCUIT_BREAKER_THRESHOLD) {}
+  constructor(
+    private readonly threshold: number = CIRCUIT_BREAKER_THRESHOLD,
+    private readonly duplicateThreshold: number = DUPLICATE_TRIP_THRESHOLD,
+  ) {}
 
   get isTripped(): boolean {
     return this.trip !== null;
@@ -138,7 +155,7 @@ export class CircuitBreaker {
       this.duplicateStreak = 1;
     }
 
-    if (this.duplicateStreak >= this.threshold) {
+    if (this.duplicateStreak >= this.duplicateThreshold) {
       this.trip = {
         reason: 'duplicate-tool-call',
         toolName: call.toolName,
@@ -150,6 +167,9 @@ export class CircuitBreaker {
 
     const executed = outputs.has(call.toolCallId) || errorIds.has(call.toolCallId);
     if (!executed) return;
+
+    // 软拦截的合成提示不是真实执行结果：失败计数保持不变（中性）
+    if (isDuplicateBlocked(outputs.get(call.toolCallId))) return;
 
     if (errorIds.has(call.toolCallId) || isFailedOutput(outputs.get(call.toolCallId))) {
       this.failureStreak += 1;

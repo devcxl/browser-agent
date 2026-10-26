@@ -273,22 +273,58 @@ describe('ToolLoopAdapter', () => {
     })).toBe(false);
   });
 
-  it('stopWhen 熔断条件在连续 3 次相同工具调用时返回 true', async () => {
+  it('stopWhen 熔断条件在连续 6 次相同工具调用时返回 true（第 3 次起已软拦截）', async () => {
     await adapter.run(basicInput);
     const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
       input: { steps: unknown[] },
     ) => boolean>;
     const circuitCondition = stopConditions[stopConditions.length - 1]!;
-    const steps = ['c1', 'c2', 'c3'].map((id) => ({
+    const mkStep = (id: string) => ({
       toolCalls: [{ toolCallId: id, toolName: 'tabs_query', input: { id: 1 } }],
       toolResults: [{ toolCallId: id, output: { success: true } }],
       content: [],
-    }));
+    });
+    const steps = ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'].map(mkStep);
 
-    expect(circuitCondition({ steps: steps.slice(0, 2) })).toBe(false);
+    expect(circuitCondition({ steps: steps.slice(0, 5) })).toBe(false);
     // 同一批 steps 反复扫描不会重复计数
-    expect(circuitCondition({ steps: steps.slice(0, 2) })).toBe(false);
+    expect(circuitCondition({ steps: steps.slice(0, 5) })).toBe(false);
     expect(circuitCondition({ steps })).toBe(true);
+  });
+
+  it('第 3 次相同参数调用被软拦截：注入错误提示、不执行工具、循环不熔断', async () => {
+    await adapter.run(basicInput);
+    const tools = capturedToolLoopAgentOptions?.['tools'] as Record<string, { execute: (args: unknown) => Promise<ToolResult> }>;
+    const executeMock = vi.mocked(mockToolRegistry.getTool('tabs_query')!.execute);
+
+    const first = await tools['tabs_query']!.execute({ id: '1' });
+    const second = await tools['tabs_query']!.execute({ id: '1' });
+    const third = await tools['tabs_query']!.execute({ id: '1' });
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    // 第 3 次不执行真实工具，返回拦截提示让模型自行调整
+    expect(executeMock).toHaveBeenCalledTimes(2);
+    expect(third.success).toBe(false);
+    expect(third.error).toContain('连续 3 次以完全相同的参数调用');
+    expect((third as Record<string, unknown>).duplicateBlocked).toBe(true);
+
+    // 软拦截期间 stopWhen 不熔断
+    const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
+      input: { steps: unknown[] },
+    ) => boolean>;
+    const circuitCondition = stopConditions[stopConditions.length - 1]!;
+    const blockedSteps = ['c1', 'c2', 'c3'].map((id) => ({
+      toolCalls: [{ toolCallId: id, toolName: 'tabs_query', input: { id: '1' } }],
+      toolResults: [{ toolCallId: id, output: { success: false, error: third.error, duplicateBlocked: true } }],
+      content: [],
+    }));
+    expect(circuitCondition({ steps: blockedSteps })).toBe(false);
+
+    // 改变参数后恢复执行
+    const fourth = await tools['tabs_query']!.execute({ id: '2' });
+    expect(fourth.success).toBe(true);
+    expect(executeMock).toHaveBeenCalledTimes(3);
   });
 
   it('stopWhen 熔断条件在连续 3 次工具失败（含抛错 tool-error）时返回 true', async () => {
@@ -309,12 +345,12 @@ describe('ToolLoopAdapter', () => {
 
   it('熔断后合成终止说明并标记 stopReason=interrupted', async () => {
     mockToolLoopAgentStream.mockImplementationOnce(async () => {
-      // 模拟 AI SDK 每步结束后调用 stopWhen，第 3 次相同调用触发熔断
+      // 模拟 AI SDK 每步结束后调用 stopWhen，第 6 次相同调用触发熔断
       const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
         input: { steps: unknown[] },
       ) => boolean>;
       stopConditions[stopConditions.length - 1]!({
-        steps: ['c1', 'c2', 'c3'].map((id) => ({
+        steps: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6'].map((id) => ({
           toolCalls: [{ toolCallId: id, toolName: 'tabs_query', input: { id: 1 } }],
           toolResults: [{ toolCallId: id, output: { success: true } }],
           content: [],
@@ -332,9 +368,9 @@ describe('ToolLoopAdapter', () => {
 
     expect(result.stopReason).toBe('interrupted');
     expect(result.interruption?.reason).toBe('duplicate-tool-call');
-    expect(result.finalMessage).toContain('检测到连续 3 次相同参数调用同一个工具');
+    expect(result.finalMessage).toContain('检测到连续 6 次相同参数调用同一个工具');
     expect(onStreamChunk).toHaveBeenCalledWith(
-      expect.stringContaining('检测到连续 3 次相同参数调用同一个工具'),
+      expect.stringContaining('检测到连续 6 次相同参数调用同一个工具'),
     );
     const persisted = persistedMessages(mockConversationManager);
     const assistantMsg = [...persisted].reverse().find((message) => message.role === 'assistant');
