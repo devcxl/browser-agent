@@ -4,6 +4,7 @@ import type { AgentSettings, ExpertModeSettings } from '../types';
 import type { Skill, SkillSubscription } from '@/shared/types';
 import type { ConnectionTestFailureReason, ConnectionTestResult } from '@/provider/connection-test';
 import { ConfigStore, SkillStore, SkillSubscriptionStore } from '@/shared/storage';
+import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
 import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
 import { cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
@@ -16,6 +17,7 @@ import {
   SettingsInput,
   SettingsSelect,
   SettingsSwitch,
+  SettingsTextarea,
 } from './SettingsControls';
 import { FloatingButtonSection } from './FloatingButtonSection';
 
@@ -79,6 +81,7 @@ interface Props {
 
 export function SettingsPanel({
   providers,
+  agentSettings,
   expertMode,
   onSaveProviders,
   onSaveExpertMode,
@@ -87,6 +90,9 @@ export function SettingsPanel({
 }: Props) {
   const { t, locale } = useI18n();
   const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'jev' | 'skills' | 'floatingButton'>('appearance');
+  // 系统提示词编辑草稿：面板每次打开时从 agentSettings 初始化
+  const [systemPromptInput, setSystemPromptInput] = useState(agentSettings.systemPrompt);
+  const [systemPromptSaveStatus, setSystemPromptSaveStatus] = useState<'saved' | null>(null);
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
   const [jevSettings, setJevSettings] = useState<JevSettings>({ enabled: false, apiKey: '' });
   const [jevApiKeyInput, setJevApiKeyInput] = useState('');
@@ -171,8 +177,22 @@ export function SettingsPanel({
     setEditingProvider(undefined);
   };
 
-  const handleSaveJevApiKey = async () => {
-    const apiKey = jevApiKeyInput.trim();
+  /** 保存自定义系统提示词；空串回退为默认值 */
+  const handleSaveSystemPrompt = () => {
+    const prompt = systemPromptInput.trim() || DEFAULT_SYSTEM_PROMPT;
+    onSaveAgentSettings({ ...agentSettings, systemPrompt: prompt });
+    setSystemPromptInput(prompt);
+    setSystemPromptSaveStatus('saved');
+  };
+
+  /** 恢复默认系统提示词 */
+  const handleResetSystemPrompt = () => {
+    setSystemPromptInput(DEFAULT_SYSTEM_PROMPT);
+    onSaveAgentSettings({ ...agentSettings, systemPrompt: DEFAULT_SYSTEM_PROMPT });
+    setSystemPromptSaveStatus(null);
+  };
+
+  const handleSaveJevApiKey = async () => {    const apiKey = jevApiKeyInput.trim();
     if (!apiKey) return;
 
     const nextSettings = { ...jevSettings, apiKey };
@@ -476,15 +496,55 @@ export function SettingsPanel({
           ))}
 
           {tab === 'agent' && (
-            <div
-              data-testid="agent-circuit-breaker-info"
-              className="space-y-2 rounded-xl border border-hairline p-3"
-            >
-              <h3 className="text-sm font-medium text-ink">{t('settings.agent.circuitBreakerTitle')}</h3>
-              <p className="text-xs leading-relaxed text-mute">{t('settings.agent.circuitBreakerDesc')}</p>
-              <p className="rounded-lg bg-surface-soft px-3 py-2 text-xs leading-relaxed text-mute">
-                {t('settings.agent.circuitBreakerHint')}
-              </p>
+            <div className="max-w-xl space-y-4">
+              <label className="block">
+                <span className="text-sm text-mute">{t('settings.agent.systemPrompt')}</span>
+                <SettingsTextarea
+                  rows={4}
+                  aria-label={t('settings.agent.systemPrompt')}
+                  data-testid="agent-system-prompt-input"
+                  value={systemPromptInput}
+                  onChange={(event) => {
+                    setSystemPromptInput(event.target.value);
+                    setSystemPromptSaveStatus(null);
+                  }}
+                  className="mt-1"
+                />
+              </label>
+              <p className="text-xs leading-relaxed text-mute">{t('settings.agent.systemPromptHint')}</p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveSystemPrompt}
+                  data-testid="agent-system-prompt-save"
+                  className="rounded-md bg-primary px-3 py-1.5 text-sm text-on-primary hover:bg-primary-active"
+                >
+                  {t('common_save')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetSystemPrompt}
+                  data-testid="agent-system-prompt-reset"
+                  className="rounded-md border border-hairline px-3 py-1.5 text-sm text-mute hover:bg-surface-soft"
+                >
+                  {t('settings.agent.systemPromptReset')}
+                </button>
+                {systemPromptSaveStatus === 'saved' && (
+                  <span role="status" className="text-xs text-success">{t('settings.agent.systemPromptSaved')}</span>
+                )}
+              </div>
+
+              <div
+                data-testid="agent-circuit-breaker-info"
+                className="space-y-2 rounded-xl border border-hairline p-3"
+              >
+                <h3 className="text-sm font-medium text-ink">{t('settings.agent.circuitBreakerTitle')}</h3>
+                <p className="text-xs leading-relaxed text-mute">{t('settings.agent.circuitBreakerDesc')}</p>
+                <p className="rounded-lg bg-surface-soft px-3 py-2 text-xs leading-relaxed text-mute">
+                  {t('settings.agent.circuitBreakerHint')}
+                </p>
+              </div>
             </div>
           )}
 

@@ -1,33 +1,33 @@
 import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
-import { createManagementListTool, createManagementToggleTool } from './management-tools';
-import { createPrivacyGetSettingsTool, createPrivacySetSettingTool } from './privacy-tools';
-import { createProxyGetSettingsTool, createProxySetSettingsTool, createProxyClearTool } from './proxy-tools';
-import { createDebuggerGetTargetsTool, createDebuggerAttachTool, createDebuggerDetachTool } from './debugger-tools';
-import { createDnrGetDynamicRulesTool, createDnrAddDynamicRulesTool, createDnrRemoveDynamicRulesTool } from './dnr-tools';
+import { createManagementListTool, createManagementSetTool } from './management-tools';
+import { createPrivacyReadTool, createPrivacySetTool } from './privacy-tools';
+import { createProxyReadTool, createProxySetTool, createProxyClearTool } from './proxy-tools';
+import { createDebuggerListTool, createDebuggerAttachTool, createDebuggerDetachTool } from './debugger-tools';
+import { createDnrListTool, createDnrAddTool, createDnrRemoveTool } from './dnr-tools';
 
 export function createExpertTools(rpc: IJsonRpcClient): ToolDefinition[] {
   return [
     // Management
     createManagementListTool(rpc),
-    createManagementToggleTool(rpc),
+    createManagementSetTool(rpc),
 
     // Privacy
-    createPrivacyGetSettingsTool(rpc),
-    createPrivacySetSettingTool(rpc),
+    createPrivacyReadTool(rpc),
+    createPrivacySetTool(rpc),
 
     // Proxy
-    createProxyGetSettingsTool(rpc),
-    createProxySetSettingsTool(rpc),
+    createProxyReadTool(rpc),
+    createProxySetTool(rpc),
     createProxyClearTool(rpc),
 
     // Debugger
-    createDebuggerGetTargetsTool(rpc),
+    createDebuggerListTool(rpc),
     createDebuggerAttachTool(rpc),
     createDebuggerDetachTool(rpc),
 
     // DeclarativeNetRequest
-    createDnrGetDynamicRulesTool(rpc),
-    createDnrAddDynamicRulesTool(rpc),
-    createDnrRemoveDynamicRulesTool(rpc),
+    createDnrListTool(rpc),
+    createDnrAddTool(rpc),
+    createDnrRemoveTool(rpc),
   ];
 }

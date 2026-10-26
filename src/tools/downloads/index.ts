@@ -1,22 +1,22 @@
 import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
 import {
-  createDownloadsSearchTool,
-  createDownloadsDownloadTool,
-  createDownloadsEraseTool,
-  createDownloadsOpenTool,
-  createDownloadsCancelTool,
-  createDownloadsPauseTool,
-  createDownloadsResumeTool,
+  createDownloadSearchTool,
+  createDownloadStartTool,
+  createDownloadClearTool,
+  createDownloadOpenTool,
+  createDownloadCancelTool,
+  createDownloadPauseTool,
+  createDownloadResumeTool,
 } from './downloads-tools';
 
 export function createDownloadsTools(rpc: IJsonRpcClient): ToolDefinition[] {
   return [
-    createDownloadsSearchTool(rpc),
-    createDownloadsDownloadTool(rpc),
-    createDownloadsEraseTool(rpc),
-    createDownloadsOpenTool(rpc),
-    createDownloadsCancelTool(rpc),
-    createDownloadsPauseTool(rpc),
-    createDownloadsResumeTool(rpc),
+    createDownloadSearchTool(rpc),
+    createDownloadStartTool(rpc),
+    createDownloadClearTool(rpc),
+    createDownloadOpenTool(rpc),
+    createDownloadCancelTool(rpc),
+    createDownloadPauseTool(rpc),
+    createDownloadResumeTool(rpc),
   ];
 }

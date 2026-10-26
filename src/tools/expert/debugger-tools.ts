@@ -1,11 +1,11 @@
 import type { IJsonRpcClient, ToolDefinition, PreflightResult } from '@/shared/types';
 
-export function createDebuggerGetTargetsTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createDebuggerListTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'debugger_getTargets',
+    name: 'debugger_list',
     description: '列出所有可调试的目标（标签页），包含 ID、标题、URL 和调试器附加状态',
     category: 'debugger',
-    riskLevel: 'medium',
+    riskLevel: 'low',
     confirmationRequired: false,
     resultSensitivity: 'sensitive',
     expertOnly: true,
@@ -22,7 +22,7 @@ export function createDebuggerGetTargetsTool(rpc: IJsonRpcClient): ToolDefinitio
 export function createDebuggerAttachTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
     name: 'debugger_attach',
-    description: '附加调试器到指定标签页。附加后可以拦截网络请求、执行 JavaScript、调试 DOM 等',
+    description: '附加调试器到指定标签页，建立调试会话（浏览器会显示“正在调试”提示条）。当前工具集仅提供附加/分离管理，无基于调试器的进一步操作。',
     category: 'debugger',
     riskLevel: 'critical',
     confirmationRequired: true,
@@ -32,7 +32,7 @@ export function createDebuggerAttachTool(rpc: IJsonRpcClient): ToolDefinition {
     schema: {
       type: 'object',
       properties: {
-        targetId: { type: 'string', description: '调试目标 ID（来自 debugger_getTargets）' },
+        targetId: { type: 'string', description: '调试目标 ID（来自 debugger_list）' },
       },
       required: ['targetId'],
     },
@@ -54,9 +54,9 @@ export function createDebuggerAttachTool(rpc: IJsonRpcClient): ToolDefinition {
 export function createDebuggerDetachTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
     name: 'debugger_detach',
-    description: '从指定标签页分离调试器',
+    description: '从指定标签页分离调试器，结束调试会话（不产生数据破坏，可随时重新附加）。',
     category: 'debugger',
-    riskLevel: 'high',
+    riskLevel: 'medium',
     confirmationRequired: true,
     resultSensitivity: 'low',
     expertOnly: true,
@@ -64,7 +64,7 @@ export function createDebuggerDetachTool(rpc: IJsonRpcClient): ToolDefinition {
     schema: {
       type: 'object',
       properties: {
-        targetId: { type: 'string', description: '调试目标 ID（来自 debugger_getTargets）' },
+        targetId: { type: 'string', description: '调试目标 ID（来自 debugger_list）' },
       },
       required: ['targetId'],
     },

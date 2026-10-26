@@ -34,7 +34,7 @@ import { BrowserEvent } from './types';
 /**
  * Firefox 浏览器适配器
  * Firefox 使用 `browser.*` 命名空间
- * Firefox 152+ 已支持 tabGroups API
+ * Firefox 128+ 已支持 tabGroups API（需 manifest 声明 tabGroups 权限）
  */
 export class FirefoxAdapter implements IBrowserAdapter {
   readonly browserType = 'firefox' as const;
@@ -125,7 +125,7 @@ export class FirefoxAdapter implements IBrowserAdapter {
   };
 
   // ── TabGroups ──────────────────────────────────────
-  // Firefox 152+ 才支持 tabGroups API，低版本返回明确错误
+  // Firefox 128+ 才支持 tabGroups API（需 tabGroups 权限），低版本返回明确错误
 
   tabGroups = {
     query: (queryInfo: TabGroupQueryInfo): Promise<TabGroup[]> => {
@@ -194,6 +194,12 @@ export class FirefoxAdapter implements IBrowserAdapter {
 
     update: (id: string, changes: BookmarkChangesArg): Promise<BookmarkTreeNode> =>
       this.browser.bookmarks.update(id, changes),
+
+    get: (id: string): Promise<BookmarkTreeNode> =>
+      this.browser.bookmarks.get(id),
+
+    move: (id: string, destination: { parentId?: string; index?: number }): Promise<BookmarkTreeNode> =>
+      this.browser.bookmarks.move(id, destination),
 
     remove: (id: string): Promise<void> =>
       this.browser.bookmarks.remove(id),

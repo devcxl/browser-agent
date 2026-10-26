@@ -184,6 +184,7 @@ export function useAgent() {
           contextWindowTokens: modelConfig?.limit?.context ?? 128000,
           tokenBudgetMargin: 4096,
           reasoningEffort,
+          systemPrompt: savedAgentSettings?.systemPrompt,
         };
         const generateTitle = () => {
           console.debug('[Title] fire-and-forget 启动', { conversationId, model });

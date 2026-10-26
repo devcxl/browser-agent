@@ -4,7 +4,7 @@ export function createPageGetMarkdownTool(
   executeFn: (params: Record<string, unknown>) => Promise<ToolResult>,
 ): ToolDefinition {
   return {
-    name: 'page_getMarkdown',
+    name: 'page_read_markdown',
     description:
       '提取当前页面的正文内容并转换为格式化的 Markdown（含 YAML frontmatter、标题降级、代码块语言保留、GFM 表格/删除线、不安全链接过滤）。',
     schema: {

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { IJsonRpcClient } from '@/shared/types/jsonrpc';
 import {
-  createProxyGetSettingsTool,
-  createProxySetSettingsTool,
+  createProxyReadTool,
+  createProxySetTool,
   createProxyClearTool,
 } from '../proxy-tools';
 
@@ -16,13 +16,13 @@ function createMockRpc(): IJsonRpcClient {
 }
 
 describe('proxy tools', () => {
-  describe('proxy_getSettings', () => {
+  describe('proxy_read', () => {
     it('should have correct metadata', () => {
-      const tool = createProxyGetSettingsTool(createMockRpc());
+      const tool = createProxyReadTool(createMockRpc());
 
-      expect(tool.name).toBe('proxy_getSettings');
+      expect(tool.name).toBe('proxy_read');
       expect(tool.category).toBe('proxy');
-      expect(tool.riskLevel).toBe('medium');
+      expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
       expect(tool.resultSensitivity).toBe('low');
       expect(tool.expertOnly).toBe(true);
@@ -36,7 +36,7 @@ describe('proxy tools', () => {
       const rpc = createMockRpc();
       const settings = { mode: 'system' };
       vi.mocked(rpc.request).mockResolvedValue(settings);
-      const tool = createProxyGetSettingsTool(rpc);
+      const tool = createProxyReadTool(rpc);
 
       const result = await tool.execute({});
 
@@ -45,11 +45,11 @@ describe('proxy tools', () => {
     });
   });
 
-  describe('proxy_setSettings', () => {
+  describe('proxy_set', () => {
     it('should have correct metadata', () => {
-      const tool = createProxySetSettingsTool(createMockRpc());
+      const tool = createProxySetTool(createMockRpc());
 
-      expect(tool.name).toBe('proxy_setSettings');
+      expect(tool.name).toBe('proxy_set');
       expect(tool.category).toBe('proxy');
       expect(tool.riskLevel).toBe('critical');
       expect(tool.confirmationRequired).toBe(true);
@@ -61,13 +61,13 @@ describe('proxy tools', () => {
     });
 
     it('should require value in schema', () => {
-      const tool = createProxySetSettingsTool(createMockRpc());
+      const tool = createProxySetTool(createMockRpc());
       expect(tool.schema.required).toContain('value');
     });
 
     it('should call rpc.request("proxy.setSettings", params)', async () => {
       const rpc = createMockRpc();
-      const tool = createProxySetSettingsTool(rpc);
+      const tool = createProxySetTool(rpc);
       const params = { value: { mode: 'fixed_servers', rules: { singleProxy: { scheme: 'http', host: '127.0.0.1', port: 8080 } } } };
 
       const result = await tool.execute(params);
@@ -78,7 +78,7 @@ describe('proxy tools', () => {
 
     describe('preflight', () => {
       it('should not warn when switching to a fixed proxy', async () => {
-        const tool = createProxySetSettingsTool(createMockRpc());
+        const tool = createProxySetTool(createMockRpc());
 
         const preflight = await tool.preflight!({
           value: { mode: 'fixed_servers', rules: { singleProxy: { scheme: 'http', host: '127.0.0.1', port: 8080 } } },
@@ -91,7 +91,7 @@ describe('proxy tools', () => {
       });
 
       it('should warn when switching to none (disconnect)', async () => {
-        const tool = createProxySetSettingsTool(createMockRpc());
+        const tool = createProxySetTool(createMockRpc());
 
         const preflight = await tool.preflight!({ value: { mode: 'none' } });
 
@@ -102,7 +102,7 @@ describe('proxy tools', () => {
       });
 
       it('should not warn for system mode', async () => {
-        const tool = createProxySetSettingsTool(createMockRpc());
+        const tool = createProxySetTool(createMockRpc());
 
         const preflight = await tool.preflight!({ value: { mode: 'system' } });
 

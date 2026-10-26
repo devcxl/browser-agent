@@ -13,6 +13,8 @@ export interface AgentConfig {
   /** 预算截断安全边际（保留给 system prompt + 输出），默认 4096 */
   tokenBudgetMargin: number;
   reasoningEffort?: ReasoningEffort;
+  /** 自定义系统提示词；空/缺省时使用 DEFAULT_SYSTEM_PROMPT */
+  systemPrompt?: string;
 }
 
 // ==================== Agent 运行输入/输出 ====================

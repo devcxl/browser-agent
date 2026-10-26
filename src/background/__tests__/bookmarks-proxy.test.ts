@@ -16,6 +16,8 @@ function createMockAdapter(): IBrowserAdapter {
       update: vi.fn().mockResolvedValue({ id: '1', title: 'Updated' }),
       remove: vi.fn().mockResolvedValue(undefined),
       getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]),
+      get: vi.fn().mockResolvedValue({ id: '9', title: 'Single', url: 'https://single.com' }),
+      move: vi.fn().mockResolvedValue({ id: '9', parentId: 'folder-3' }),
     },
     downloads: {} as any,
     cookies: {} as any,
@@ -77,3 +79,19 @@ describe('BookmarksProxy', () => {
     expect(result).toHaveLength(1);
   });
 });
+
+  it('get should delegate to adapter.bookmarks.get', async () => {
+    const mockAdapter = createMockAdapter();
+    const proxy = new BookmarksProxy(mockAdapter);
+    const result = await proxy.get({ id: '9' });
+    expect(mockAdapter.bookmarks.get).toHaveBeenCalledWith('9');
+    expect(result.title).toBe('Single');
+  });
+
+  it('move should delegate to adapter.bookmarks.move', async () => {
+    const mockAdapter = createMockAdapter();
+    const proxy = new BookmarksProxy(mockAdapter);
+    const result = await proxy.move({ id: '9', destination: { parentId: 'folder-3' } });
+    expect(mockAdapter.bookmarks.move).toHaveBeenCalledWith('9', { parentId: 'folder-3' });
+    expect(result.parentId).toBe('folder-3');
+  });

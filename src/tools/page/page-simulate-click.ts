@@ -4,7 +4,7 @@ type ExecuteFn = (params: Record<string, unknown>) => Promise<ToolResult>;
 
 export function createPageSimulateClickTool(executeFn: ExecuteFn): ToolDefinition {
   return {
-    name: 'page_simulateClick',
+    name: 'page_click',
     description: '在页面上模拟鼠标点击，支持 CSS 选择器、XPath 或文本内容定位元素',
     schema: {
       type: 'object',

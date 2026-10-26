@@ -15,6 +15,7 @@ import type { ConnectionTestResult } from '@/provider/connection-test';
 import { applyTheme } from './theme';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
+import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
 import { WIDGET_MESSAGE_SOURCE, type CloseRequestMessage } from '@/shared/widget-protocol';
 
 import { ChatContentContainer } from './components/ChatContentContainer';
@@ -65,6 +66,7 @@ function ChatLayout() {
   const [agentSettings, setAgentSettings] = useState<AgentSettings>({
     maxToolRounds: 99,
     contextWindowTokens: 128000,
+    systemPrompt: DEFAULT_SYSTEM_PROMPT,
   });
   const [expertMode, setExpertMode] = useState<ExpertModeSettings>({
     enabled: false,
@@ -116,6 +118,7 @@ function ChatLayout() {
       setAgentSettings({
         maxToolRounds: saved.maxToolRounds,
         contextWindowTokens: saved.contextWindowTokens ?? 128000,
+        systemPrompt: saved.systemPrompt || DEFAULT_SYSTEM_PROMPT,
       });
       setExpertMode(await store.get('expertModeSettings'));
       const prefs = await store.get('preferences');
@@ -156,6 +159,7 @@ function ChatLayout() {
     await store.set('agentSettings', {
       maxToolRounds: s.maxToolRounds,
       contextWindowTokens: s.contextWindowTokens,
+      systemPrompt: s.systemPrompt,
     });
   }, []);
   const handleSaveExpertMode = useCallback(async (e: ExpertModeSettings) => {

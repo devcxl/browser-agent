@@ -1,3 +1,4 @@
+import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
 import type {
   FloatingButtonSettings,
   StorageSchema,
@@ -22,6 +23,7 @@ const DEFAULTS: StorageSchema = {
   agentSettings: {
     maxToolRounds: 99,
     contextWindowTokens: 128000,
+    systemPrompt: DEFAULT_SYSTEM_PROMPT,
   },
   expertModeSettings: {
     enabled: false,

@@ -257,7 +257,7 @@ test.describe('Jev tool routing', () => {
     expect(getAgentRequests(chatRequests)).toHaveLength(1);
     const routedTools = getToolNames(agentRequest);
     expect(routedTools).toContain('history_search');
-    expect(routedTools).not.toContain('bookmarks_search');
+    expect(routedTools).not.toContain('bookmark_search');
   });
 
   test('local keyword hits bypass Jev when Jev is enabled', async ({ extensionContext, extensionId }) => {
@@ -291,7 +291,7 @@ test.describe('Jev tool routing', () => {
     expect(getAgentRequests(chatRequests)).toHaveLength(1);
     const routedTools = getToolNames(agentRequest);
     expect(routedTools).toContain('history_search');
-    expect(routedTools).not.toContain('bookmarks_search');
+    expect(routedTools).not.toContain('bookmark_search');
   });
 
   test('Jev enables every confidently selected category', async ({ extensionContext, extensionId }) => {
@@ -307,8 +307,8 @@ test.describe('Jev tool routing', () => {
     const [agentRequest] = getAgentRequests(chatRequests);
     const routedTools = getToolNames(agentRequest);
     expect(routedTools).toContain('history_search');
-    expect(routedTools).toContain('bookmarks_search');
-    expect(routedTools).not.toContain('downloads_search');
+    expect(routedTools).toContain('bookmark_search');
+    expect(routedTools).not.toContain('download_search');
   });
 
   test('uncertain Jev decisions leave the full tool set available without another classifier call', async ({
@@ -327,7 +327,7 @@ test.describe('Jev tool routing', () => {
     expect(getAgentRequests(chatRequests)).toHaveLength(1);
     const routedTools = getToolNames(agentRequest);
     expect(routedTools).toContain('history_search');
-    expect(routedTools).toContain('bookmarks_search');
+    expect(routedTools).toContain('bookmark_search');
   });
 
   test('Jev service errors safely leave all tools available', async ({ extensionContext, extensionId }) => {
@@ -341,6 +341,6 @@ test.describe('Jev tool routing', () => {
     expect(jevRequests).toHaveLength(1);
     const [agentRequest] = getAgentRequests(chatRequests);
     expect(getAgentRequests(chatRequests)).toHaveLength(1);
-    expect(getToolNames(agentRequest)).toContain('bookmarks_search');
+    expect(getToolNames(agentRequest)).toContain('bookmark_search');
   });
 });

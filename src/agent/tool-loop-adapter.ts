@@ -28,10 +28,12 @@ import {
 import { ToolClassifier } from './tool-classifier';
 import { CircuitBreaker, formatInterruptionMessage } from './circuit-breaker';
 import type { AgentRunInterruption } from './circuit-breaker';
+import { DuplicateCallGuard, duplicateBlockResult } from './duplicate-call-guard';
 import { TOOL_CATEGORY_DESCRIPTIONS } from '@/shared/tool-categories';
 import type { ToolCategory } from '@/shared/types/tool';
 import { reconstructToolProtocol } from '@/shared/tool-protocol';
 import { DEFAULT_AGENT_CONFIG } from './agent-config';
+import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
 
 /** 常驻类别：高频操作不参与懒加载过滤，分类失效时仍有核心能力可用 */
 const CORE_TOOL_CATEGORIES: readonly ToolCategory[] = [
@@ -81,6 +83,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
   private toolClassifier: ToolClassifier;
   /** 本次运行（run）的熔断状态；每次 run 前重置 */
   private circuitBreaker = new CircuitBreaker();
+  /** 重复调用软拦截状态：第 3 次相同调用起注入提示而非执行工具；每次 run 前重置 */
+  private duplicateGuard = new DuplicateCallGuard();
   private onRequestApproval?: OnRequestApproval;
   /** 缓存的 LanguageModel；provider 或模型变化时由调用方重建 adapter */
   private _model: Promise<LanguageModelV4> | null = null;
@@ -131,6 +135,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     console.debug('[ToolLoopAdapter] run() 开始', { conversationId: input.conversationId });
     this.abortController = new AbortController();
     this.circuitBreaker.reset();
+    this.duplicateGuard.reset();
     this.lastActiveTools = undefined;
     const toolCalls: ToolCallRecord[] = [];
     const persistenceTasks: Promise<void>[] = [];
@@ -286,7 +291,8 @@ export class ToolLoopAdapter implements IAgentRuntime {
         // isLoopFinished() 永不返回 true，显式声明「让循环自然收敛」——
         // 省略 stopWhen 时 ToolLoopAgent 会默认在 20 步后停止。
         isLoopFinished(),
-        // 熔断条件：重扫全部 steps，CircuitBreaker 按 toolCallId 去重不会重复计数
+        // 熔断条件：重扫全部 steps，CircuitBreaker 按 toolCallId 去重不会重复计数。
+        // 重复调用第 3 次起已由工具层软拦截注入提示，这里在连续第 6 次才真正熔断。
         ({ steps }) => {
           for (const step of steps) {
             this.circuitBreaker.recordStep({
@@ -486,6 +492,12 @@ export class ToolLoopAdapter implements IAgentRuntime {
         description: t.description,
         inputSchema: jsonSchemaToZod(t.schema as unknown as Record<string, unknown>),
         execute: async (args, _opts) => {
+          // 重复调用软拦截：第 3 次相同参数调用起不执行工具，把纠正提示
+          // 作为工具错误结果注入上下文，让模型自行调整后继续（真正终止
+          // 由 stopWhen 的 CircuitBreaker 在连续第 6 次兜底）。
+          if (this.duplicateGuard.shouldBlock(t.name, args)) {
+            return duplicateBlockResult();
+          }
           return this.executeTool(t, args as Record<string, unknown>);
         },
       } as AISdkTool;
@@ -723,15 +735,17 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
   /**
    * 静态 system message：仅含固定指令与工具类别索引。
+   * 角色描述来自用户自定义系统提示词（默认 DEFAULT_SYSTEM_PROMPT），
    * 内容不随会话变化，保证 provider 端 prompt caching 命中前缀。
    */
   private buildSystemMessage(): ModelMessage {
+    const persona = this.agentConfig.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
     const categoryIndex = (Object.keys(TOOL_CATEGORY_DESCRIPTIONS) as ToolCategory[])
       .map((category) => `- ${category}: ${TOOL_CATEGORY_DESCRIPTIONS[category]}`)
       .join('\n');
 
     const content = [
-      `你是浏览器助手，可以管理用户的标签页、窗口、标签组等。`,
+      persona,
       ``,
       `## 可用工具类别`,
       categoryIndex,

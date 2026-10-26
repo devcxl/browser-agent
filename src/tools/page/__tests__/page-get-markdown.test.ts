@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createPageGetMarkdownTool } from '../page-get-markdown';
 
-describe('page_getMarkdown tool', () => {
+describe('page_read_markdown tool', () => {
   it('should return tool definition with correct metadata', () => {
     const executeFn = vi.fn();
     const tool = createPageGetMarkdownTool(executeFn);
 
-    expect(tool.name).toBe('page_getMarkdown');
+    expect(tool.name).toBe('page_read_markdown');
     expect(tool.category).toBe('page');
     expect(tool.riskLevel).toBe('high');
     expect(tool.confirmationRequired).toBe(true);

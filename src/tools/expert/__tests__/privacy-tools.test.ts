@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { IJsonRpcClient } from '@/shared/types/jsonrpc';
 import {
-  createPrivacyGetSettingsTool,
-  createPrivacySetSettingTool,
+  createPrivacyReadTool,
+  createPrivacySetTool,
 } from '../privacy-tools';
 
 function createMockRpc(): IJsonRpcClient {
@@ -15,13 +15,13 @@ function createMockRpc(): IJsonRpcClient {
 }
 
 describe('privacy tools', () => {
-  describe('privacy_getSettings', () => {
+  describe('privacy_read', () => {
     it('should have correct metadata', () => {
-      const tool = createPrivacyGetSettingsTool(createMockRpc());
+      const tool = createPrivacyReadTool(createMockRpc());
 
-      expect(tool.name).toBe('privacy_getSettings');
+      expect(tool.name).toBe('privacy_read');
       expect(tool.category).toBe('privacy');
-      expect(tool.riskLevel).toBe('medium');
+      expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
       expect(tool.resultSensitivity).toBe('low');
       expect(tool.expertOnly).toBe(true);
@@ -35,7 +35,7 @@ describe('privacy tools', () => {
       const rpc = createMockRpc();
       const settings = { webRTCIPHandlingPolicy: 'default_public_interface_only' };
       vi.mocked(rpc.request).mockResolvedValue(settings);
-      const tool = createPrivacyGetSettingsTool(rpc);
+      const tool = createPrivacyReadTool(rpc);
 
       const result = await tool.execute({});
 
@@ -44,11 +44,11 @@ describe('privacy tools', () => {
     });
   });
 
-  describe('privacy_setSetting', () => {
+  describe('privacy_set', () => {
     it('should have correct metadata', () => {
-      const tool = createPrivacySetSettingTool(createMockRpc());
+      const tool = createPrivacySetTool(createMockRpc());
 
-      expect(tool.name).toBe('privacy_setSetting');
+      expect(tool.name).toBe('privacy_set');
       expect(tool.category).toBe('privacy');
       expect(tool.riskLevel).toBe('high');
       expect(tool.confirmationRequired).toBe(true);
@@ -60,14 +60,14 @@ describe('privacy tools', () => {
     });
 
     it('should require key and value in schema', () => {
-      const tool = createPrivacySetSettingTool(createMockRpc());
+      const tool = createPrivacySetTool(createMockRpc());
       expect(tool.schema.required).toContain('key');
       expect(tool.schema.required).toContain('value');
     });
 
     it('should call rpc.request("privacy.setNetworkSetting", params)', async () => {
       const rpc = createMockRpc();
-      const tool = createPrivacySetSettingTool(rpc);
+      const tool = createPrivacySetTool(rpc);
       const params = {
         key: 'webRTCIPHandlingPolicy',
         value: 'disable_non_proxied_udp',

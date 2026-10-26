@@ -1,11 +1,14 @@
 import type { IJsonRpcClient, ToolDefinition, PreflightResult } from '@/shared/types';
 
-export function createBookmarksSearchTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * bookmark_search：按关键字/标题/URL 搜索书签。
+ */
+export function createBookmarkSearchTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'bookmarks_search',
-    description: '搜索浏览器书签，可按关键字、标题或 URL 匹配',
+    name: 'bookmark_search',
+    description: '搜索浏览器书签，可按关键字、标题或 URL 匹配。需要书签 ID 时先从这里查。',
     category: 'bookmarks',
-    riskLevel: 'medium',
+    riskLevel: 'low',
     confirmationRequired: false,
     resultSensitivity: 'low',
     schema: {
@@ -17,16 +20,24 @@ export function createBookmarksSearchTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      const data = await rpc.request('bookmarks.search', params);
-      return { success: true, data };
+      try {
+        const data = await rpc.request('bookmarks.search', params);
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createBookmarksCreateTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * bookmark_add：添加书签或文件夹。
+ */
+export function createBookmarkAddTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'bookmarks_create',
-    description: '创建新的书签或文件夹',
+    name: 'bookmark_add',
+    description:
+      '添加书签或书签文件夹：提供 url 时创建书签，不提供 url 时创建文件夹。可用 bookmark_search 查 parentId 把书签放进指定文件夹。',
     category: 'bookmarks',
     riskLevel: 'low',
     confirmationRequired: false,
@@ -42,16 +53,24 @@ export function createBookmarksCreateTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      const data = await rpc.request('bookmarks.create', params);
-      return { success: true, data };
+      try {
+        const data = await rpc.request('bookmarks.create', params);
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createBookmarksUpdateTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * bookmark_edit：修改书签标题/URL（不含移动位置）。
+ */
+export function createBookmarkEditTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'bookmarks_update',
-    description: '更新书签或文件夹的标题和 URL',
+    name: 'bookmark_edit',
+    description:
+      '修改书签或文件夹的标题和 URL。注意：本工具不能移动书签位置，移动请用 bookmark_move。',
     category: 'bookmarks',
     riskLevel: 'medium',
     confirmationRequired: false,
@@ -59,7 +78,7 @@ export function createBookmarksUpdateTool(rpc: IJsonRpcClient): ToolDefinition {
     schema: {
       type: 'object',
       properties: {
-        id: { type: 'string', description: '要更新的书签 ID' },
+        id: { type: 'string', description: '要修改的书签 ID' },
         title: { type: 'string', description: '新标题' },
         url: { type: 'string', description: '新 URL' },
       },
@@ -67,13 +86,58 @@ export function createBookmarksUpdateTool(rpc: IJsonRpcClient): ToolDefinition {
     },
     requireBackground: true,
     execute: async (params) => {
-      const data = await rpc.request('bookmarks.update', params);
-      return { success: true, data };
+      try {
+        const { id, title, url } = params;
+        const data = await rpc.request('bookmarks.update', { id, changes: { title, url } });
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createBookmarksDeleteTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * bookmark_move：把书签移动到其他文件夹/位置。
+ */
+export function createBookmarkMoveTool(rpc: IJsonRpcClient): ToolDefinition {
+  return {
+    name: 'bookmark_move',
+    description:
+      '把书签移动到其他文件夹或位置。目标文件夹 ID 可用 bookmark_search 查到。整理书签分类时使用。',
+    category: 'bookmarks',
+    riskLevel: 'medium',
+    confirmationRequired: false,
+    resultSensitivity: 'low',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: '要移动的书签 ID' },
+        parentId: { type: 'string', description: '目标父文件夹 ID' },
+        index: { type: 'number', description: '目标文件夹中的位置索引' },
+      },
+      required: ['id'],
+    },
+    requireBackground: true,
+    execute: async (params) => {
+      try {
+        const { id, parentId, index } = params;
+        const data = await rpc.request('bookmarks.move', {
+          id,
+          destination: { parentId, index },
+        });
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
+    },
+  };
+}
+
+/**
+ * bookmark_remove：删除书签（高风险，保留 preflight）。
+ */
+export function createBookmarkRemoveTool(rpc: IJsonRpcClient): ToolDefinition {
   const preflight = async (params: Record<string, unknown>): Promise<PreflightResult> => {
     const ids: string[] = [];
     if (typeof params.id === 'string') {
@@ -84,7 +148,7 @@ export function createBookmarksDeleteTool(rpc: IJsonRpcClient): ToolDefinition {
     }
 
     const results = await Promise.allSettled(
-      ids.map((id) => rpc.request('bookmarks.search', { id }) as Promise<{ title?: string; url?: string }>)
+      ids.map((id) => rpc.request('bookmarks.get', { id }) as Promise<{ title?: string; url?: string }>)
     );
 
     const affectedObjects = results
@@ -108,8 +172,8 @@ export function createBookmarksDeleteTool(rpc: IJsonRpcClient): ToolDefinition {
   };
 
   return {
-    name: 'bookmarks_delete',
-    description: '删除书签或文件夹。高风险操作，删除不可恢复。',
+    name: 'bookmark_remove',
+    description: '删除书签或文件夹。删除不可恢复，需用户确认。',
     category: 'bookmarks',
     riskLevel: 'high',
     confirmationRequired: true,
@@ -128,16 +192,23 @@ export function createBookmarksDeleteTool(rpc: IJsonRpcClient): ToolDefinition {
     requireBackground: true,
     preflight,
     execute: async (params) => {
-      await rpc.request('bookmarks.delete', params);
-      return { success: true };
+      try {
+        await rpc.request('bookmarks.delete', params);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }
 
-export function createBookmarksGetTreeTool(rpc: IJsonRpcClient): ToolDefinition {
+/**
+ * bookmark_tree：获取完整书签树。
+ */
+export function createBookmarkTreeTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'bookmarks_getTree',
-    description: '获取完整的书签树结构',
+    name: 'bookmark_tree',
+    description: '获取完整的书签树结构（含文件夹层级）。需要了解书签整体组织时使用。',
     category: 'bookmarks',
     riskLevel: 'low',
     confirmationRequired: false,
@@ -148,8 +219,12 @@ export function createBookmarksGetTreeTool(rpc: IJsonRpcClient): ToolDefinition 
     },
     requireBackground: true,
     execute: async () => {
-      const data = await rpc.request('bookmarks.getTree', {});
-      return { success: true, data };
+      try {
+        const data = await rpc.request('bookmarks.getTree', {});
+        return { success: true, data };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+      }
     },
   };
 }

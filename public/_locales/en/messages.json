@@ -476,6 +476,18 @@
   "settings_agent_maxToolRounds": {
     "message": "Max Steps per Task"
   },
+  "settings_agent_systemPrompt": {
+    "message": "System Prompt"
+  },
+  "settings_agent_systemPromptHint": {
+    "message": "Customize the assistant's role and behavior. Saved as the system prompt sent to the model. Saving empty restores the default."
+  },
+  "settings_agent_systemPromptReset": {
+    "message": "Reset to Default"
+  },
+  "settings_agent_systemPromptSaved": {
+    "message": "Saved"
+  },
   "settings_agent_circuitBreakerTitle": {
     "message": "Intelligent Task Protection"
   },

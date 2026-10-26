@@ -1,11 +1,11 @@
 import type { IJsonRpcClient, ToolDefinition } from '@/shared/types';
 
-export function createPrivacyGetSettingsTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createPrivacyReadTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'privacy_getSettings',
+    name: 'privacy_read',
     description: '读取浏览器隐私相关设置（WebRTC 等）',
     category: 'privacy',
-    riskLevel: 'medium',
+    riskLevel: 'low',
     confirmationRequired: false,
     resultSensitivity: 'low',
     expertOnly: true,
@@ -19,9 +19,9 @@ export function createPrivacyGetSettingsTool(rpc: IJsonRpcClient): ToolDefinitio
   };
 }
 
-export function createPrivacySetSettingTool(rpc: IJsonRpcClient): ToolDefinition {
+export function createPrivacySetTool(rpc: IJsonRpcClient): ToolDefinition {
   return {
-    name: 'privacy_setSetting',
+    name: 'privacy_set',
     description: '修改浏览器隐私设置',
     category: 'privacy',
     riskLevel: 'high',

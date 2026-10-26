@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { IJsonRpcClient } from '@/shared/types/jsonrpc';
 import {
-  createDebuggerGetTargetsTool,
+  createDebuggerListTool,
   createDebuggerAttachTool,
   createDebuggerDetachTool,
 } from '../debugger-tools';
@@ -16,13 +16,13 @@ function createMockRpc(): IJsonRpcClient {
 }
 
 describe('debugger tools', () => {
-  describe('debugger_getTargets', () => {
+  describe('debugger_list', () => {
     it('should have correct metadata', () => {
-      const tool = createDebuggerGetTargetsTool(createMockRpc());
+      const tool = createDebuggerListTool(createMockRpc());
 
-      expect(tool.name).toBe('debugger_getTargets');
+      expect(tool.name).toBe('debugger_list');
       expect(tool.category).toBe('debugger');
-      expect(tool.riskLevel).toBe('medium');
+      expect(tool.riskLevel).toBe('low');
       expect(tool.confirmationRequired).toBe(false);
       expect(tool.resultSensitivity).toBe('sensitive');
       expect(tool.expertOnly).toBe(true);
@@ -36,7 +36,7 @@ describe('debugger tools', () => {
       const rpc = createMockRpc();
       const targets = [{ id: 'target-1', title: 'Tab 1' }];
       vi.mocked(rpc.request).mockResolvedValue(targets);
-      const tool = createDebuggerGetTargetsTool(rpc);
+      const tool = createDebuggerListTool(rpc);
 
       const result = await tool.execute({});
 
@@ -100,7 +100,7 @@ describe('debugger tools', () => {
 
       expect(tool.name).toBe('debugger_detach');
       expect(tool.category).toBe('debugger');
-      expect(tool.riskLevel).toBe('high');
+      expect(tool.riskLevel).toBe('medium');
       expect(tool.confirmationRequired).toBe(true);
       expect(tool.resultSensitivity).toBe('low');
       expect(tool.expertOnly).toBe(true);

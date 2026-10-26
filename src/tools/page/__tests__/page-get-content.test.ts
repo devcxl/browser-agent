@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createPageGetContentTool } from '../page-get-content';
 
-describe('page_getContent tool', () => {
+describe('page_read_content tool', () => {
   it('should return tool definition with correct metadata', () => {
     const executeFn = vi.fn();
     const tool = createPageGetContentTool(executeFn);
 
-    expect(tool.name).toBe('page_getContent');
+    expect(tool.name).toBe('page_read_content');
     expect(tool.category).toBe('page');
     expect(tool.riskLevel).toBe('high');
     expect(tool.confirmationRequired).toBe(true);
