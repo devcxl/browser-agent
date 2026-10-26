@@ -37,10 +37,10 @@ describe('registerPhase2Tools', () => {
     registry = createMockRegistry();
   });
 
-  it('注册 44 个工具', () => {
+  it('注册 45 个工具', () => {
     registerPhase2Tools(registry, rpc);
     const allTools = registry.getAllTools();
-    expect(allTools).toHaveLength(44);
+    expect(allTools).toHaveLength(45);
   });
 
   it('覆盖所有 10 个 category', () => {
@@ -77,7 +77,7 @@ describe('registerPhase2Tools', () => {
   it('bookmarks 工具数量正确', () => {
     registerPhase2Tools(registry, rpc);
     const tools = registry.getToolsByCategory('bookmarks');
-    expect(tools).toHaveLength(5);
+    expect(tools).toHaveLength(6);
   });
 
   it('history 工具数量正确', () => {

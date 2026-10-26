@@ -23,7 +23,7 @@ const tabCleanup: SkillDef = {
 你已激活"标签页大扫除"技能。请按以下步骤整理用户的标签页：
 
 ### 步骤 1：获取全部标签页
-使用 \`tabs_query\` 获取所有打开的标签页，关注字段：url、title、id、lastAccessed。
+使用 \`tab_search\` 获取所有打开的标签页，关注字段：url、title、id、lastAccessed。
 
 ### 步骤 2：查找重复标签页
 找出所有 URL 重复的标签页，每组只保留一个（优先保留最早打开或正活跃的），其余标记为可关闭。
@@ -32,10 +32,10 @@ const tabCleanup: SkillDef = {
 找出 lastAccessed 超过 24 小时的标签页。
 
 ### 步骤 4：归档闲置标签页
-先用 \`bookmarks_create\` 将其加入书签（建议放在"归档标签页"文件夹下），再用 \`tabs_remove\` 关闭。
+先用 \`bookmark_add\` 将其加入书签（建议放在"归档标签页"文件夹下），再用 \`tab_close\` 关闭。
 
 ### 步骤 5：关闭重复标签页
-使用 \`tabs_remove\` 分批关闭重复标签页，每步需用户确认。
+使用 \`tab_close\` 分批关闭重复标签页，每步需用户确认。
 
 ### 步骤 6：汇报结果
 汇报：扫描总数、关闭的重复数、归档的闲置数、剩余标签页数。
@@ -56,7 +56,7 @@ const tabSorter: SkillDef = {
 你已激活"智能标签分组"技能。请按以下步骤整理标签页分组：
 
 ### 步骤 1：获取全部标签页
-使用 \`tabs_query\` 获取当前窗口中所有标签页。
+使用 \`tab_search\` 获取当前窗口中所有标签页。
 
 ### 步骤 2：分析域名分布
 从每个标签页的 url 中提取域名（hostname），统计每个域名下的标签页数量。
@@ -67,7 +67,7 @@ const tabSorter: SkillDef = {
 - 同产品线（如 github.com + github.io）合并为一个分组
 
 ### 步骤 4：创建标签组
-使用 \`tabs_manage({ action: "group", tabIds })\` 为每组创建标签组，设置有意义的标题和不同颜色。
+使用 \`group_create({ tabIds })\` 为每组创建标签组，设置有意义的标题和不同颜色。
 
 ### 步骤 5：汇报
 汇报：标签页总数、创建的标签组数、每组包含的网站、未分组标签页。
@@ -91,18 +91,18 @@ const tabWorkspace: SkillDef = {
 先确认用户想：保存工作区、恢复工作区、还是列出所有工作区？
 
 ### 保存工作区
-1. 用 \`tabs_query\` 获取当前窗口所有标签页
-2. 用 \`sessions_save\` 保存会话，命名格式"日期 + 用途"
-3. 用 \`bookmarks_create\` 在"工作区"书签文件夹下创建子文件夹，把 URL 加入书签（双保险）
+1. 用 \`tab_search\` 获取当前窗口所有标签页
+2. 用 \`session_save\` 保存会话，命名格式"日期 + 用途"
+3. 用 \`bookmark_add\` 在"工作区"书签文件夹下创建子文件夹，把 URL 加入书签（双保险）
 
 ### 恢复工作区
 1. 先问在当前窗口还是新窗口打开
-2. 用 \`sessions_restore\` 恢复会话
+2. 用 \`session_restore\` 恢复会话
 3. 汇报恢复的标签页数
 
 ### 列出工作区
-1. 用 \`sessions_list\` 列出已保存的会话
-2. 用 \`bookmarks_search\` 搜索"工作区"书签文件夹
+1. 用 \`session_list\` 列出已保存的会话
+2. 用 \`bookmark_search\` 搜索"工作区"书签文件夹
 3. 展示：名称—标签页数—保存时间
 
 ### 重要提醒
@@ -120,19 +120,19 @@ const tabRescue: SkillDef = {
 你已激活"标签页过载救援"技能。按优先级抢救：
 
 ### 步骤 1：全局扫描
-用 \`tabs_query\` 获取所有标签页，统计总数、各窗口分布、pinned 数和重复 URL 数。
+用 \`tab_search\` 获取所有标签页，统计总数、各窗口分布、pinned 数和重复 URL 数。
 
 ### 步骤 2：去重（最高优先级）
-找出所有 URL 重复的标签页，每组保留 1 个（优先保留活跃窗口中、最近访问的、有表单状态的）。用 \`tabs_remove\` 关闭其余。
+找出所有 URL 重复的标签页，每组保留 1 个（优先保留活跃窗口中、最近访问的、有表单状态的）。用 \`tab_close\` 关闭其余。
 
 ### 步骤 3：休眠闲置标签页（中等优先级）
 对 lastAccessed 超过 12 小时的标签页：
-1. 用 \`bookmarks_create\` 保存到"休眠标签页"书签文件夹
-2. 用 \`tabs_remove\` 关闭
+1. 用 \`bookmark_add\` 保存到"休眠标签页"书签文件夹
+2. 用 \`tab_close\` 关闭
 分批处理，每批不超过 20 个。
 
 ### 步骤 4：分组整理剩余标签页（低优先级）
-用 \`tabs_manage({ action: "group", tabIds })\` 按域名分组。
+用 \`group_create({ tabIds })\` 按域名分组。
 
 ### 步骤 5：汇报
 汇报：原始数、关闭的重复数、归档的闲置数、剩余活跃数、创建的标签组数。
@@ -156,7 +156,7 @@ const focusMode: SkillDef = {
 询问用户的专注类型：写代码、写作/文档、学习、设计、或自定义。
 
 ### 步骤 2：识别干扰标签页
-用 \`tabs_query\` 获取所有标签页。
+用 \`tab_search\` 获取所有标签页。
 
 默认干扰源（除非用户明确保留）：
 - 社交媒体：twitter.com、reddit.com、weibo.com
@@ -174,15 +174,15 @@ const focusMode: SkillDef = {
 按类别分组展示将被关闭的标签页。
 
 ### 步骤 4：确认并关闭
-1. 先保存工作区：用 \`sessions_save\` 或 \`bookmarks_create\` 创建"专注前快照"
+1. 先保存工作区：用 \`session_save\` 或 \`bookmark_add\` 创建"专注前快照"
 2. 用户审查清单后可手动排除
-3. 用 \`tabs_remove\` 分批关闭
+3. 用 \`tab_close\` 分批关闭
 
 ### 步骤 5：整理剩余标签页
-用 \`tabs_manage({ action: "group", tabIds })\` 按主题分组，按工作流排序（概览→文档→参考→工具）。
+用 \`group_create({ tabIds })\` 按主题分组，按工作流排序（概览→文档→参考→工具）。
 
 ### 退出专注模式
-询问是否恢复之前标签页，用 \`sessions_restore\` 恢复。
+询问是否恢复之前标签页，用 \`session_restore\` 恢复。
 
 ### 重要提醒
 - 关闭前一定创建快照
@@ -202,7 +202,7 @@ const bookmarkDedup: SkillDef = {
 你已激活"书签去重"技能。请按以下步骤清理重复书签：
 
 ### 步骤 1：获取完整书签树
-用 \`bookmarks_getTree\` 获取所有书签，忽略文件夹节点，只关注有 url 的叶子节点。
+用 \`bookmark_tree\` 获取所有书签，忽略文件夹节点，只关注有 url 的叶子节点。
 
 ### 步骤 2：检测重复
 按以下维度：
@@ -219,7 +219,7 @@ const bookmarkDedup: SkillDef = {
 列出删除清单（名称、URL、所在文件夹），等用户确认。
 
 ### 步骤 4：执行删除
-用户确认后用 \`bookmarks_delete\` 逐一删除。
+用户确认后用 \`bookmark_remove\` 逐一删除。
 
 ### 步骤 5：汇报
 汇报：扫描书签数、重复组数、删除数、剩余书签数。
@@ -240,7 +240,7 @@ const bookmarkOrganizer: SkillDef = {
 你已激活"书签分类整理"技能。请按以下步骤整理书签：
 
 ### 步骤 1：获取书签树
-用 \`bookmarks_getTree\` 获取完整书签结构。
+用 \`bookmark_tree\` 获取完整书签结构。
 
 ### 步骤 2：分析当前结构
 识别：顶层无文件夹的书签、需要拆分的过大的文件夹、已有文件夹名称。
@@ -259,8 +259,8 @@ const bookmarkOrganizer: SkillDef = {
 也可按主题分类：开发工具、学习资料、设计资源、新闻资讯、个人。
 
 ### 步骤 4：创建文件夹并移动书签
-1. 用 \`bookmarks_create\` 创建分类文件夹
-2. 用 \`bookmarks_update\` 移动书签到对应文件夹
+1. 用 \`bookmark_add\` 创建分类文件夹
+2. 用 \`bookmark_move\` 移动书签到对应文件夹
 
 ### 步骤 5：汇报
 汇报：创建的文件夹、每个文件夹的书签数、无法归类的书签。
@@ -281,16 +281,16 @@ const bookmarkValidator: SkillDef = {
 你已激活"死链检测"技能。请按以下步骤检测书签有效性：
 
 ### 步骤 1：获取所有书签
-用 \`bookmarks_search\` 或 \`bookmarks_getTree\` 获取有 url 的书签。
+用 \`bookmark_search\` 或 \`bookmark_tree\` 获取有 url 的书签。
 
 ### 步骤 2：准备检测
 向用户说明：将逐一打开书签 URL、建议分批检测（每批 20-30 个）。
 
 ### 步骤 3：分批检测
-1. 用 \`tabs_manage({ action: "create", url, active: false })\` 在后台打开书签 URL
-2. 等待几秒后，用 \`tabs_query\`（传入 tabId）检查状态（title 不为空、不是错误页）
-3. 用 \`page_getMetadata\` 辅助判断
-4. 用 \`tabs_remove\` 关闭检测标签页
+1. 用 \`tab_open({ url, active: false })\` 在后台打开书签 URL
+2. 等待几秒后，用 \`tab_search\`（传入 tabId）检查状态（title 不为空、不是错误页）
+3. 用 \`page_read_metadata\` 辅助判断
+4. 用 \`tab_close\` 关闭检测标签页
 5. 记录：✅ 正常 / ❌ 无法访问 / ⚠️ 跳转
 
 ### 步骤 4：整理报告
@@ -319,15 +319,15 @@ const windowMerger: SkillDef = {
 你已激活"窗口合并"技能。将所有分散窗口的标签页合并到主窗口。
 
 ### 步骤 1：获取所有窗口和标签页
-用 \`windows_getAll\` 获取所有窗口及标签页，展示窗口分布。
+用 \`window_list\` 获取所有窗口及标签页，展示窗口分布。
 
 ### 步骤 2：选择合并策略
 让用户选择：全部合并到当前窗口、合并到新窗口、合并到指定窗口、或仅合并部分窗口。
 
 ### 步骤 3：执行合并
-1. 用 \`tabs_manage({ action: "move", tabIds, windowId, index })\` 将标签页移动到目标窗口
-2. 移空后自动关闭源窗口（用 \`windows_remove\`）
-3. 用 \`tabs_manage({ action: "group", tabIds })\` 按原始窗口来源创建标签组（不同颜色区分）
+1. 用 \`tab_set({ tabId, windowId, index })\` 将标签页移动到目标窗口
+2. 移空后自动关闭源窗口（用 \`window_close\`）
+3. 用 \`group_create({ tabIds })\` 按原始窗口来源创建标签组（不同颜色区分）
 
 ### 步骤 4：汇报
 汇报：原有窗口数→现在窗口数、合并的标签页数、关闭的空窗口数、创建的标签组数。
@@ -353,12 +353,12 @@ const researchMode: SkillDef = {
 询问用户：研究主题是什么？要归拢哪些标签页（当前窗口全部/用户指定/当前窗口+其他相关）？
 
 ### 步骤 2：收集标签页
-用 \`tabs_query\` 收集目标标签页，排除邮件、聊天、空白页和被排除的域名。
+用 \`tab_search\` 收集目标标签页，排除邮件、聊天、空白页和被排除的域名。
 
 ### 步骤 3：创建研究窗口
-1. 用 \`windows_create\` 创建新窗口（不激活）
-2. 用 \`tabs_manage({ action: "move", tabIds, windowId })\` 将所有研究标签页移入
-3. 用 \`tabs_manage({ action: "group", tabIds })\` 按域名/子主题创建标签组
+1. 用 \`window_new\` 创建新窗口（不激活）
+2. 用 \`tab_set({ tabId, windowId, index })\` 将所有研究标签页移入
+3. 用 \`group_create({ tabIds })\` 按域名/子主题创建标签组
 
 ### 步骤 4：组织标签页顺序
 按研究逻辑排列：概览→核心文档→参考案例→社区讨论。
@@ -371,9 +371,9 @@ const researchMode: SkillDef = {
 
 ### 步骤 7：后续归档（用户主动触发）
 当用户说"归档这个研究"时：
-1. 用 \`sessions_save\` 保存窗口会话
-2. 可选：用 \`page_getMarkdown\` 抓取内容保存到 storage
-3. 用 \`page_viewMarkdown\` 生成汇总页面
+1. 用 \`session_save\` 保存窗口会话
+2. 可选：用 \`page_read_markdown\` 抓取内容保存到 storage
+3. 用 \`page_view_markdown\` 生成汇总页面
 4. 询问是否关闭研究窗口
 
 ### 重要提醒
@@ -393,17 +393,17 @@ const readingList: SkillDef = {
 
 ### 添加到阅读列表
 1. 确认保存范围：当前标签页 / 当前窗口全部 / 用户指定
-2. 用 \`page_getMetadata\` 获取每个页面元数据
-3. 用 \`bookmarks_getTree\` 检查是否已有"📖 阅读列表"文件夹，没有则创建
-4. 用 \`bookmarks_create\` 加入，标题格式：YYYY-MM-DD {页面标题}（过长截断）
+2. 用 \`page_read_metadata\` 获取每个页面元数据
+3. 用 \`bookmark_tree\` 检查是否已有"📖 阅读列表"文件夹，没有则创建
+4. 用 \`bookmark_add\` 加入，标题格式：YYYY-MM-DD {页面标题}（过长截断）
 
 ### 查看阅读列表
-1. 用 \`bookmarks_search\` 搜索"阅读列表"文件夹
+1. 用 \`bookmark_search\` 搜索"阅读列表"文件夹
 2. 按日期分组展示
 
 ### 开始阅读
 1. 展示在线列表，推荐最近添加的
-2. 用 \`tabs_manage({ action: "create", url })\` 在新标签页打开
+2. 用 \`tab_open({ url })\` 在新标签页打开
 3. 询问：已读完（从列表移除）/ 还没读完（保留）/ 加入永久书签（移动）
 
 ### 清理阅读列表
@@ -432,7 +432,7 @@ const privacyCleanup: SkillDef = {
 白名单外的域名用 \`cookies_remove\` 逐个删除。
 
 ### 步骤 3：清理历史记录
-用 \`history_search\` 搜索，白名单外的用 \`history_delete\` 删除（高风险，需确认）。
+用 \`history_search\` 搜索，白名单外的用 \`history_remove\` 删除（高风险，需确认）。
 
 ### 步骤 4：清理本地存储
 用 \`storage_local_get\` 检查扩展的本地存储。
@@ -462,10 +462,10 @@ const pageScraper: SkillDef = {
 询问用户想提取：所有链接、表格数据、图片列表、联系方式、代码块、或全文 Markdown。
 
 ### 步骤 2：获取页面内容
-1. 用 \`tabs_query\` 确认当前活跃标签页
-2. 用 \`page_getMarkdown\` 获取 Markdown 版本
-3. 用 \`page_getMetadata\` 获取元数据
-4. 如需原文，用 \`page_getContent\` 获取 Readability 提取的内容
+1. 用 \`tab_search\` 确认当前活跃标签页
+2. 用 \`page_read_markdown\` 获取 Markdown 版本
+3. 用 \`page_read_metadata\` 获取元数据
+4. 如需原文，用 \`page_read_content\` 获取 Readability 提取的内容
 
 ### 步骤 3：处理提取结果
 - 链接：从 Markdown 解析 [text](url)，按域名分组
@@ -474,7 +474,7 @@ const pageScraper: SkillDef = {
 
 ### 步骤 4：展示和保存
 1. 在对话中展示结构化结果
-2. 询问是否需要导出：用 \`page_viewMarkdown\` 在新标签页展示，或用 \`clipboard_write\` 复制到剪贴板
+2. 询问是否需要导出：用 \`page_view_markdown\` 在新标签页展示，或用 \`clipboard_write\` 复制到剪贴板
 
 ### 重要提醒
 - 过滤页面内导航链接（#锚点）

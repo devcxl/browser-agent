@@ -78,7 +78,7 @@ export interface ToolParameterSchema {
 
 /** 工具定义 */
 export interface ToolDefinition {
-  /** 唯一名称，如 "tabs_query", "tabs_remove" */
+  /** 唯一名称，如 "tab_search", "tab_close" */
   name: string;
   /** 人类可读描述，注入 LLM system prompt */
   description: string;
