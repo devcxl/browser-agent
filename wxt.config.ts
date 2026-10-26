@@ -20,7 +20,11 @@ export default defineConfig({
       'history',
     ];
 
-    if (!isFirefox) {
+    if (isFirefox) {
+      // Firefox 128+ 支持标签组 API，但必须显式声明 tabGroups 权限才会暴露
+      // browser.tabGroups（windows 不是 Firefox 的合法权限关键字，仍需排除）
+      permissions.push('tabGroups');
+    } else {
       permissions.push('tabGroups', 'windows');
     }
 
