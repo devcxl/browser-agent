@@ -313,8 +313,12 @@ export function createTabCloseTool(rpc: IJsonRpcClient): ToolDefinition {
     requireBackground: true,
     preflight,
     execute: async (params) => {
-      await rpc.request("tabs.remove", params);
-      return { success: true };
+      try {
+        await rpc.request("tabs.remove", params);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+      }
     },
   };
 }

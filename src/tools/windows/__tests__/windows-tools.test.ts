@@ -103,6 +103,29 @@ describe('window_close', () => {
     ]);
   });
 
+  it('preflight 查询标签页失败时降级为警告（Error 与非 Error）', async () => {
+    const rpc = createMockRpc();
+    vi.mocked(rpc.request).mockRejectedValueOnce(new Error('query tabs failed'))
+      .mockRejectedValueOnce('plain string failure');
+    const tool = getTool('window_close', rpc);
+
+    let preflight = await tool.preflight!({ windowId: 9 });
+    expect(preflight.warnings.some((w) => w.includes('query tabs failed'))).toBe(true);
+
+    preflight = await tool.preflight!({ windowId: 9 });
+    expect(preflight.warnings.some((w) => w.includes('Unable to list tabs'))).toBe(true);
+    expect(preflight.affectedObjects.some((o) => o.type === 'window' && o.title === 'Window 9')).toBe(true);
+  });
+
+  it('execute 失败返回错误结果（Error 与非 Error 两种形态）', async () => {
+    const rpc = createMockRpc();
+    vi.mocked(rpc.request).mockRejectedValueOnce(new Error('remove failed'))
+      .mockRejectedValueOnce('plain string failure');
+    const tool = getTool('window_close', rpc);
+    expect(await tool.execute({ windowId: 9 })).toEqual({ success: false, error: 'remove failed' });
+    expect(await tool.execute({ windowId: 9 })).toEqual({ success: false, error: 'Unknown error' });
+  });
+
   it('执行时调用 windows.remove', async () => {
     const rpc = createMockRpc();
     const tool = getTool('window_close', rpc);
@@ -119,6 +142,32 @@ describe('createWindowsTools', () => {
     expect(names).toEqual(['window_list', 'window_new', 'window_focus', 'window_close']);
     for (const retired of ['windows_getAll', 'windows_get', 'windows_create', 'windows_remove']) {
       expect(names).not.toContain(retired);
+    }
+  });
+});
+const SAMPLE_PARAMS: Record<string, Record<string, unknown>> = {"window_list": {}, "window_new": {}, "window_focus": {"windowId": 1}, "window_close": {"windowId": 1}};
+
+describe('window_list 单窗查 getInfo 分支', () => {
+  it('windowId + getInfo 同时传递', async () => {
+    const rpc = createMockRpc();
+    const tool = createWindowsTools(rpc).find((t) => t.name === 'window_list')!;
+
+    await tool.execute({ windowId: 9, getInfo: { populate: true } });
+
+    expect(rpc.request).toHaveBeenCalledWith('windows.get', { windowId: 9, getInfo: { populate: true } });
+  });
+});
+
+describe('windows 全工具异常归一化', () => {
+  it('每个工具执行异常都返回失败结果（Error 与非 Error 两侧）', async () => {
+    const rpc = createMockRpc();
+    const tools = createWindowsTools(rpc);
+    for (const tool of tools) {
+      for (const rejection of [new Error('E1'), 'E2-string']) {
+        vi.mocked(rpc.request).mockRejectedValue(rejection);
+        const result = await tool.execute(SAMPLE_PARAMS[tool.name] ?? {});
+        expect(result.success).toBe(false);
+      }
     }
   });
 });

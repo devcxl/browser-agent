@@ -173,3 +173,18 @@ describe('History tools', () => {
     });
   });
 });
+const SAMPLE_PARAMS: Record<string, Record<string, unknown>> = {"history_search": {"text": "x"}, "history_remove": {}, "history_clear": {}};
+
+describe('history 全工具异常归一化', () => {
+  it('每个工具执行异常都返回失败结果（Error 与非 Error 两侧）', async () => {
+    const rpc = createMockRpc();
+    const tools = createHistoryTools(rpc);
+    for (const tool of tools) {
+      for (const rejection of [new Error('E1'), 'E2-string']) {
+        vi.mocked(rpc.request).mockRejectedValue(rejection);
+        const result = await tool.execute(SAMPLE_PARAMS[tool.name] ?? {});
+        expect(result.success).toBe(false);
+      }
+    }
+  });
+});

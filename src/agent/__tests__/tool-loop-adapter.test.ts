@@ -1486,6 +1486,38 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     expect(() => onStepFinish({ toolCalls: [] })).not.toThrow();
   });
 
+  it('jev 启用时走 Jev 分类并传上下文', async () => {
+    const jevAdapter = new ToolLoopAdapter(
+      createMockToolRegistry([createMockTool('tabs_query')]),
+      createMockGuardrail(),
+      createMockConversationManager(),
+      createMockProviderConfig(),
+      'test-model',
+      { maxToolRounds: 99, contextWindowTokens: 128000, tokenBudgetMargin: 4096 },
+      undefined,
+      { enabled: true, apiKey: 'jev-key' },
+    );
+    await jevAdapter.run(basicInput);
+
+    // 分类仅在 prepareStep(step0) 内触发，手动模拟 AI SDK 调用
+    const prepareStep = capturedToolLoopAgentOptions?.prepareStep as (input: {
+      messages: unknown[];
+      stepNumber: number;
+      model: unknown;
+    }) => Promise<{ activeTools?: string[] }>;
+    await prepareStep({ messages: [{ role: 'user', content: 'Hello' }], stepNumber: 0, model: {} });
+
+    // 注意：手动模拟 prepareStep 在 run() 结束后执行，finally 已将
+    // abortController 置空，因此这里只断言 jevSettings 透传
+    expect(mockToolClassifierClassify).toHaveBeenCalledWith(
+      'Hello',
+      expect.anything(),
+      expect.objectContaining({
+        jevSettings: { enabled: true, apiKey: 'jev-key' },
+      }),
+    );
+  });
+
   it('分类结果为空时降级到 baseTools（绝不回退全量工具）', async () => {
     const lazyAdapter = new ToolLoopAdapter(
       createMockToolRegistry([createMockTool('tabs_query')]),

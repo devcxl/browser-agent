@@ -225,3 +225,18 @@ describe('Downloads tools', () => {
     });
   });
 });
+const SAMPLE_PARAMS: Record<string, Record<string, unknown>> = {"download_search": {}, "download_start": {"url": "https://e.com"}, "download_clear": {}, "download_open": {"downloadId": 1}, "download_cancel": {"downloadId": 1}, "download_pause": {"downloadId": 1}, "download_resume": {"downloadId": 1}};
+
+describe('downloads 全工具异常归一化', () => {
+  it('每个工具执行异常都返回失败结果（Error 与非 Error 两侧）', async () => {
+    const rpc = createMockRpc();
+    const tools = createDownloadsTools(rpc);
+    for (const tool of tools) {
+      for (const rejection of [new Error('E1'), 'E2-string']) {
+        vi.mocked(rpc.request).mockRejectedValue(rejection);
+        const result = await tool.execute(SAMPLE_PARAMS[tool.name] ?? {});
+        expect(result.success).toBe(false);
+      }
+    }
+  });
+});

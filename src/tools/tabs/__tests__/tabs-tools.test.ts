@@ -173,6 +173,17 @@ describe('tab_focus', () => {
   });
 });
 
+describe('tab_focus', () => {
+  it('RPC 失败返回错误结果（Error 与非 Error 两种形态）', async () => {
+    const rpc = createMockRpc();
+    vi.mocked(rpc.request).mockRejectedValueOnce(new Error('RPC failed'))
+      .mockRejectedValueOnce('plain string failure');
+    const tool = getTool('tab_focus', rpc);
+    expect(await tool.execute({ tabId: 7 })).toEqual({ success: false, error: 'RPC failed' });
+    expect(await tool.execute({ tabId: 7 })).toEqual({ success: false, error: 'Unknown error' });
+  });
+});
+
 describe('tab_set', () => {
   it('设置 pinned', async () => {
     const rpc = createMockRpc();
@@ -205,6 +216,15 @@ describe('tab_set', () => {
     const tool = getTool('tab_set', createMockRpc());
     const result = await tool.execute({ tabId: 7 });
     expect(result.success).toBe(false);
+  });
+
+  it('RPC 失败返回错误结果（Error 与非 Error 两种形态）', async () => {
+    const rpc = createMockRpc();
+    vi.mocked(rpc.request).mockRejectedValueOnce(new Error('RPC failed'))
+      .mockRejectedValueOnce('plain string failure');
+    const tool = getTool('tab_set', rpc);
+    expect(await tool.execute({ tabId: 7, pinned: true })).toEqual({ success: false, error: 'RPC failed' });
+    expect(await tool.execute({ tabId: 7, pinned: true })).toEqual({ success: false, error: 'Unknown error' });
   });
 });
 
@@ -261,5 +281,62 @@ describe('tool metadata', () => {
     expect(createTabNavigateTool(rpc).category).toBe('tabs');
     expect(createTabFocusTool(rpc).category).toBe('tabs');
     expect(createTabSetTool(rpc).category).toBe('tabs');
+  });
+});
+const SAMPLE_PARAMS: Record<string, Record<string, unknown>> = {"tab_search": {}, "tab_open": {"url": "https://e.com"}, "tab_navigate": {"url": "https://e.com"}, "tab_focus": {"tabId": 1}, "tab_set": {"tabId": 1, "pinned": true}, "tab_close": {"tabIds": [1]}};
+
+describe('tab_search / tab_set / tab_close 补充分支', () => {
+  it('keyword/url 过滤对缺失 title/url 的标签页安全降级', async () => {
+    const rpc = createMockRpc();
+    vi.mocked(rpc.request).mockResolvedValue([
+      { id: 1 }, // 无 title 无 url
+      { id: 2, url: 'https://example.com/github' }, // 无 title
+    ]);
+    const tool = getTool('tab_search', rpc);
+
+    let result = await tool.execute({ keyword: 'github' });
+    expect((result.data as Array<Record<string, unknown>>).map((t) => t.id)).toEqual([2]);
+
+    result = await tool.execute({ url: 'github' });
+    expect((result.data as Array<Record<string, unknown>>).map((t) => t.id)).toEqual([2]);
+
+    result = await tool.execute({ pinned: false });
+    expect(rpc.request).toHaveBeenLastCalledWith('tabs.query', { queryInfo: { pinned: false } });
+  });
+
+  it('tabSet muted 走 update 且 move 返回单对象时取该对象', async () => {
+    const rpc = createMockRpc();
+    vi.mocked(rpc.request).mockResolvedValue({ id: 7, mutedInfo: { muted: true } });
+    const tool = getTool('tab_set', rpc);
+
+    const result = await tool.execute({ tabId: 7, muted: true });
+    expect(rpc.request).toHaveBeenCalledWith('tabs.update', { tabId: 7, updateProperties: { muted: true } });
+    expect((result.data as Record<string, unknown>).id).toBe(7);
+  });
+
+  it('tab_close preflight 容忍空 tabIds 与无 id 的标签页', async () => {
+    const rpc = createMockRpc();
+    vi.mocked(rpc.request).mockResolvedValue({ title: 'no id tab', url: 'https://example.com' });
+    const tool = getTool('tab_close', rpc);
+
+    const result = await tool.preflight!({ tabIds: [5] });
+
+    expect(result.affectedObjects).toEqual([
+      { type: 'tab', id: '', title: 'no id tab', url: 'https://example.com', reason: '即将关闭此标签页' },
+    ]);
+  });
+});
+
+describe('tabs 全工具异常归一化', () => {
+  it('每个工具执行异常都返回失败结果（Error 与非 Error 两侧）', async () => {
+    const rpc = createMockRpc();
+    const tools = createTabsTools(rpc);
+    for (const tool of tools) {
+      for (const rejection of [new Error('E1'), 'E2-string']) {
+        vi.mocked(rpc.request).mockRejectedValue(rejection);
+        const result = await tool.execute(SAMPLE_PARAMS[tool.name] ?? {});
+        expect(result.success).toBe(false);
+      }
+    }
   });
 });

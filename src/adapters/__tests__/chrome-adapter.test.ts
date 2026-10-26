@@ -69,6 +69,8 @@ function createMockChrome() {
       update: vi.fn().mockResolvedValue({ id: '1', title: 'bm2', url: 'https://example.com' }),
       remove: vi.fn().mockResolvedValue(undefined),
       getTree: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockResolvedValue([{ id: '1', title: 'bm', url: 'https://example.com' }]),
+      move: vi.fn().mockResolvedValue({ id: '1', parentId: 'folder-2' }),
     },
     downloads: {
       search: vi.fn().mockResolvedValue([]),
@@ -323,6 +325,18 @@ describe('ChromeAdapter', () => {
     it('getTree 正确转发到 chrome.bookmarks.getTree', async () => {
       await adapter.bookmarks.getTree();
       expect(mockChrome.bookmarks.getTree).toHaveBeenCalled();
+    });
+
+    it('get 取第一个节点（chrome.bookmarks.get 类型为数组）', async () => {
+      const result = await adapter.bookmarks.get('1');
+      expect(mockChrome.bookmarks.get).toHaveBeenCalledWith('1');
+      expect(result.title).toBe('bm');
+    });
+
+    it('move 正确转发到 chrome.bookmarks.move', async () => {
+      const result = await adapter.bookmarks.move('1', { parentId: 'folder-2', index: 0 });
+      expect(mockChrome.bookmarks.move).toHaveBeenCalledWith('1', { parentId: 'folder-2', index: 0 });
+      expect(result.parentId).toBe('folder-2');
     });
   });
 

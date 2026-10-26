@@ -220,3 +220,31 @@ describe('Bookmarks tools', () => {
     });
   });
 });
+const SAMPLE_PARAMS: Record<string, Record<string, unknown>> = {"bookmark_search": {"query": "x"}, "bookmark_add": {}, "bookmark_edit": {"id": "1"}, "bookmark_move": {"id": "1"}, "bookmark_remove": {"id": "1"}, "bookmark_tree": {}};
+
+describe('bookmark_remove preflight idList 分支', () => {
+  it('idList 数组参与合并且空结果不报错', async () => {
+    const rpc = createMockRpc();
+    vi.mocked(rpc.request).mockResolvedValue({ id: 'a', title: 'A', url: 'https://a.com' });
+    const tool = createBookmarksTools(rpc).find((t) => t.name === 'bookmark_remove')!;
+
+    const result = await tool.preflight!({ id: 'a', idList: ['b'] });
+
+    expect(rpc.request).toHaveBeenCalledTimes(2);
+    expect(result.affectedObjects).toHaveLength(2);
+  });
+});
+
+describe('bookmarks 全工具异常归一化', () => {
+  it('每个工具执行异常都返回失败结果（Error 与非 Error 两侧）', async () => {
+    const rpc = createMockRpc();
+    const tools = createBookmarksTools(rpc);
+    for (const tool of tools) {
+      for (const rejection of [new Error('E1'), 'E2-string']) {
+        vi.mocked(rpc.request).mockRejectedValue(rejection);
+        const result = await tool.execute(SAMPLE_PARAMS[tool.name] ?? {});
+        expect(result.success).toBe(false);
+      }
+    }
+  });
+});
