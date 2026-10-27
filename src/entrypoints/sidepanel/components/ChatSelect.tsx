@@ -191,6 +191,7 @@ export function ChatSelect({
             ? 'w-full justify-between gap-2 rounded-lg border border-hairline bg-surface-card px-3 py-2 text-sm text-ink shadow-sm transition-colors hover:border-hairline-strong focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15'
             : 'max-w-[200px] gap-1 rounded-full border-none bg-surface-soft px-2.5 py-1 text-xs font-medium text-body hover:text-ink',
           disabled && 'opacity-40 cursor-not-allowed',
+          'active:scale-[0.97] transition-transform',
         )}
       >
         <span className="truncate">{selectedOption?.label || value || label}</span>
@@ -221,10 +222,11 @@ export function ChatSelect({
         {isOpen && (
           <motion.ul
             ref={listRef}
-            initial={{ opacity: 0, scale: 0.97, y: -4 }}
+            initial={{ opacity: 0, scale: 0.95, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -4 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            exit={{ opacity: 0, scale: 0.97, y: -4, transition: { duration: 0.12, ease: 'easeIn' } }}
+            transition={{ type: 'spring', stiffness: 500, damping: 34, mass: 0.9 }}
+            style={{ ...menuStyle, transformOrigin: 'top' }}
             id={`${id}-listbox`}
             role="listbox"
             aria-label={label}
