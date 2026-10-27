@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '../utils';
 
 export interface ChatSelectOption {
@@ -215,10 +216,15 @@ export function ChatSelect({
         )}
       </button>
 
-      {isOpen &&
-        createPortal(
-          <ul
+      {createPortal(
+        <AnimatePresence>
+        {isOpen && (
+          <motion.ul
             ref={listRef}
+            initial={{ opacity: 0, scale: 0.97, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.97, y: -4 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
             id={`${id}-listbox`}
             role="listbox"
             aria-label={label}
@@ -249,9 +255,11 @@ export function ChatSelect({
                 {opt.label}
               </li>
             ))}
-          </ul>,
-          document.body,
+          </motion.ul>
         )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }

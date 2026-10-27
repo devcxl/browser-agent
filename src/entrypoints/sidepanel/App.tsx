@@ -18,6 +18,8 @@ import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
 import { WIDGET_MESSAGE_SOURCE, type CloseRequestMessage } from '@/shared/widget-protocol';
+import { MotionConfig, motion } from 'motion/react';
+import { riseIn, staggerContainer } from './motion';
 
 import { ChatContentContainer } from './components/ChatContentContainer';
 import { EmbeddedHeader } from './components/EmbeddedHeader';
@@ -340,6 +342,7 @@ function ChatLayout() {
   };
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="h-full flex flex-col bg-canvas relative overflow-hidden">
       {/* 内嵌模式头部 */}
       {isEmbedded && <EmbeddedHeader onClose={handleEmbeddedClose} />}
@@ -414,21 +417,27 @@ function ChatLayout() {
 
           <MessageInput {...inputProps} variant="home" />
 
-          <div className="grid grid-cols-2 gap-2.5">
+          <motion.div
+            className="grid grid-cols-2 gap-2.5"
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+          >
             {SUGGESTIONS.map((s) => (
-              <button
+              <motion.button
                 key={s.titleKey}
                 type="button"
                 data-testid="suggestion-card"
                 onClick={() => handleSend(t(s.promptKey))}
                 disabled={!activeProvider}
+                variants={riseIn}
                 className="text-left bg-surface-card border border-hairline rounded-xl p-3 shadow-sm hover:-translate-y-0.5 hover:shadow-lg transition-all duration-150 disabled:opacity-50 disabled:hover:translate-y-0"
               >
                 <div className="text-[12.5px] font-medium text-ink">{t(s.titleKey)}</div>
                 <div className="text-[11px] text-mute mt-0.5 leading-relaxed">{t(s.descKey)}</div>
-              </button>
+              </motion.button>
             ))}
-          </div>
+          </motion.div>
 
           {providersLoaded && completeProviders.length === 0 && (
             <div className="flex flex-col items-center gap-2 pt-2">
@@ -482,27 +491,25 @@ function ChatLayout() {
         tokenUsage={tokenUsage}
       />
 
-      {showSettings && (
-        <SettingsPanel
-          providers={providers}
-          agentSettings={agentSettings}
-          expertMode={expertMode}
-          onSaveProviders={handleSaveProviders}
-          onSaveAgentSettings={handleSaveAgentSettings}
-          onSaveExpertMode={handleSaveExpertMode}
-          onTestConnection={handleTestConnection}
-          onClose={() => setShowSettings(false)}
-        />
-      )}
+      <SettingsPanel
+        open={showSettings}
+        providers={providers}
+        agentSettings={agentSettings}
+        expertMode={expertMode}
+        onSaveProviders={handleSaveProviders}
+        onSaveAgentSettings={handleSaveAgentSettings}
+        onSaveExpertMode={handleSaveExpertMode}
+        onTestConnection={handleTestConnection}
+        onClose={() => setShowSettings(false)}
+      />
 
-      {confirmRequest && (
-        <ConfirmDialog
-          request={confirmRequest}
-          onConfirm={() => resolveConfirm(true)}
-          onCancel={() => resolveConfirm(false)}
-        />
-      )}
+      <ConfirmDialog
+        request={confirmRequest}
+        onConfirm={() => resolveConfirm(true)}
+        onCancel={() => resolveConfirm(false)}
+      />
     </div>
+    </MotionConfig>
   );
 }
 

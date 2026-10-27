@@ -1,9 +1,11 @@
 import React from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import type { ConfirmRequest } from '../types';
 import { useI18n } from '../i18n/useI18n';
+import { overlayBackdrop, overlayCard } from '../motion';
 
 interface Props {
-  request: ConfirmRequest;
+  request: ConfirmRequest | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -12,11 +14,25 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
   const { t } = useI18n();
 
   return (
-    <div
+    <AnimatePresence>
+      {request && (
+    <motion.div
+      key="confirm-backdrop"
       data-testid="confirm-dialog"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+      variants={overlayBackdrop}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
     >
-      <div className="bg-surface-card rounded-2xl shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col overflow-hidden">
+      <motion.div
+        key="confirm-card"
+        className="bg-surface-card rounded-2xl shadow-2xl max-w-lg w-full mx-4 max-h-[80vh] flex flex-col overflow-hidden"
+        variants={overlayCard}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
         {/* 风险等级横条 */}
         <div className="h-[3px] bg-warning shrink-0" />
 
@@ -90,7 +106,9 @@ export function ConfirmDialog({ request, onConfirm, onCancel }: Props) {
             {t('dialog.confirm')}
           </button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

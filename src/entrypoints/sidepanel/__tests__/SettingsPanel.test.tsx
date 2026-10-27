@@ -105,6 +105,7 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof SettingsPanel>
     onSaveExpertMode: vi.fn(),
     onTestConnection: vi.fn().mockResolvedValue({ ok: true }),
     onClose: vi.fn(),
+    open: true,
     ...overrides,
   };
 }
