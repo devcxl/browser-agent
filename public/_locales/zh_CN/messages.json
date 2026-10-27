@@ -122,6 +122,9 @@
   "chat_input_queuedChip": {
     "message": "已排队 {count} 条，将按顺序发送"
   },
+  "chat_input_otherRunningPlaceholder": {
+    "message": "其他会话正在执行任务，完成后可在此发送"
+  },
   "chat_input_abort": {
     "message": "中止"
   },

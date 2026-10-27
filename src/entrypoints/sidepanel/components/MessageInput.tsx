@@ -27,6 +27,8 @@ interface Props {
   contextWindowTokens?: number;
   /** 排队中的消息数（agent 运行期间发送的消息；>0 时显示排队提示） */
   queuedCount?: number;
+  /** 当前查看的不是正在运行的会话：输入禁用并提示稍后发送 */
+  otherRunning?: boolean;
 }
 
 const SpinnerIcon = (
@@ -37,7 +39,7 @@ const SpinnerIcon = (
 );
 
 export function MessageInput({
-  onSend, onAbort, disabled, isRunning, queuedCount = 0,
+  onSend, onAbort, disabled, isRunning, queuedCount = 0, otherRunning = false,
   providers, selectedProviderId = '', onSelectProvider = () => {}, selectedModelId = '', onSelectModel = () => {},
   reasoningEffort, onReasoningEffortChange = () => {},
   variant = 'chat',
@@ -205,11 +207,13 @@ export function MessageInput({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder={
-            disabled
-              ? t('chat.input.disabledPlaceholder')
-              : isRunning
-                ? t('chat.input.queuedPlaceholder')
-                : t('chat.input.placeholder')
+            otherRunning
+              ? t('chat.input.otherRunningPlaceholder')
+              : disabled
+                ? t('chat.input.disabledPlaceholder')
+                : isRunning
+                  ? t('chat.input.queuedPlaceholder')
+                  : t('chat.input.placeholder')
           }
           rows={isHome ? 3 : 1}
           className={cn(

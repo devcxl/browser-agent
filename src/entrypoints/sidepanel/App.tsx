@@ -229,9 +229,10 @@ function ChatLayout() {
     (text: string) => {
       if (!activeProvider || !activeModel) return;
 
-      // 回复进行中：入队，由队列调度在回合结束后发出
+      // 回复进行中：仅当查看的会话正是运行中的会话时入队；
+      // 其他会话在执行期间不接收发送（避免消息跨会话）
       if (agent.status !== 'idle') {
-        if (!conversations.activeId) return;
+        if (!conversations.activeId || conversations.activeId !== agent.runningConversationId) return;
         setPendingQueue((prev) => [...prev, { id: uid(), conversationId: conversations.activeId!, text }]);
         return;
       }
@@ -247,8 +248,8 @@ function ChatLayout() {
     [conversations, agent, activeProvider, activeModel, reasoningEffort, runMessage],
   );
 
-  // 队列调度：回合结束后按序出队；队首属于其他会话时先切换过去，
-  // 并等待其历史装载完成后再发送，避免流式气泡被装载覆盖
+  // 队列调度：队列严格归属其会话——只有用户回到目标会话且历史装载
+  // 完成后才出队发送，绝不把排队消息发进其他会话
   useEffect(() => {
     if (agent.status !== 'idle') {
       dequeueLockRef.current = false;
@@ -257,16 +258,12 @@ function ChatLayout() {
     if (pendingQueue.length === 0 || dequeueLockRef.current) return;
 
     const next = pendingQueue[0]!;
-    if (next.conversationId !== conversations.activeId) {
-      conversations.select(next.conversationId);
-      return;
-    }
-    if (messagesLoading) return;
+    if (next.conversationId !== conversations.activeId || messagesLoading) return;
 
     dequeueLockRef.current = true;
     setPendingQueue((prev) => prev.slice(1));
     runMessage(next.conversationId, next.text);
-  }, [agent.status, pendingQueue, conversations.activeId, messagesLoading, runMessage, conversations]);
+  }, [agent.status, pendingQueue, conversations.activeId, messagesLoading, runMessage]);
 
   const handleTestConnection = useCallback(
     (provider: ProviderConfig): Promise<ConnectionTestResult> => testProviderConnection(
@@ -320,11 +317,16 @@ function ChatLayout() {
   const isHome = messages.length === 0 && !messagesLoading && agent.status === 'idle';
   const activeTitle = conversations.list.find((c) => c.id === conversations.activeId)?.title;
 
+  // 查看的会话不是正在运行的会话时，禁止发送（防止消息跨会话/并发运行）
+  const isOtherConversationRunning = agent.status !== 'idle'
+    && conversations.activeId !== agent.runningConversationId;
+
   const inputProps = {
     onSend: handleSend,
     onAbort: agent.abort,
-    disabled: !activeProvider,
-    queuedCount: pendingQueue.length,
+    disabled: !activeProvider || isOtherConversationRunning,
+    otherRunning: isOtherConversationRunning,
+    queuedCount: conversations.activeId === agent.runningConversationId ? pendingQueue.length : 0,
     isRunning: agent.status !== 'idle',
     providers: completeProviders,
     selectedProviderId: activeProvider?.id ?? '',

@@ -508,6 +508,19 @@ describe('MessageInput', () => {
     expect(screen.queryByTestId('queued-messages-chip')).toBeNull();
   });
 
+  it('查看其他会话（otherRunning）时禁用输入并提示稍后发送', () => {
+    wrappedRender(
+      <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled otherRunning providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
+    );
+
+    const input = screen.getByTestId('message-input') as HTMLTextAreaElement;
+    expect(input.disabled).toBe(true);
+    expect(
+      input.placeholder === '其他会话正在执行任务，完成后可在此发送'
+      || input.placeholder.includes('Another conversation is running'),
+    ).toBe(true);
+  });
+
   it('运行中发送消息正常回调（Enter 不再被禁用拦截）', async () => {
     const onSend = vi.fn();
     wrappedRender(
