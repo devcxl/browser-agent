@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageInput } from '../components/MessageInput';
@@ -368,7 +368,7 @@ describe('MessageInput', () => {
         providers={[provider]}
         selectedProviderId="local"
         onSelectProvider={vi.fn()}
-        selectedModelId="chat"
+        selectedModelId="qwen"
         onSelectModel={vi.fn()}
         onReasoningEffortChange={vi.fn()}
       />,
@@ -389,7 +389,7 @@ describe('MessageInput', () => {
         providers={[PROVIDER_NO_CONTEXT_LIMIT]}
         selectedProviderId="local"
         onSelectProvider={vi.fn()}
-        selectedModelId="chat"
+        selectedModelId="qwen"
         onSelectModel={vi.fn()}
         tokenUsage={{ prompt: 45200, completion: 0 }}
       />,
@@ -409,7 +409,7 @@ describe('MessageInput', () => {
         providers={[PROVIDER_NO_CONTEXT_LIMIT]}
         selectedProviderId="local"
         onSelectProvider={vi.fn()}
-        selectedModelId="chat"
+        selectedModelId="qwen"
         onSelectModel={vi.fn()}
       />,
     );
@@ -424,7 +424,7 @@ describe('MessageInput', () => {
         providers={[PROVIDER_NO_CONTEXT_LIMIT]}
         selectedProviderId="local"
         onSelectProvider={vi.fn()}
-        selectedModelId="chat"
+        selectedModelId="qwen"
         onSelectModel={vi.fn()}
         tokenUsage={{ prompt: 0, completion: 0 }}
       />,
@@ -480,5 +480,57 @@ describe('MessageInput', () => {
 
     expect(follows(reasoning, ring)).toBe(true);
     expect(follows(ring, mic)).toBe(true);
+  });
+
+
+  // ── 消息队列（运行中可输入，入队提示） ──
+
+  it('运行中输入框可用且占位提示切换为排队文案', () => {
+    wrappedRender(
+      <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
+    );
+
+    const input = screen.getByTestId('message-input') as HTMLTextAreaElement;
+    expect(input.disabled).toBe(false);
+    // 排队占位（zh/en 视浏览器语言），不等于普通占位
+    expect(input.placeholder === '回复生成中，新消息将排队发送…' || input.placeholder.includes('queued')).toBe(true);
+  });
+
+  it('queuedCount > 0 时显示排队提示条，为 0 时不显示', () => {
+    const { rerender } = wrappedRender(
+      <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning queuedCount={2} providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
+    );
+    expect(screen.getByTestId('queued-messages-chip')).toBeTruthy();
+
+    rerender(
+      <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning queuedCount={0} providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
+    );
+    expect(screen.queryByTestId('queued-messages-chip')).toBeNull();
+  });
+
+  it('查看其他会话（otherRunning）时禁用输入并提示稍后发送', () => {
+    wrappedRender(
+      <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled otherRunning providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
+    );
+
+    const input = screen.getByTestId('message-input') as HTMLTextAreaElement;
+    expect(input.disabled).toBe(true);
+    expect(
+      input.placeholder === '其他会话正在执行任务，完成后可在此发送'
+      || input.placeholder.includes('Another conversation is running'),
+    ).toBe(true);
+  });
+
+  it('运行中发送消息正常回调（Enter 不再被禁用拦截）', async () => {
+    const onSend = vi.fn();
+    wrappedRender(
+      <MessageInput onSend={onSend} onAbort={vi.fn()} disabled={false} isRunning={false} providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
+    );
+
+    const input = screen.getByTestId('message-input');
+    fireEvent.change(input, { target: { value: '排队消息' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(onSend).toHaveBeenCalledWith('排队消息');
   });
 });

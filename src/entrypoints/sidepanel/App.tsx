@@ -7,6 +7,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import { ErrorBoundary } from './ErrorBoundary';
 import { useI18n } from './i18n/useI18n';
+import { uid } from './utils';
 import { useEmbeddedStatusBridge } from './hooks/useEmbeddedStatusBridge';
 import { ConfigStore } from '@/shared/storage';
 import { ProviderCatalog } from '@/provider/provider-catalog';
@@ -50,6 +51,9 @@ function ChatLayout() {
   // 嵌入 iframe 时把 agent 状态同步给外层悬浮球（T3 协议，T4 消费）
   // lastRunOutcome 仅在 idle 时随消息发送，让外层区分完成/出错/中止
   useEmbeddedStatusBridge(isEmbedded, agent.status, agent.lastRunOutcome ?? undefined);
+  // 消息队列：agent 运行期间发送的消息按序挂起，回合结束后依次发出
+  const [pendingQueue, setPendingQueue] = useState<Array<{ id: string; conversationId: string; text: string }>>([]);
+  const dequeueLockRef = useRef(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [providersLoaded, setProvidersLoaded] = useState(false);
@@ -213,21 +217,53 @@ function ChatLayout() {
     }));
   }, [activeProvider, activeModel, persistProviderSelection]);
 
-  const handleSend = useCallback(
-    (text: string) => {
+  const runMessage = useCallback(
+    (conversationId: string, text: string) => {
       if (!activeProvider || !activeModel) return;
-      const model = activeModel.id;
-
-      if (!conversations.activeId) {
-        conversations.create().then((id) => {
-          agent.run(id, text, activeProvider, model, reasoningEffort, activeModel);
-        });
-        return;
-      }
-      agent.run(conversations.activeId, text, activeProvider, model, reasoningEffort, activeModel);
+      agent.run(conversationId, text, activeProvider, activeModel.id, reasoningEffort, activeModel);
     },
     [conversations, agent, activeProvider, activeModel, reasoningEffort],
   );
+
+  const handleSend = useCallback(
+    (text: string) => {
+      if (!activeProvider || !activeModel) return;
+
+      // 回复进行中：仅当查看的会话正是运行中的会话时入队；
+      // 其他会话在执行期间不接收发送（避免消息跨会话）
+      if (agent.status !== 'idle') {
+        if (!conversations.activeId || conversations.activeId !== agent.runningConversationId) return;
+        setPendingQueue((prev) => [...prev, { id: uid(), conversationId: conversations.activeId!, text }]);
+        return;
+      }
+
+      if (!conversations.activeId) {
+        conversations.create().then((id) => {
+          runMessage(id, text);
+        });
+        return;
+      }
+      runMessage(conversations.activeId, text);
+    },
+    [conversations, agent, activeProvider, activeModel, reasoningEffort, runMessage],
+  );
+
+  // 队列调度：队列严格归属其会话——只有用户回到目标会话且历史装载
+  // 完成后才出队发送，绝不把排队消息发进其他会话
+  useEffect(() => {
+    if (agent.status !== 'idle') {
+      dequeueLockRef.current = false;
+      return;
+    }
+    if (pendingQueue.length === 0 || dequeueLockRef.current) return;
+
+    const next = pendingQueue[0]!;
+    if (next.conversationId !== conversations.activeId || messagesLoading) return;
+
+    dequeueLockRef.current = true;
+    setPendingQueue((prev) => prev.slice(1));
+    runMessage(next.conversationId, next.text);
+  }, [agent.status, pendingQueue, conversations.activeId, messagesLoading, runMessage]);
 
   const handleTestConnection = useCallback(
     (provider: ProviderConfig): Promise<ConnectionTestResult> => testProviderConnection(
@@ -281,10 +317,16 @@ function ChatLayout() {
   const isHome = messages.length === 0 && !messagesLoading && agent.status === 'idle';
   const activeTitle = conversations.list.find((c) => c.id === conversations.activeId)?.title;
 
+  // 查看的会话不是正在运行的会话时，禁止发送（防止消息跨会话/并发运行）
+  const isOtherConversationRunning = agent.status !== 'idle'
+    && conversations.activeId !== agent.runningConversationId;
+
   const inputProps = {
     onSend: handleSend,
     onAbort: agent.abort,
-    disabled: agent.status !== 'idle' || !activeProvider,
+    disabled: !activeProvider || isOtherConversationRunning,
+    otherRunning: isOtherConversationRunning,
+    queuedCount: conversations.activeId === agent.runningConversationId ? pendingQueue.length : 0,
     isRunning: agent.status !== 'idle',
     providers: completeProviders,
     selectedProviderId: activeProvider?.id ?? '',
