@@ -3,6 +3,8 @@ import { cn } from '../utils';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import { useVoiceInput } from '../hooks/useVoiceInput';
 import { useI18n } from '../i18n/useI18n';
+import { AnimatePresence, motion } from 'motion/react';
+import { heightCollapse } from '../motion';
 import type { TokenUsage } from '../types';
 import { ChatSelect } from './ChatSelect';
 import { ContextUsageRing } from './ContextUsageRing';
@@ -180,17 +182,24 @@ export function MessageInput({
   return (
     <div className={cn(!isHome && 'border-t border-hairline bg-canvas px-3 pt-2 pb-3')}>
       {/* 排队提示：agent 运行期间发送的消息将按序发出 */}
-      {queuedCount > 0 && (
-        <div
-          data-testid="queued-messages-chip"
-          className="mb-1.5 flex items-center gap-1.5 px-1 text-xs text-mute"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h10" />
-          </svg>
-          {t('chat.input.queuedChip', { count: queuedCount })}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {queuedCount > 0 && (
+          <motion.div
+            key="queued-chip"
+            data-testid="queued-messages-chip"
+            className="mb-1.5 flex items-center gap-1.5 px-1 text-xs text-mute overflow-hidden"
+            variants={heightCollapse}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+          >
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h10" />
+            </svg>
+            {t('chat.input.queuedChip', { count: queuedCount })}
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Composer 容器 */}
       <div
         className={cn(
@@ -281,23 +290,33 @@ export function MessageInput({
           {micButton}
 
           <div className="ml-auto flex items-center gap-2">
+            <AnimatePresence initial={false} mode="popLayout">
             {isRunning ? (
-              <button
+              <motion.button
+                key="abort"
                 type="button"
                 data-testid="abort-button"
                 onClick={onAbort}
                 className="w-[30px] h-[30px] rounded-full bg-danger text-on-primary flex items-center justify-center hover:bg-danger-hover transition-colors"
                 title={t('chat.input.abort')}
+                initial={{ opacity: 0, scale: 0.7, rotate: -90 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.7, rotate: 90 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="6" y="6" width="12" height="12" rx="2" />
                 </svg>
-              </button>
+              </motion.button>
             ) : (
-              <button
+              <motion.button
                 type="button"
                 data-testid="send-button"
                 onClick={handleSend}
+                initial={{ opacity: 0, scale: 0.7 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                transition={{ duration: 0.15, ease: 'easeOut' }}
                 disabled={!canSend}
                 aria-label={t('chat.input.send')}
                 className={cn(
@@ -310,8 +329,9 @@ export function MessageInput({
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M13 6l6 6-6 6" />
                 </svg>
-              </button>
+              </motion.button>
             )}
+            </AnimatePresence>
           </div>
         </div>
       </div>

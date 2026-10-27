@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
+import { riseIn } from '../motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { isTextUIPart, isReasoningUIPart, isToolUIPart } from 'ai';
@@ -158,9 +160,12 @@ function MessageBubbleLegacy({
   const isUser = message.role === 'user';
 
   return (
-    <div
+    <motion.div
       data-testid="message-bubble"
       className={cn('flex', isUser ? 'justify-end' : 'justify-start')}
+      variants={riseIn}
+      initial="hidden"
+      animate="visible"
     >
       <div
         className={cn(
@@ -243,7 +248,7 @@ function MessageBubbleLegacy({
           {formatTime(message.timestamp ?? Date.now())}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   SettingsCheckbox,
@@ -39,7 +39,7 @@ describe('SettingsControls', () => {
     }
   });
 
-  it('设置下拉使用自定义菜单并返回选中值', () => {
+  it('设置下拉使用自定义菜单并返回选中值', async () => {
     const onChange = vi.fn();
     function Select() {
       const [openSelectId, setOpenSelectId] = React.useState<string | null>(null);
@@ -65,7 +65,7 @@ describe('SettingsControls', () => {
     fireEvent.click(screen.getByRole('option', { name: 'Two' }));
 
     expect(onChange).toHaveBeenCalledWith('two');
-    expect(screen.queryByRole('listbox')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
   });
 
   it('选择控件保留原生语义和事件', () => {

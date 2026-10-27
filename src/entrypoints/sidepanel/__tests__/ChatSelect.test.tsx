@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ChatSelect } from '../components/ChatSelect';
@@ -85,7 +85,7 @@ describe('ChatSelect', () => {
     expect(listbox.parentElement).toBe(document.body);
   });
 
-  it('关闭时菜单从 DOM 中移除', () => {
+  it('关闭时菜单从 DOM 中移除', async () => {
     const { rerender } = renderSelect({ openSelectId: 'test-select' });
     expect(screen.getByRole('listbox')).toBeInTheDocument();
 
@@ -100,7 +100,7 @@ describe('ChatSelect', () => {
         onOpenChange={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('listbox')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
   });
 
   // ── 选项渲染 ──
@@ -265,7 +265,7 @@ describe('ChatSelect', () => {
 
   // ── 受控状态（多个实例共享 openSelectId） ──
 
-  it('当 openSelectId 匹配时显示为打开', () => {
+  it('当 openSelectId 匹配时显示为打开', async () => {
     const { rerender } = renderSelect({ openSelectId: 'test-select' });
     expect(screen.getByRole('listbox')).toBeInTheDocument();
 
@@ -281,6 +281,6 @@ describe('ChatSelect', () => {
         onOpenChange={vi.fn()}
       />,
     );
-    expect(screen.queryByRole('listbox')).toBeNull();
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
   });
 });

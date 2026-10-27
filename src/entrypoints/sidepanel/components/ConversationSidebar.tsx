@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import type { ConversationSummary, TokenUsage } from '../types';
 import { formatDateTime, formatNum, cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
+import { drawerSlide, fadeFast } from '../motion';
 
 interface Props {
   conversations: ConversationSummary[];
@@ -56,26 +58,30 @@ export function ConversationSidebar({
   return (
     <>
       {/* 遮罩 */}
-      <div
+      <motion.div
         data-testid="drawer-mask"
         onClick={onClose}
-        className={cn(
-          'absolute inset-0 bg-black/25 z-[55] transition-opacity duration-150',
-          open ? 'opacity-100' : 'opacity-0 pointer-events-none',
-        )}
+        className="absolute inset-0 bg-black/25 z-[55] pointer-events-none"
+        initial={false}
+        animate={{ opacity: open ? 1 : 0 }}
+        transition={fadeFast}
+        style={{ pointerEvents: open ? 'auto' : 'none' }}
       />
 
-      {/* 抽屉 */}
-      <div
+      {/* 抽屉：常驻挂载，spring 滑入滑出 */}
+      <motion.div
         data-testid="conversation-sidebar"
         className={cn(
           // z-[60]：内嵌模式下需盖过 EmbeddedHeader（z-50, h-10），
           // 否则抽屉头部的「新建会话」按钮会被其遮盖
           'absolute top-0 left-0 bottom-0 w-[280px] z-[60]',
           'bg-surface-card border-r border-hairline shadow-xl',
-          'flex flex-col transition-transform duration-200 ease-out',
-          open ? 'translate-x-0' : '-translate-x-full',
+          'flex flex-col',
         )}
+        initial={false}
+        animate={open ? 'visible' : 'hidden'}
+        variants={drawerSlide}
+        style={{ pointerEvents: open ? 'auto' : 'none' }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2.5 border-b border-hairline">
@@ -196,7 +202,7 @@ export function ConversationSidebar({
             </div>
           </div>
         )}
-      </div>
+      </motion.div>
     </>
   );
 }

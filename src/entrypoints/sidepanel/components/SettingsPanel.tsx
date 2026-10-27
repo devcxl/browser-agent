@@ -5,6 +5,8 @@ import type { Skill, SkillSubscription } from '@/shared/types';
 import type { ConnectionTestFailureReason, ConnectionTestResult } from '@/provider/connection-test';
 import { ConfigStore, SkillStore, SkillSubscriptionStore } from '@/shared/storage';
 import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
+import { AnimatePresence, motion } from 'motion/react';
+import { overlayBackdrop, overlayCard } from '../motion';
 import { fetchSkillsFromGitHub } from '@/shared/github-skill-fetcher';
 import { cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
@@ -69,6 +71,8 @@ function hasProviderConnectionConfigChanged(a: ProviderConfig, b: ProviderConfig
 }
 
 interface Props {
+  /** 面板开合由父级控制；卸载动画在内部 AnimatePresence 中完成 */
+  open: boolean;
   providers: ProviderConfig[];
   agentSettings: AgentSettings;
   expertMode: ExpertModeSettings;
@@ -80,6 +84,7 @@ interface Props {
 }
 
 export function SettingsPanel({
+  open,
   providers,
   agentSettings,
   expertMode,
@@ -397,11 +402,25 @@ export function SettingsPanel({
   }
 
   return (
-    <div
+    <AnimatePresence>
+    {open && (
+    <motion.div
+      key="settings-backdrop"
       data-testid="settings-panel"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      variants={overlayBackdrop}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
     >
-      <div className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] h-[85vh] flex flex-col">
+      <motion.div
+        key="settings-card"
+        className="bg-canvas rounded-xl shadow-xl w-[90vw] max-w-[750px] h-[85vh] flex flex-col"
+        variants={overlayCard}
+        initial="hidden"
+        animate="visible"
+        exit="exit"
+      >
         <div className="flex items-center justify-between px-5 py-3 border-b border-hairline shrink-0">
           <h2 className="text-base font-semibold text-ink">{t('settings.title')}</h2>
           <button
@@ -879,7 +898,9 @@ export function SettingsPanel({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
+    )}
+    </AnimatePresence>
   );
 }
