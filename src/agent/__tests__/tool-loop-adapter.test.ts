@@ -1518,6 +1518,32 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     );
   });
 
+  it('browserEnv 注入为独立的动态 system message', async () => {
+    await adapter.run({
+      ...basicInput,
+      browserEnv: {
+        browser: 'Firefox 141.0',
+        uiLanguage: 'zh-CN',
+        language: 'zh-CN',
+        timezone: 'Asia/Shanghai',
+        platform: 'Linux x86-64',
+      },
+    });
+
+    const sentMessages = mockToolLoopAgentStream.mock.calls.at(-1)?.[0].messages as Array<{
+      role: string;
+      content: string;
+    }>;
+    const envMessage = sentMessages.find((m) => m.role === 'system' && String(m.content).includes('浏览器环境'));
+    expect(envMessage).toBeDefined();
+    expect(envMessage!.content).toContain('Firefox 141.0');
+    expect(envMessage!.content).toContain('Asia/Shanghai');
+    // 缺省不注入
+    await adapter.run(basicInput);
+    const sent2 = mockToolLoopAgentStream.mock.calls.at(-1)?.[0].messages as Array<{ role: string; content: string }>;
+    expect(sent2.find((m) => m.role === 'system' && String(m.content).includes('浏览器环境'))).toBeUndefined();
+  });
+
   it('分类结果为空时降级到 baseTools（绝不回退全量工具）', async () => {
     const lazyAdapter = new ToolLoopAdapter(
       createMockToolRegistry([createMockTool('tabs_query')]),

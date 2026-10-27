@@ -106,6 +106,23 @@ export interface LowSensitivityContext {
   };
 }
 
+/**
+ * 浏览器运行环境（低敏、不易变的属性）：
+ * 注入 system prompt 帮助模型识别当前环境。
+ */
+export interface BrowserEnv {
+  /** 浏览器名称与版本，如 "Firefox 141.0" */
+  browser: string;
+  /** 浏览器 UI 语言（browser.i18n.getUILanguage），如 "zh-CN" */
+  uiLanguage: string;
+  /** Navigator 语言列表首选，如 "zh-CN" */
+  language: string;
+  /** IANA 时区，如 "Asia/Shanghai" */
+  timezone: string;
+  /** 操作系统平台，如 "Linux x86_64" */
+  platform: string;
+}
+
 // ==================== Capabilities ====================
 
 /** 浏览器能力检测结果，覆盖 17 个能力域 */

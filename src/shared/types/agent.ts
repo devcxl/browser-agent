@@ -1,5 +1,5 @@
 import type { ProviderConfig, ProviderModelConfig, ReasoningEffort } from './llm';
-import type { LowSensitivityContext } from './browser';
+import type { BrowserEnv, LowSensitivityContext } from './browser';
 import type { RiskLevel, ToolResult } from './tool';
 import type { Skill } from './skill';
 import type { ExpertModeSettings } from './storage';
@@ -36,6 +36,8 @@ export interface AgentRunInput {
   /** 当前会话对模型默认思考等级的临时覆盖。 */
   reasoningEffort?: ReasoningEffort;
   browserContext: LowSensitivityContext;
+  /** 浏览器运行环境（版本/语言/时区/平台），注入 system prompt */
+  browserEnv?: BrowserEnv;
   abortSignal?: AbortSignal;
   /** 可用技能列表，用于 skill tool call 拦截和 context 注入 */
   skills?: Skill[];

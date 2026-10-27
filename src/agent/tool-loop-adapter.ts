@@ -3,7 +3,7 @@ import type { IToolRegistry, ToolDefinition } from '@/registry/types';
 import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
-import type { LowSensitivityContext } from '@/shared/types/browser';
+import type { BrowserEnv, LowSensitivityContext } from '@/shared/types/browser';
 import type { JevSettings } from '@/shared/types/storage';
 import type { ToolResult, RiskLevel } from '@/shared/types/tool';
 import { ToolLoopAgent, generateText, isLoopFinished, pruneMessages } from 'ai';
@@ -564,6 +564,9 @@ export class ToolLoopAdapter implements IAgentRuntime {
     messages.push(this.buildSystemMessage());
     // 2. 动态浏览器上下文（放在静态前缀之后，变化不影响缓存命中）
     messages.push(this.buildBrowserContextMessage(input.browserContext));
+    if (input.browserEnv) {
+      messages.push(this.buildBrowserEnvMessage(input.browserEnv));
+    }
 
     // 2. Conversation summary
     const conversation = await this.conversationManager.get(input.conversationId);
@@ -687,6 +690,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     const fixedMessages: ModelMessage[] = [
       this.buildSystemMessage(),
       this.buildBrowserContextMessage(input.browserContext),
+      ...(input.browserEnv ? [this.buildBrowserEnvMessage(input.browserEnv)] : []),
       { role: 'user', content: input.userMessage },
     ];
     const rawTargetTokens = Math.max(
@@ -762,6 +766,24 @@ export class ToolLoopAdapter implements IAgentRuntime {
     return {
       role: 'system',
       content: `## 当前浏览器上下文\n${JSON.stringify(browserContext, null, 2)}`,
+    };
+  }
+
+  /**
+   * 浏览器环境 system message：版本/语言/时区等不易变属性。
+   * 帮助模型回答「我的浏览器是什么版本」类问题与格式化本地时间。
+   */
+  private buildBrowserEnvMessage(env: BrowserEnv): ModelMessage {
+    return {
+      role: 'system',
+      content: [
+        '## 浏览器环境',
+        `- 浏览器: ${env.browser}`,
+        `- 界面语言: ${env.uiLanguage}`,
+        `- 首选语言: ${env.language}`,
+        `- 时区: ${env.timezone}`,
+        `- 平台: ${env.platform}`,
+      ].join('\n'),
     };
   }
 
