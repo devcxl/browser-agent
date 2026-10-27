@@ -55,7 +55,10 @@ function timestamp(): string {
 
 // ── 会话级导出 ──────────────────────────────────────────
 
-/** 把一条会话渲染为 Markdown（含工具调用折叠块） */
+/**
+ * 把一条会话渲染为 Markdown：仅含用户与助手的文本内容，
+ * 工具调用/结果是执行细节，不进入人类可读的导出。
+ */
 export function renderConversationMarkdown(
   conversation: Conversation,
   messages: StoredMessage[],
@@ -63,28 +66,27 @@ export function renderConversationMarkdown(
   const lines: string[] = [
     `# ${conversation.title}`,
     '',
-    `> 导出于 ${new Date().toLocaleString()} · ${messages.length} 条消息`,
+    `> 导出于 ${new Date().toLocaleString()}`,
   ];
   if (conversation.summary) {
     lines.push('', '## 摘要', '', conversation.summary);
   }
+  let rendered = 0;
   for (const msg of messages) {
+    if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+    if (!msg.content.trim()) continue;
     lines.push('', '---', '');
     const time = new Date(msg.timestamp ?? 0).toLocaleString();
     if (msg.role === 'user') {
       lines.push(`**👤 用户** · ${time}`, '', msg.content);
-    } else if (msg.role === 'assistant') {
-      if (msg.toolCalls?.length) {
-        for (const tc of msg.toolCalls) {
-          lines.push(`**🛠 工具调用** \`${tc.name}\``, '', '```json', JSON.stringify(tc.params, null, 2), '```');
-        }
-      }
-      if (msg.content) {
-        lines.push(`**🤖 助手** · ${time}`, '', msg.content);
-      }
-    } else if (msg.role === 'tool') {
-      lines.push(`**⚙️ 工具结果** \`${msg.toolCallId ?? ''}\``, '', '```json', msg.content, '```');
+    } else {
+      lines.push(`**🤖 助手** · ${time}`, '', msg.content);
     }
+    rendered++;
+  }
+  // 没有任何文本消息时给出说明，避免导出一个空壳
+  if (rendered === 0) {
+    lines.push('', '（本会话仅包含工具调用，无可展示的文本内容）');
   }
   return lines.join('\n');
 }
