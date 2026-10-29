@@ -17,6 +17,11 @@ import { WIDGET_MESSAGE_SOURCE } from '@/shared/widget-protocol';
 const LOAD_TIMEOUT = 5000;
 
 /** 滑入/滑出动画时长（ms），与 CSS transition 保持一致 */
+function effectiveTransitionMs(): number {
+  // jsdom/旧环境无 matchMedia 时按完整动画处理
+  if (typeof window.matchMedia !== 'function') return TRANSITION_MS;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : TRANSITION_MS;
+}
 const TRANSITION_MS = 250;
 
 /** 协议允许的结束原因；其他值一律视为缺省（complete），保持向后兼容 */
@@ -100,10 +105,14 @@ export class ChatPanel {
     this.positionContainer();
     this.containerEl.style.display = 'block';
 
-    // 触发滑入动画（下一帧执行，确保 display: block 生效）
+    // 触发滑入动画（下一帧执行，确保 display: block 生效）；
+    // opacity 与 transform 同步过渡，避免纯位移的生硬感
+    this.containerEl.style.opacity = '0';
     requestAnimationFrame(() => {
-      this.containerEl.style.transition = `transform ${TRANSITION_MS}ms ease-out`;
+      const ms = effectiveTransitionMs();
+      this.containerEl.style.transition = `transform ${ms}ms ease-out, opacity ${ms}ms ease-out`;
       this.containerEl.style.transform = 'translateX(0)';
+      this.containerEl.style.opacity = '1';
     });
   }
 
@@ -111,10 +120,12 @@ export class ChatPanel {
   close(): void {
     if (!this._isOpen) return;
 
-    // 滑出动画
-    this.containerEl.style.transition = 'transform 250ms ease-out';
+    // 滑出动画（位移 + 淡出）
+    const closeMs = effectiveTransitionMs() || TRANSITION_MS;
+    this.containerEl.style.transition = `transform ${closeMs}ms ease-out, opacity ${closeMs}ms ease-out`;
     const translate = this.side === 'left' ? '-110%' : '110%';
     this.containerEl.style.transform = `translateX(${translate})`;
+    this.containerEl.style.opacity = '0';
     // 动画结束后隐藏；不能只依赖 transitionend：
     // 元素不可见/无合成帧（如无头浏览器）时该事件不触发，面板会卡在 display: block。
     const hide = () => {
@@ -125,7 +136,7 @@ export class ChatPanel {
     const onTransitionEnd = () => hide();
     this.containerEl.addEventListener('transitionend', onTransitionEnd, { once: true });
     // 兜底：略长于动画时长，确保 transitionend 缺席时仍能隐藏
-    this.hideTimer = setTimeout(hide, TRANSITION_MS + 100);
+    this.hideTimer = setTimeout(hide, closeMs + 100);
 
     this._isOpen = false;
     this.onClose?.();

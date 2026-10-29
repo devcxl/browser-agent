@@ -76,8 +76,10 @@ describe('ConversationSidebar', () => {
   it('closed drawer hides content off-screen', () => {
     wrappedRender(<ConversationSidebar {...defaultProps} open={false} />);
 
-    const drawer = screen.getByTestId('conversation-sidebar');
-    expect(drawer.className).toContain('-translate-x-full');
+    const drawer = screen.getByTestId('conversation-sidebar') as HTMLElement;
+    // 动效重构后位移由 motion 驱动（style.transform），不再依赖 CSS 类
+    expect(drawer.style.transform).toContain('-100%');
+    expect(drawer.style.pointerEvents).toBe('none');
   });
 
   it('calls onClose when mask clicked', async () => {

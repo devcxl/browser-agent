@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '../utils';
 
 export interface ChatSelectOption {
@@ -40,6 +41,8 @@ export function ChatSelect({
   const listRef = useRef<HTMLUListElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  /** 菜单向上翻转弹出（空间不足时），决定展开方向与箭头朝向 */
+  const [flipUp, setFlipUp] = useState(false);
 
   // 打开时重置活动项到当前选中项
   useEffect(() => {
@@ -57,6 +60,7 @@ export function ChatSelect({
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const flip = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
+    setFlipUp(flip);
     const availableHeight = flip ? spaceAbove - 8 : spaceBelow - 8;
     setMenuStyle({
       position: 'fixed',
@@ -190,6 +194,7 @@ export function ChatSelect({
             ? 'w-full justify-between gap-2 rounded-lg border border-hairline bg-surface-card px-3 py-2 text-sm text-ink shadow-sm transition-colors hover:border-hairline-strong focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15'
             : 'max-w-[200px] gap-1 rounded-full border-none bg-surface-soft px-2.5 py-1 text-xs font-medium text-body hover:text-ink',
           disabled && 'opacity-40 cursor-not-allowed',
+          'active:scale-[0.97] transition-transform',
         )}
       >
         <span className="truncate">{selectedOption?.label || value || label}</span>
@@ -198,7 +203,7 @@ export function ChatSelect({
             aria-hidden="true"
             viewBox="0 0 20 20"
             fill="none"
-            className="size-4 shrink-0 text-mute"
+            className={cn('size-4 shrink-0 text-mute transition-transform duration-200', isOpen && 'rotate-180')}
           >
             <path
               d="m6 8 4 4 4-4"
@@ -215,10 +220,21 @@ export function ChatSelect({
         )}
       </button>
 
-      {isOpen &&
-        createPortal(
-          <ul
+      {createPortal(
+        <AnimatePresence>
+        {isOpen && (
+          <motion.ul
             ref={listRef}
+            initial={{ opacity: 0, scale: 0.95, y: flipUp ? 8 : -8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{
+              opacity: 0,
+              scale: 0.97,
+              y: flipUp ? 4 : -4,
+              transition: { duration: 0.12, ease: 'easeIn' },
+            }}
+            transition={{ type: 'spring', stiffness: 500, damping: 34, mass: 0.9 }}
+            style={{ ...menuStyle, transformOrigin: flipUp ? 'bottom' : 'top' }}
             id={`${id}-listbox`}
             role="listbox"
             aria-label={label}
@@ -249,9 +265,11 @@ export function ChatSelect({
                 {opt.label}
               </li>
             ))}
-          </ul>,
-          document.body,
+          </motion.ul>
         )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 }

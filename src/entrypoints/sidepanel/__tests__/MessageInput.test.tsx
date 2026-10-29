@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MessageInput } from '../components/MessageInput';
@@ -496,7 +496,7 @@ describe('MessageInput', () => {
     expect(input.placeholder === '回复生成中，新消息将排队发送…' || input.placeholder.includes('queued')).toBe(true);
   });
 
-  it('queuedCount > 0 时显示排队提示条，为 0 时不显示', () => {
+  it('queuedCount > 0 时显示排队提示条，为 0 时不显示', async () => {
     const { rerender } = wrappedRender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning queuedCount={2} providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
     );
@@ -505,7 +505,7 @@ describe('MessageInput', () => {
     rerender(
       <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled={false} isRunning queuedCount={0} providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
     );
-    expect(screen.queryByTestId('queued-messages-chip')).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId('queued-messages-chip')).toBeNull());
   });
 
   it('查看其他会话（otherRunning）时禁用输入并提示稍后发送', () => {
