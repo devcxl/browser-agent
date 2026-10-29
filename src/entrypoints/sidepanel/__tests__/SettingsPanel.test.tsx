@@ -153,6 +153,15 @@ describe('SettingsPanel', () => {
     expect(screen.getByRole('listbox', { name: '主题' })).toBeTruthy();
   });
 
+  it('数据 tab 可进入并展示导出与导入入口', async () => {
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+
+    expect(screen.getByTestId('export-all-button')).toBeTruthy();
+    expect(screen.getByTestId('import-label')).toBeTruthy();
+  });
+
   it('Agent 设置展示智能执行保护且不再暴露固定步数输入', async () => {
     const props = makeProps();
     renderWithI18n(<SettingsPanel {...props} />);
