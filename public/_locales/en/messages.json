@@ -799,5 +799,41 @@
   },
   "home_sug4_prompt": {
     "message": "Review recently closed tabs and windows, ordered from most recently closed, and list their titles and URLs. Do not restore anything automatically."
+  },
+  "export_title": {
+    "message": "Export conversation"
+  },
+  "export_markdown": {
+    "message": "Export as Markdown"
+  },
+  "export_json": {
+    "message": "Export as JSON"
+  },
+  "settings_tabs_data": {
+    "message": "Data"
+  },
+  "data_exportAll": {
+    "message": "Export all data"
+  },
+  "data_exportAllDesc": {
+    "message": "Download a JSON backup of all conversations and settings. Credentials such as API keys are excluded; re-enter them after importing"
+  },
+  "data_import": {
+    "message": "Import backup"
+  },
+  "data_importDesc": {
+    "message": "Restore from a backup file. Conversations merge by ID, settings are overwritten per key; nothing is deleted, and credentials already configured in this browser are kept"
+  },
+  "data_importing": {
+    "message": "Importing…"
+  },
+  "data_importDone": {
+    "message": "Imported {c} conversations, {m} messages and {k} settings"
+  },
+  "data_importFailed": {
+    "message": "Import failed"
+  },
+  "data_pickFile": {
+    "message": "Choose backup file"
   }
 }

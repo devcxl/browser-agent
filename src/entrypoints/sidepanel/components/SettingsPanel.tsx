@@ -94,10 +94,14 @@ export function SettingsPanel({
   onClose,
 }: Props) {
   const { t, locale } = useI18n();
-  const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'jev' | 'skills' | 'floatingButton'>('appearance');
+  const [tab, setTab] = useState<'appearance' | 'provider' | 'agent' | 'expert' | 'jev' | 'skills' | 'floatingButton' | 'data'>('appearance');
   // 系统提示词编辑草稿：面板每次打开时从 agentSettings 初始化
   const [systemPromptInput, setSystemPromptInput] = useState(agentSettings.systemPrompt);
   const [systemPromptSaveStatus, setSystemPromptSaveStatus] = useState<'saved' | null>(null);
+  // 数据 tab：导入状态
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
   const [jevSettings, setJevSettings] = useState<JevSettings>({ enabled: false, apiKey: '' });
   const [jevApiKeyInput, setJevApiKeyInput] = useState('');
@@ -195,6 +199,29 @@ export function SettingsPanel({
     setSystemPromptInput(DEFAULT_SYSTEM_PROMPT);
     onSaveAgentSettings({ ...agentSettings, systemPrompt: DEFAULT_SYSTEM_PROMPT });
     setSystemPromptSaveStatus(null);
+  };
+
+  const handleExportAll = async () => {
+    try {
+      await exportFullSnapshot();
+      setImportError(null);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : '导出失败');
+    }
+  };
+
+  const handleImportFile = async (file: File) => {
+    setImporting(true);
+    setImportResult(null);
+    setImportError(null);
+    try {
+      const result = await importFullSnapshot(await file.text());
+      setImportResult(result);
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleSaveJevApiKey = async () => {    const apiKey = jevApiKeyInput.trim();
@@ -433,7 +460,7 @@ export function SettingsPanel({
         </div>
 
         <div className="flex border-b border-hairline px-5 shrink-0">
-          {(['appearance', 'provider', 'agent', 'expert', 'jev', 'skills', 'floatingButton'] as const).map((tabKey) => (
+          {(['appearance', 'provider', 'agent', 'expert', 'jev', 'skills', 'floatingButton', 'data'] as const).map((tabKey) => (
             <button
               key={tabKey}
               type="button"
@@ -829,6 +856,54 @@ export function SettingsPanel({
 
           {tab === 'floatingButton' && (
             <FloatingButtonSection />
+          )}
+
+          {tab === 'data' && (
+            <div className="max-w-xl space-y-4">
+              <div className="rounded-xl border border-hairline p-4 space-y-3">
+                <h3 className="text-sm font-medium text-ink">{t('data_exportAll')}</h3>
+                <p className="text-xs leading-relaxed text-mute">{t('data_exportAllDesc')}</p>
+                <button
+                  type="button"
+                  data-testid="export-all-button"
+                  onClick={handleExportAll}
+                  className="rounded-md bg-primary px-3 py-1.5 text-sm text-on-primary hover:bg-primary-active"
+                >
+                  {t('data_exportAll')}
+                </button>
+              </div>
+
+              <div className="rounded-xl border border-hairline p-4 space-y-3">
+                <h3 className="text-sm font-medium text-ink">{t('data_import')}</h3>
+                <p className="text-xs leading-relaxed text-mute">{t('data_importDesc')}</p>
+                <label
+                  data-testid="import-label"
+                  className="inline-block cursor-pointer rounded-md border border-hairline px-3 py-1.5 text-sm text-mute hover:bg-surface-soft"
+                >
+                  {importing ? t('data_importing') : t('data_pickFile')}
+                  <input
+                    type="file"
+                    accept="application/json,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleImportFile(file);
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
+                {importResult && (
+                  <p role="status" data-testid="import-result" className="text-xs text-success">
+                    {t('data_importDone', { c: importResult.conversations, m: importResult.messages, k: importResult.settingsKeys.length })}
+                  </p>
+                )}
+                {importError && (
+                  <p role="alert" data-testid="import-error" className="text-xs text-danger">
+                    {t('data_importFailed')}: {importError}
+                  </p>
+                )}
+              </div>
+            </div>
           )}
 
           {tab === 'appearance' && (
