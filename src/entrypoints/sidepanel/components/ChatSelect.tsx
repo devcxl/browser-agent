@@ -41,6 +41,8 @@ export function ChatSelect({
   const listRef = useRef<HTMLUListElement>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
+  /** 菜单向上翻转弹出（空间不足时），决定展开方向与箭头朝向 */
+  const [flipUp, setFlipUp] = useState(false);
 
   // 打开时重置活动项到当前选中项
   useEffect(() => {
@@ -58,6 +60,7 @@ export function ChatSelect({
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
     const flip = spaceBelow < estimatedHeight && spaceAbove > spaceBelow;
+    setFlipUp(flip);
     const availableHeight = flip ? spaceAbove - 8 : spaceBelow - 8;
     setMenuStyle({
       position: 'fixed',
@@ -200,7 +203,7 @@ export function ChatSelect({
             aria-hidden="true"
             viewBox="0 0 20 20"
             fill="none"
-            className="size-4 shrink-0 text-mute"
+            className={cn('size-4 shrink-0 text-mute transition-transform duration-200', isOpen && 'rotate-180')}
           >
             <path
               d="m6 8 4 4 4-4"
@@ -222,11 +225,16 @@ export function ChatSelect({
         {isOpen && (
           <motion.ul
             ref={listRef}
-            initial={{ opacity: 0, scale: 0.95, y: -8 }}
+            initial={{ opacity: 0, scale: 0.95, y: flipUp ? 8 : -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -4, transition: { duration: 0.12, ease: 'easeIn' } }}
+            exit={{
+              opacity: 0,
+              scale: 0.97,
+              y: flipUp ? 4 : -4,
+              transition: { duration: 0.12, ease: 'easeIn' },
+            }}
             transition={{ type: 'spring', stiffness: 500, damping: 34, mass: 0.9 }}
-            style={{ ...menuStyle, transformOrigin: 'top' }}
+            style={{ ...menuStyle, transformOrigin: flipUp ? 'bottom' : 'top' }}
             id={`${id}-listbox`}
             role="listbox"
             aria-label={label}
