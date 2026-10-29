@@ -1518,6 +1518,36 @@ describe('ToolLoopAdapter run() 事件流与异常', () => {
     );
   });
 
+  it('browserEnv 并入头部 system message，不新增 system 条数', async () => {
+    await adapter.run({
+      ...basicInput,
+      browserEnv: {
+        browser: 'Firefox 141.0',
+        uiLanguage: 'zh-CN',
+        language: 'zh-CN',
+        timezone: 'Asia/Shanghai',
+        platform: 'Linux x86-64',
+      },
+    });
+
+    const sentMessages = mockToolLoopAgentStream.mock.calls.at(-1)?.[0].messages as Array<{
+      role: string;
+      content: string;
+    }>;
+    const withEnv = sentMessages.filter((m) => m.role === 'system');
+    // 浏览器环境随头部那条 system message 一起给出
+    expect(withEnv[0]!.content).toContain('## 浏览器环境');
+    expect(withEnv[0]!.content).toContain('Firefox 141.0');
+    expect(withEnv[0]!.content).toContain('Asia/Shanghai');
+
+    // 缺省不注入，且 system 条数保持不变（环境不额外占一条 message）
+    await adapter.run(basicInput);
+    const sent2 = mockToolLoopAgentStream.mock.calls.at(-1)?.[0].messages as Array<{ role: string; content: string }>;
+    const withoutEnv = sent2.filter((m) => m.role === 'system');
+    expect(withoutEnv[0]!.content).not.toContain('浏览器环境');
+    expect(withoutEnv.length).toBe(withEnv.length);
+  });
+
   it('分类结果为空时降级到 baseTools（绝不回退全量工具）', async () => {
     const lazyAdapter = new ToolLoopAdapter(
       createMockToolRegistry([createMockTool('tabs_query')]),

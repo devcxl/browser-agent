@@ -3,7 +3,7 @@ import type { IToolRegistry, ToolDefinition } from '@/registry/types';
 import type { IGuardrail, GuardrailContext } from '@/shared/types/guardrail';
 import type { IConversationManager, StoredMessage } from '@/shared/types/conversation';
 import type { ProviderConfig } from '@/shared/types/llm';
-import type { LowSensitivityContext } from '@/shared/types/browser';
+import type { BrowserEnv, LowSensitivityContext } from '@/shared/types/browser';
 import type { JevSettings } from '@/shared/types/storage';
 import type { ToolResult, RiskLevel } from '@/shared/types/tool';
 import { ToolLoopAgent, generateText, isLoopFinished, pruneMessages } from 'ai';
@@ -561,7 +561,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     const messages: ModelMessage[] = [];
 
     // 1. 静态 system prompt（保持前缀稳定以命中 provider prompt cache）
-    messages.push(this.buildSystemMessage());
+    messages.push(this.buildSystemMessage(input.browserEnv));
     // 2. 动态浏览器上下文（放在静态前缀之后，变化不影响缓存命中）
     messages.push(this.buildBrowserContextMessage(input.browserContext));
 
@@ -685,7 +685,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
       ? Math.min(desiredSummaryTokens, maxOutputTokens)
       : desiredSummaryTokens;
     const fixedMessages: ModelMessage[] = [
-      this.buildSystemMessage(),
+      this.buildSystemMessage(input.browserEnv),
       this.buildBrowserContextMessage(input.browserContext),
       { role: 'user', content: input.userMessage },
     ];
@@ -734,11 +734,14 @@ export class ToolLoopAdapter implements IAgentRuntime {
   }
 
   /**
-   * 静态 system message：仅含固定指令与工具类别索引。
+   * 头部 system message：固定指令、浏览器环境与工具类别索引。
    * 角色描述来自用户自定义系统提示词（默认 DEFAULT_SYSTEM_PROMPT），
    * 内容不随会话变化，保证 provider 端 prompt caching 命中前缀。
+   *
+   * 浏览器环境（版本/语言/时区/平台）在同一浏览器内稳定不变，随头部一次给出：
+   * 既不额外占用一条 system message，也不会在请求之间抖动前缀。
    */
-  private buildSystemMessage(): ModelMessage {
+  private buildSystemMessage(browserEnv?: BrowserEnv): ModelMessage {
     const persona = this.agentConfig.systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
     const categoryIndex = (Object.keys(TOOL_CATEGORY_DESCRIPTIONS) as ToolCategory[])
       .map((category) => `- ${category}: ${TOOL_CATEGORY_DESCRIPTIONS[category]}`)
@@ -746,7 +749,18 @@ export class ToolLoopAdapter implements IAgentRuntime {
 
     const content = [
       persona,
-      ``,
+      ...(browserEnv
+        ? [
+            '',
+            '## 浏览器环境',
+            `- 浏览器: ${browserEnv.browser}`,
+            `- 界面语言: ${browserEnv.uiLanguage}`,
+            `- 首选语言: ${browserEnv.language}`,
+            `- 时区: ${browserEnv.timezone}`,
+            `- 平台: ${browserEnv.platform}`,
+          ]
+        : []),
+      '',
       `## 可用工具类别`,
       categoryIndex,
     ].join('\n');

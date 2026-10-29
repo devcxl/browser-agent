@@ -15,6 +15,7 @@ import type { IConversationManager } from '@/shared/types/conversation';
 import type { IJsonRpcClient } from '@/shared/types';
 import { uid } from '../utils';
 import { ConfigStore } from '@/shared/storage';
+import { collectBrowserEnv } from '@/shared/browser-env';
 
 import type { ISkillStore } from '@/shared/types/skill';
 
@@ -243,6 +244,7 @@ export function useAgent() {
             allWindows: [],
             tabGroups: [],
           },
+          browserEnv: await collectBrowserEnv(),
           callbacks: {
             onStreamChunk: (chunk: string) => {
               // 工具执行结束、文本恢复输出：从 running 回到 streaming（思考/生成中）
