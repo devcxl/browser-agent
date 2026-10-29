@@ -18,8 +18,9 @@ import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
 import { WIDGET_MESSAGE_SOURCE, type CloseRequestMessage } from '@/shared/widget-protocol';
-import { MotionConfig, motion } from 'motion/react';
+import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { riseIn, staggerContainer } from './motion';
+import { exportConversationMarkdown, exportConversationJson } from '@/shared/data-transfer';
 
 import { ChatContentContainer } from './components/ChatContentContainer';
 import { EmbeddedHeader } from './components/EmbeddedHeader';
@@ -303,6 +304,7 @@ function ChatLayout() {
     [handleSaveProviders],
   );
 
+
   const handleNewConversation = useCallback(async () => {
     await conversations.create();
     setDrawerOpen(false);
@@ -318,6 +320,23 @@ function ChatLayout() {
 
   const isHome = messages.length === 0 && !messagesLoading && agent.status === 'idle';
   const activeTitle = conversations.list.find((c) => c.id === conversations.activeId)?.title;
+
+  // ── 会话导出：顶栏菜单（Markdown / JSON）
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+
+  const handleExport = useCallback(async (format: 'markdown' | 'json') => {
+    setExportMenuOpen(false);
+    if (!conversations.activeId || !activeTitle) return;
+    try {
+      if (format === 'markdown') {
+        await exportConversationMarkdown(conversations.activeId, activeTitle);
+      } else {
+        await exportConversationJson(conversations.activeId, activeTitle);
+      }
+    } catch (err) {
+      console.warn('[App] 会话导出失败', err);
+    }
+  }, [conversations.activeId, activeTitle]);
 
   // 查看的会话不是正在运行的会话时，禁止发送（防止消息跨会话/并发运行）
   const isOtherConversationRunning = agent.status !== 'idle'
@@ -363,6 +382,43 @@ function ChatLayout() {
         <span className="text-[13px] font-semibold text-ink tracking-wide truncate px-2">
           {isHome ? t('app.title') : (activeTitle ?? t('app.title'))}
         </span>
+        <div className="flex items-center gap-0.5">
+        {conversations.activeId && !isHome && (
+          <div className="relative">
+            <button
+              type="button"
+              data-testid="export-button"
+              onClick={() => setExportMenuOpen((v) => !v)}
+              className="w-7 h-7 flex items-center justify-center rounded-md text-mute hover:text-ink hover:bg-surface-soft transition-colors"
+              title={t('export_title')}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v2a2 2 0 002 2h14a2 2 0 002-2v-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2" />
+              </svg>
+            </button>
+            <AnimatePresence>
+              {exportMenuOpen && (
+                <motion.div
+                  key="export-menu"
+                  data-testid="export-menu"
+                  className="absolute right-0 top-8 z-[70] w-40 rounded-lg border border-hairline bg-surface-card shadow-lg py-1"
+                  initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.97, y: -4, transition: { duration: 0.12, ease: 'easeIn' } }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 34 }}
+                  style={{ transformOrigin: 'top' }}
+                >
+                  <button type="button" data-testid="export-markdown" onClick={() => handleExport('markdown')} className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-surface-soft">
+                    {t('export_markdown')}
+                  </button>
+                  <button type="button" data-testid="export-json" onClick={() => handleExport('json')} className="w-full text-left px-3 py-1.5 text-xs text-ink hover:bg-surface-soft">
+                    {t('export_json')}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
         <button
           type="button"
           data-testid="settings-button"
@@ -375,6 +431,7 @@ function ChatLayout() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
         </button>
+        </div>
       </header>
 
       {/* 加载进度条（顶栏下方） */}

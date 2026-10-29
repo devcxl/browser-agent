@@ -799,5 +799,41 @@
   },
   "home_sug4_prompt": {
     "message": "帮我查看最近关闭的标签页和窗口，按关闭时间从近到远列出标题和 URL。不要自动恢复任何内容。"
+  },
+  "export_title": {
+    "message": "导出当前会话"
+  },
+  "export_markdown": {
+    "message": "导出为 Markdown"
+  },
+  "export_json": {
+    "message": "导出为 JSON"
+  },
+  "settings_tabs_data": {
+    "message": "数据"
+  },
+  "data_exportAll": {
+    "message": "导出全部数据"
+  },
+  "data_exportAllDesc": {
+    "message": "下载包含全部会话与配置的 JSON 备份文件（不含 API Key 等凭据，导入后需重新填写）"
+  },
+  "data_import": {
+    "message": "导入备份"
+  },
+  "data_importDesc": {
+    "message": "从备份文件恢复。会话按 ID 合并、配置按键覆盖，不会删除现有数据；本机已配置的密钥会保留"
+  },
+  "data_importing": {
+    "message": "导入中…"
+  },
+  "data_importDone": {
+    "message": "已导入 {c} 个会话、{m} 条消息与 {k} 项配置"
+  },
+  "data_importFailed": {
+    "message": "导入失败"
+  },
+  "data_pickFile": {
+    "message": "选择备份文件"
   }
 }
