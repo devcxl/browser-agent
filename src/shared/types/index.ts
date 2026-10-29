@@ -16,6 +16,7 @@ export type {
   BrowserState,
   StateChanges,
   LowSensitivityContext,
+  BrowserEnv,
   Capabilities,
   TabQueryInfo,
   TabCreateProperties,
