@@ -1,0 +1,83 @@
+# PR 自动审查（Pi Coding Agent）
+#
+# 触发方式：
+#   1. pull_request：opened / synchronize / reopened / ready_for_review
+#   2. workflow_dispatch：手动补审（可指定 PR 编号与门禁级别）
+#
+# 行为要点：
+#   - 在 Runner 内用 git merge-base 本地比对，绕开 GitHub diff API 的 20000 行上限
+#   - 审查 Agent 只拿到只读工具（read/grep/find/ls），工作区配置不被信任
+#   - 结论以 <!-- pi-review:begin --> 标记幂等更新在 PR 上，不刷屏
+#   - 默认只评论不拦截（fail_on: none）；需要硬门禁时用 workflow_dispatch 指定级别
+#
+# 依赖的仓库级 Secrets（缺失时 Action 会优雅跳过，退出码 0）：
+#   HALF_CABBAGE_BASE_URL / HALF_CABBAGE_API_KEY / TYPESAFE_API_KEY
+
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: '要审查的 PR 编号'
+        required: true
+        type: string
+      fail_on:
+        description: '门禁级别（达到该级别即判定失败）'
+        required: false
+        default: 'none'
+        type: choice
+        options: [none, low, medium, high, critical]
+      max_chunks:
+        description: '本次最多审查的 chunk 数（0 = 不限）'
+        required: false
+        default: '0'
+        type: string
+
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+jobs:
+  review:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # merge-base 需要完整历史；不落盘凭据，避免审查 Agent 触达 git 凭证
+      - name: Checkout PR head (full history, no persisted credentials)
+        uses: actions/checkout@v7
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number || inputs.pr_number }}/head
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Run Pi PR Review
+        uses: devcxl/agentic-action/pr-review@v1.0.0
+        with:
+          provider: 'half-cabbage'
+          model: 'minimax-m3'
+          thinking: 'high'
+          pr_number: ${{ github.event.pull_request.number || inputs.pr_number }}
+          max_chunks: ${{ inputs.max_chunks || '0' }}
+          # 关联 Issue 决定审查侧重点与思考档位；未配置 TYPESAFE_API_KEY 时自动跳过
+          link_issues: 'true'
+          include_issue_body: 'false'
+          triage_config: '.github/triage.yml'
+          # 把仓库约定喂给审查 Agent，让结论对齐本项目的术语与决策记录
+          context_files: 'AGENTS.md CONTEXT.md'
+          # 排除构建产物与 vendored 第三方代码（后者由 security-audit 单独审计）
+          exclude: '**/dist/**,**/coverage/**,**/.wxt/**,**/test-results/**,**/src/content/floating-widget/grokbot/**'
+          fail_on: ${{ inputs.fail_on || 'none' }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          typesafe_api_key: ${{ secrets.TYPESAFE_API_KEY }}
+        env:
+          HALF_CABBAGE_BASE_URL: ${{ secrets.HALF_CABBAGE_BASE_URL }}
+          HALF_CABBAGE_API_KEY: ${{ secrets.HALF_CABBAGE_API_KEY }}

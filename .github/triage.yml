@@ -1,0 +1,35 @@
+# Issue 分类配置（供 devcxl/agentic-action 的 triage / PR Issue 联动使用）
+#
+# labels 全部复用本仓库已存在的标签，无需新建：
+#   bug / enhancement / question / documentation 为 GitHub 默认类型标签，
+#   needs-triage 为本仓库的状态标签（与 docs/agents/triage-labels.md 对齐）。
+#
+# 字段约束：types 数量 2~20、label 全局唯一、color 为 6 位十六进制、
+# model 不得以 -latest / -preview 结尾。
+
+model: jev-1.14.0
+confidence_floor: 0.6
+fallback: other
+max_body_chars: 8000
+
+types:
+  bug:
+    label: bug
+    color: "d73a4a"
+    description: "行为与预期不符、崩溃、报错或回归缺陷"
+  feature:
+    label: enhancement
+    color: "a2eeef"
+    description: "新增功能特性或改进现有能力"
+  question:
+    label: question
+    color: "d876e3"
+    description: "使用方式咨询、配置疑问或非缺陷类求助"
+  docs:
+    label: documentation
+    color: "0075ca"
+    description: "文档缺失、过时或表述错误"
+  other:
+    label: needs-triage
+    color: "fbca04"
+    description: "以上都不是，或信息不足以判断具体分类"
