@@ -42,11 +42,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 手动触发时事件载荷里没有 pull_request.base.sha，Action 会退回用
-  # `gh pr view` 解析 base SHA，而 gh 在 Actions 里必须显式拿 token。
-  # 该步骤只需要只读权限，因此单独放在一个 job 里。
+  # 解析 base SHA：
+  #   - pull_request 事件：直接取事件载荷里的 base.sha
+  #   - workflow_dispatch：事件载荷没有 PR 信息，用 gh pr view 解析
+  # 该 job 只需只读权限，且始终运行（避免依赖“被跳过的 needs 仍会执行”这一隐式语义）。
   resolve-base:
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -62,8 +62,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            if [[ ! "$EVENT_BASE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::event payload carries no valid base SHA"
+              exit 1
+            fi
+            echo "sha=$EVENT_BASE_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
             echo "::error::pr_number must be a positive integer"
             exit 1
@@ -81,10 +91,7 @@ jobs:
 
   review:
     needs: [resolve-base]
-    # resolve-base 在 pull_request 事件下被跳过，此时 base SHA 来自事件载荷
-    if: >-
-      !cancelled() && needs.resolve-base.result != 'failure' &&
-      (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -109,7 +116,7 @@ jobs:
           model: 'minimax-m3'
           thinking: 'high'
           pr_number: ${{ github.event.pull_request.number || inputs.pr_number }}
-          base_sha: ${{ needs.resolve-base.outputs.base_sha || github.event.pull_request.base.sha }}
+          base_sha: ${{ needs.resolve-base.outputs.base_sha }}
           max_chunks: ${{ inputs.max_chunks || '0' }}
           # 关联 Issue 决定审查侧重点与思考档位；未配置 TYPESAFE_API_KEY 时自动跳过
           link_issues: 'true'

@@ -67,11 +67,11 @@ gh secret set TYPESAFE_API_KEY --repo devcxl/browser-agent
 The action diffs against `git merge-base <base> <head>`, so it needs the base commit SHA:
 
 - **`pull_request` events**: read straight from the event payload (`github.event.pull_request.base.sha`).
-- **`workflow_dispatch` events**: the payload has no `pull_request`, so a dedicated
-  `resolve-base` job runs `gh pr view <n> --json baseRefName,baseRefOid` and passes the SHA to the
-  review job via `base_sha`. The step validates the SHA (`^[0-9a-f]{40}$`) and fails loudly if
-  `gh` fails. That job runs in `runner.temp` with **read-only** permissions; the write-scoped
-  token only exists in the `review` job, which needs it to publish the comment.
+- **`workflow_dispatch` events**: the payload has no `pull_request`, so the `resolve-base` job runs
+  `gh pr view <n> --json baseRefName,baseRefOid` and passes the SHA to the review job via
+  `base_sha`. The step validates the SHA (`^[0-9a-f]{40}$`) and fails loudly if `gh` fails. That
+  job runs in `runner.temp` with **read-only** permissions; the write-scoped token only exists in
+  the `review` job, which needs it to publish the comment.
 
 `gh` needs `GH_TOKEN` (Actions does not export `secrets.GITHUB_TOKEN` into the environment by
 itself). Without it the action falls back to its own `gh pr view` call and fails with an
@@ -147,11 +147,18 @@ Verified against the pinned commit `c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`
 
 Inputs the action does not declare are ignored by GitHub with a warning, so a typo here would
 degrade silently rather than fail loudly. The `action-contract` job in `.github/workflows/ci.yml`
-guards against that: it extracts the pinned commit from `pr-review.yml`, fetches that commit's
-`pr-review/action.yml`, and fails if `base_sha` / `tools` / `exclude_tools` are no longer declared
-or if the action's default tool set ever grows a shell tool. It runs on every PR, so a Dependabot
-bump of the pinned SHA cannot silently change the contract — the bump has to pass the check
-first, and the contract re-check happens in the same PR that moves the SHA.
+guards against that, in two parts:
+
+1. **Input contract** — it extracts the pinned commit from `pr-review.yml`, fetches that commit's
+   `pr-review/action.yml`, and fails if `base_sha` / `tools` / `exclude_tools` are no longer
+   declared or if the action's default tool set ever grows a shell tool (fail-closed: an
+   unparseable default is an error, not a pass).
+2. **Safety semantics** — it fetches the pinned commit's `dist/review-pr.js` and asserts the
+   invariants this repo relies on are still there: `--no-mcp`, `--no-approve`, the `INPUT_*`
+   skip, the `GITHUB_TOKEN`/`GH_TOKEN` skip, and the `isShellEnabledInPolicy` gate.
+
+Both run on every PR, so a Dependabot bump of the pinned SHA cannot silently change the
+contract — the bump has to pass the checks first, in the same PR that moves the SHA.
 
 ## Known limits
 

@@ -78,7 +78,8 @@ jobs:
             exit 1
           fi
           echo "pinned ref: $ref"
-          curl -fsSL "https://raw.githubusercontent.com/devcxl/agentic-action/$ref/pr-review/action.yml" -o /tmp/pr-review-action.yml
+          base="https://raw.githubusercontent.com/devcxl/agentic-action/$ref"
+          curl -fsSL "$base/pr-review/action.yml" -o /tmp/pr-review-action.yml
           for input in base_sha tools exclude_tools; do
             if ! grep -qE "^  ${input}:" /tmp/pr-review-action.yml; then
               echo "::error::固定的 action 不再声明 input '$input'，需重新核对 docs/agents/pr-review.md 的 Tool isolation 一节"
@@ -86,12 +87,31 @@ jobs:
             fi
           done
           # 默认工具集不得包含可执行工具，否则白名单失效时 Agent 将获得命令执行能力
-          default_tools="$(grep -A3 '^  tools:' /tmp/pr-review-action.yml | grep -E '^\s+default:' | head -1 | tr -d "'\" " | sed 's/^default://')"
-          echo "action default tools: ${default_tools:-<none>}"
+          default_tools="$(grep -A3 '^  tools:' /tmp/pr-review-action.yml | grep -E '^[[:space:]]+default:' | head -1 | tr -d "'\" " | sed 's/^default://')"
+          if [ -z "$default_tools" ]; then
+            echo "::error::无法解析 action 的默认工具集，契约校验失败"
+            exit 1
+          fi
+          echo "action default tools: $default_tools"
           if echo "$default_tools" | grep -qE '(^|,)(bash|powershell)(,|$)'; then
             echo "::error::action 默认工具集包含可执行工具，白名单失效时将开放命令执行"
             exit 1
           fi
+
+      - name: Verify pinned agentic-action still keeps the safety semantics we rely on
+        run: |
+          set -euo pipefail
+          ref="$(grep -oE 'devcxl/agentic-action/pr-review@[0-9a-f]{40}' .github/workflows/pr-review.yml | head -1 | cut -d@ -f2)"
+          curl -fsSL "https://raw.githubusercontent.com/devcxl/agentic-action/$ref/dist/review-pr.js" -o /tmp/review-pr.js
+          # 断言 Action 仍然（1）恒定关闭 MCP 与项目配置信任、（2）不把 INPUT_* 与
+          # GitHub token 透传给 Agent 子进程、（3）用 shell 判定控制 token 注入
+          for guard in '--no-mcp' '--no-approve' 'startsWith("INPUT_")' 'key === "GITHUB_TOKEN" || key === "GH_TOKEN") continue' 'isShellEnabledInPolicy'; do
+            if ! grep -qF -- "$guard" /tmp/review-pr.js; then
+              echo "::error::固定的 action 不再包含安全护栏 '$guard'，需重新核对 docs/agents/pr-review.md 的 Tool isolation 一节"
+              exit 1
+            fi
+          done
+          echo "safety semantics verified"
 
   ci:
     needs: [lint, test]
