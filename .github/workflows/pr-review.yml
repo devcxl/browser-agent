@@ -41,6 +41,10 @@ concurrency:
   group: pr-review-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
+# 工作流级默认权限：新增 job 默认只读，需要写的 job 必须显式声明
+permissions:
+  contents: read
+
 jobs:
   # 解析 base SHA：
   #   - pull_request 事件：直接取事件载荷里的 base.sha

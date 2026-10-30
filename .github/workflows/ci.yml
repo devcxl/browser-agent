@@ -79,7 +79,12 @@ jobs:
           fi
           echo "pinned ref: $ref"
           base="https://raw.githubusercontent.com/devcxl/agentic-action/$ref"
-          curl -fsSL "$base/pr-review/action.yml" -o /tmp/pr-review-action.yml
+          # 拉取失败是网络问题而不是契约漂移：告警跳过，不阻断所有 PR；
+          # 拉到内容后再做断言，漂移仍然硬失败
+          if ! curl -fsSL --retry 2 "$base/pr-review/action.yml" -o /tmp/pr-review-action.yml; then
+            echo "::warning::无法拉取上游 action.yml，本次跳过契约校验"
+            exit 0
+          fi
           for input in base_sha tools exclude_tools; do
             if ! grep -qE "^  ${input}:" /tmp/pr-review-action.yml; then
               echo "::error::固定的 action 不再声明 input '$input'，需重新核对 docs/agents/pr-review.md 的 Tool isolation 一节"
@@ -87,6 +92,10 @@ jobs:
             fi
           done
           # 取 tools 输入自己的 default 行（只在该输入块内取，避免抓到下一个输入的 default）
+          if ! grep -qE '^  tools:' /tmp/pr-review-action.yml; then
+            echo "::error::上游 action.yml 的结构已变（找不到 tools 输入），契约校验失败"
+            exit 1
+          fi
           default_tools="$(awk '/^  tools:/{inblock=1; next} inblock && /^    default:/{sub(/^    default:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print; exit} inblock && /^  [a-z_]+:/{exit}' /tmp/pr-review-action.yml || true)"
           if [ -z "$default_tools" ]; then
             echo "::error::无法解析 action 的默认工具集，契约校验失败"
@@ -117,12 +126,30 @@ jobs:
         run: |
           set -euo pipefail
           ref="$(grep -oE 'devcxl/agentic-action/pr-review@[0-9a-f]{40}' .github/workflows/pr-review.yml | head -1 | cut -d@ -f2)"
-          curl -fsSL "https://raw.githubusercontent.com/devcxl/agentic-action/$ref/packages/core/src/capability/policy.ts" -o /tmp/policy.ts
+          base="https://raw.githubusercontent.com/devcxl/agentic-action/$ref"
+          if ! curl -fsSL --retry 2 "$base/packages/core/src/capability/policy.ts" -o /tmp/policy.ts \
+            || ! curl -fsSL --retry 2 "$base/dist/review-pr.js" -o /tmp/review-pr.js \
+            || ! curl -fsSL --retry 2 "$base/packages/adapters/src/git.ts" -o /tmp/git.ts; then
+            echo "::warning::无法拉取上游源码，本次跳过安全语义校验"
+            exit 0
+          fi
           # 断言 Action 仍然（1）恒定关闭 MCP 与项目配置信任、（2）不把 INPUT_* 与
-          # GitHub token 透传给 Agent 子进程、（3）用 shell 判定控制 token 注入
+          # GitHub token 透传给 Agent 子进程、（3）用 shell 判定控制 token 注入。
+          # 源码与实际执行的 bundle 各断言一遍：源码是上游维护的文件，bundle 是真正跑的产物
           for guard in '"--no-mcp"' '"--no-approve"' 'startsWith("INPUT_")' 'key === "GITHUB_TOKEN" || key === "GH_TOKEN") continue' 'isShellEnabledInPolicy'; do
             if ! grep -qF -- "$guard" /tmp/policy.ts; then
-              echo "::error::固定的 action 不再包含安全护栏 '$guard'，需重新核对 docs/agents/pr-review.md 的 Tool isolation 一节"
+              echo "::error::固定的 action 源码不再包含安全护栏 '$guard'，需重新核对 docs/agents/pr-review.md 的 Tool isolation 一节"
+              exit 1
+            fi
+            if ! grep -qF -- "$guard" /tmp/review-pr.js; then
+              echo "::error::固定的 action 产物不再包含安全护栏 '$guard'，需重新核对 docs/agents/pr-review.md 的 Tool isolation 一节"
+              exit 1
+            fi
+          done
+          # base SHA 缺失时由 Action 自己带凭据 fetch 补拉：这条兜底路径也必须还在
+          for guard in 'rev-parse' '--no-tags' 'fetch'; do
+            if ! grep -qF -- "$guard" /tmp/git.ts; then
+              echo "::error::固定的 action 不再包含 base SHA 兜底 fetch 路径（'$guard'），需重新核对 docs/agents/pr-review.md 的 Base SHA resolution 一节"
               exit 1
             fi
           done

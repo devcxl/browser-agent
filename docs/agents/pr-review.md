@@ -157,14 +157,20 @@ guards against that, in two parts:
    contains an executable tool. The allowlist we pass is the actual boundary, so it is checked
    directly, not only upstream.
 3. **Safety semantics** — it fetches the pinned commit's
-   `packages/core/src/capability/policy.ts` and asserts the invariants this repo relies on are
-   still there: `--no-mcp`, `--no-approve`, the `INPUT_*` skip, the `GITHUB_TOKEN`/`GH_TOKEN`
-   skip, and the `isShellEnabledInPolicy` gate. The source file is asserted rather than the
-   built bundle: it is the file upstream maintains, so it is the stable thing to match on.
+   `packages/core/src/capability/policy.ts`, the built `dist/review-pr.js`, and
+   `packages/adapters/src/git.ts`, and asserts the invariants this repo relies on are still
+   there: `--no-mcp`, `--no-approve`, the `INPUT_*` skip, the `GITHUB_TOKEN`/`GH_TOKEN` skip,
+   the `isShellEnabledInPolicy` gate, and the authenticated `fetch` fallback that pulls a
+   missing base SHA. Source *and* bundle are asserted: the source is the file upstream
+   maintains, the bundle is what actually runs.
 
 Both run on every PR, so a Dependabot bump of the pinned SHA cannot silently change the
 contract — the bump has to pass the checks first, in the same PR that moves the SHA. The
 `action-contract` job is also wired into the `ci` summary job, so it cannot be skipped.
+
+If the upstream files cannot be fetched (network outage, rate limit), the job **warns and skips**
+rather than failing: it detects contract drift, it is not a network canary. A contract that is
+fetched but violates the assertions still fails hard.
 
 **What this guardrail is not.** It detects *upstream drift* in the pinned commit. It does not
 protect against a PR that swaps the pinned SHA for a hostile action — that action would simply
