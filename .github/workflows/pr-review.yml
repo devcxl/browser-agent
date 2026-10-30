@@ -117,7 +117,9 @@ jobs:
         uses: devcxl/agentic-action/pr-review@c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085 # v1.0.0
         with:
           provider: 'half-cabbage'
-          model: 'minimax-m3'
+          # deepseek-v4.1-flash：额度充足，替代曾长期 429（Token Plan 用尽）的 minimax-m3。
+          # 换模型只需改这一行；thinking 档位按该模型的推理能力单独评估。
+          model: 'deepseek-v4.1-flash'
           thinking: 'high'
           pr_number: ${{ github.event.pull_request.number || inputs.pr_number }}
           base_sha: ${{ needs.resolve-base.outputs.base_sha }}
