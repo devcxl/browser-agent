@@ -72,18 +72,19 @@ jobs:
           PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           set -euo pipefail
-          base_ref="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName --jq .baseRefName)"
-          sha="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefOid --jq .baseRefOid)"
+          read -r base_ref sha <<< "$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName,baseRefOid --jq '.baseRefName + " " + .baseRefOid')"
           if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]] || [[ -z "$base_ref" ]]; then
             echo "::error::failed to resolve base branch/baseRefOid for PR #$PR_NUMBER"
             exit 1
           fi
-          # base 分支可能在 checkout 之后前移，先把它拉进本地对象库
-          git fetch --quiet origin "+refs/heads/$base_ref:refs/remotes/origin/$base_ref"
+          # base 分支可能在 checkout 之后前移；对象缺失时 Action 会用自己的
+          # 带凭据 fetch 回退补拉，这里不重复 fetch（checkout 未落盘凭据）。
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Run Pi PR Review
-        uses: devcxl/agentic-action/pr-review@v1.0.0
+        # 固定到 v1.0.0 对应的 commit：工具白名单是本仓库的安全边界，不能被
+        # 上游移动 tag 悄悄改写；后续版本由 Dependabot 提升该 SHA。
+        uses: devcxl/agentic-action/pr-review@c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085
         with:
           provider: 'half-cabbage'
           model: 'minimax-m3'

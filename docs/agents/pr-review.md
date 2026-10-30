@@ -68,9 +68,11 @@ The action diffs against `git merge-base <base> <head>`, so it needs the base co
 
 - **`pull_request` events**: read straight from the event payload (`github.event.pull_request.base.sha`).
 - **`workflow_dispatch` events**: the payload has no `pull_request`, so a short `Resolve base SHA`
-  step runs `gh pr view <n> --json baseRefOid` and passes the result via the `base_sha` input.
-  The step validates the SHA (`^[0-9a-f]{40}$`), fails loudly if `gh` fails, and fetches the base
-  branch first so the object exists locally even when the base branch moved after checkout.
+  step runs `gh pr view <n> --json baseRefName,baseRefOid` and passes the SHA via the `base_sha`
+  input. The step validates the SHA (`^[0-9a-f]{40}$`) and fails loudly if `gh` fails. If the base
+  branch moved after checkout, the resolved commit may not be in the local object database — the
+  action fetches it with its own credentials in that case, so this workflow does not fetch again
+  (checkout runs with `persist-credentials: false`).
 
 `gh` needs `GH_TOKEN` (Actions does not export `secrets.GITHUB_TOKEN` into the environment by
 itself). Without it the action falls back to its own `gh pr view` call and fails with an
@@ -116,9 +118,9 @@ degrade silently rather than fail loudly — the table above is the local record
   Internal PRs (including Dependabot's) are unaffected.
 - **Vendored third-party code is excluded** (`src/content/floating-widget/grokbot/**`); review it
   with the `security-audit` action instead.
-- The action is referenced as `devcxl/agentic-action/pr-review@v1.0.0` — a **mutable tag, not a
-  commit SHA**. It runs an LLM pipeline with a write-scoped token in the job and now also carries
-  this repo's tool allowlist, so upstream could widen the tool surface by moving the tag.
-  Pinning `devcxl/agentic-action/pr-review@<sha>` is the stronger posture; it costs a manual bump
-  (Dependabot can do it). Its internal `setup-node`/`upload-artifact` versions are the action's own
+- The action is referenced as `devcxl/agentic-action/pr-review@<commit>`, pinned to the commit
+  behind the `v1.0.0` tag (`c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`). It runs an LLM pipeline
+  with a write-scoped token in the job and now also carries this repo's tool allowlist, so a moving
+  tag could widen that boundary — pinning removes the risk. Dependabot bumps the SHA when a newer
+  release appears. Its internal `setup-node`/`upload-artifact` versions are the action's own
   concern, not this repo's.
