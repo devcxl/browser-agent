@@ -83,7 +83,7 @@ jobs:
           # 网络故障 = 告警跳过。护栏是漂移检测器，不是网络探测器。
           # 注意：不能用 `if ! curl; then code=$?`，`!` 会把退出码取反成 0。
           code=0
-          curl -fsSL --retry 2 "$base/pr-review/action.yml" -o /tmp/pr-review-action.yml || code=$?
+          curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 "$base/pr-review/action.yml" -o /tmp/pr-review-action.yml || code=$?
           if [ "$code" -eq 22 ]; then
             echo "::error::上游 $ref 已不提供 pr-review/action.yml，契约校验失败"
             exit 1
@@ -103,7 +103,14 @@ jobs:
             echo "::error::上游 action.yml 的结构已变（找不到 tools 输入），契约校验失败"
             exit 1
           fi
-          default_tools="$(awk '/^[[:space:]]*tools:/{inblock=1; next} inblock && /^[[:space:]]+default:/{sub(/^[[:space:]]*default:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print; exit} inblock && /^  [a-z_]+:/{exit}' /tmp/pr-review-action.yml || true)"
+          # 取 tools 输入块内的 default 行：先按块切分（sed 区间），再在块内取唯一一行 default
+          block="$(sed -n '/^  tools:/,/^  [a-z_][a-z_]*:/p' /tmp/pr-review-action.yml)"
+          default_lines="$(printf '%s\n' "$block" | grep -cE '^[[:space:]]+default:' || true)"
+          if [ "$default_lines" != "1" ]; then
+            echo "::error::无法唯一定位 action 的 tools 默认值（找到 $default_lines 行），契约校验失败"
+            exit 1
+          fi
+          default_tools="$(printf '%s\n' "$block" | grep -E '^[[:space:]]+default:' | head -1 | sed -E 's/^[[:space:]]*default:[[:space:]]*//' | tr -d "'\"")"
           if [ -z "$default_tools" ]; then
             echo "::error::无法解析 action 的默认工具集，契约校验失败"
             exit 1
@@ -141,15 +148,20 @@ jobs:
           set -euo pipefail
           ref="$(grep -oE 'devcxl/agentic-action/pr-review@[0-9a-f]{40}' .github/workflows/pr-review.yml | head -1 | cut -d@ -f2)"
           base="https://raw.githubusercontent.com/devcxl/agentic-action/$ref"
-          code=0
-          curl -fsSL --retry 2 "$base/packages/core/src/capability/policy.ts" -o /tmp/policy.ts || code=$?
-          curl -fsSL --retry 2 "$base/dist/review-pr.js" -o /tmp/review-pr.js || code=$?
-          curl -fsSL --retry 2 "$base/packages/adapters/src/git.ts" -o /tmp/git.ts || code=$?
-          if [ "$code" -eq 22 ]; then
-            echo "::error::上游 $ref 的实现文件已缺失，契约校验失败"
-            exit 1
-          fi
-          if [ "$code" -ne 0 ]; then
+          # 每个文件单独捕获退出码：任何一个 HTTP 错误（22）都算契约破坏
+          code_policy=0
+          code_bundle=0
+          code_git=0
+          curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 "$base/packages/core/src/capability/policy.ts" -o /tmp/policy.ts || code_policy=$?
+          curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 "$base/dist/review-pr.js" -o /tmp/review-pr.js || code_bundle=$?
+          curl -fsSL --retry 2 --connect-timeout 10 --max-time 60 "$base/packages/adapters/src/git.ts" -o /tmp/git.ts || code_git=$?
+          for code in "$code_policy" "$code_bundle" "$code_git"; do
+            if [ "$code" -eq 22 ]; then
+              echo "::error::上游 $ref 的实现文件已缺失，契约校验失败"
+              exit 1
+            fi
+          done
+          if [ "$code_policy" -ne 0 ] || [ "$code_bundle" -ne 0 ] || [ "$code_git" -ne 0 ]; then
             echo "::warning::网络原因无法拉取上游源码，本次跳过安全语义校验"
             exit 0
           fi

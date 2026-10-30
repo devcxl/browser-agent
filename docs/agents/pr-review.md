@@ -164,6 +164,10 @@ guards against that, in two parts:
    missing base SHA. Source *and* bundle are asserted: the source is the file upstream
    maintains, the bundle is what actually runs.
 
+This is a **text-level** check: it proves those specific strings are still present, not that the
+upstream code behaves as it did. It is a drift tripwire, not a proof of behaviour — the human
+review of a bump is still the real check.
+
 Both run on every PR, so a Dependabot bump of the pinned SHA cannot silently change the
 contract — the bump has to pass the checks first, in the same PR that moves the SHA. The
 `action-contract` job is also wired into the `ci` summary job, so it cannot be skipped.
