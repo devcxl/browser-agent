@@ -60,8 +60,11 @@ const messageVersionAtLoadStart = messageVersionRef.current;
   当前靠“只保留 streaming/running 的气泡”规避。若补上助手消息的 id 对齐
   （`onStepFinish` 把预生成的 id 传给 UI），这条限制即可消除，判定也能简化为纯 id 去重。
 - 内存中最多保留「当前会话 + 运行中会话」两份消息，规模由单个会话的消息量决定。
-- `tsconfig.json` 排除 `src/entrypoints`，本改动不在 `tsc` 覆盖范围内（靠测试与 lint 保证）；
-  若把该目录纳入类型检查，会新增约 27 处非测试源码的类型错误，属独立任务。
+- `tsconfig.json` 排除 `src/entrypoints` 与 `src/content`，本改动不在 `tsc` 覆盖范围内（靠测试与 lint 保证）。
+  把这两条路径纳入类型检查会暴露 89 处非测试源码错误（`src/entrypoints` 25 处、
+  `src/content` 64 处，后者集中在 grokbot 的 PixiJS 几何运算）；其中 `src/entrypoints`
+  那批里已有真实缺陷（如 #252 引入的 `SettingsPanel` 未解构 `onSaveAgentSettings`、
+  未 import `exportFullSnapshot`），属独立任务。
 
 ## 后续行动
 

@@ -29,6 +29,19 @@ interface OwnedMessage {
   owner: string;
 }
 
+/**
+ * 消息是否可能「尚未落库」，因此需要在历史之外额外保留。
+ *
+ * - 用户消息：落库后 id 不变（UI 生成、Agent 复用），载入历史时按 id 就能去掉；
+ * - 助手/工具气泡：落库后 id 会变（Agent 侧另生成），只能靠状态判断还在输出。
+ *   工具气泡的 status 来自 ToolCallDisplay，取值比 UIMessage.status 更宽（含 'running'）。
+ */
+function isNotYetPersisted(msg: UIMessage): boolean {
+  if (msg.role === 'user') return true;
+  const status: string | undefined = msg.status;
+  return status === 'streaming' || status === 'running';
+}
+
 /** 消息与加载错误放在一起：载入结果的判定必须基于同一份最新状态 */
 interface MessageState {
   entries: OwnedMessage[];
@@ -150,9 +163,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           // - 用户消息：落库后 id 不变（UI 生成、Agent 复用），在历史里就能按 id 去掉
           // - 还在输出的助手/工具气泡：落库后 id 会变，只能靠状态判定“尚未落库”
           const live = prev.entries.filter(
-            (e) => e.owner === active
-              && !historyIds.has(e.msg.id)
-              && (e.msg.role === 'user' || e.msg.status === 'streaming' || e.msg.status === 'running'),
+            (e) => e.owner === active && !historyIds.has(e.msg.id) && isNotYetPersisted(e.msg),
           );
           const runningEntries = prev.entries.filter((e) => e.owner === running);
           return {
