@@ -22,15 +22,20 @@ interface ChatContextValue {
   conversationStatuses: Record<string, AgentStatus>;
 }
 
+/** 消息与加载错误放在一起：载入结果的判定必须基于同一份最新状态 */
+interface MessageState {
+  messages: UIMessage[];
+  error: string | null;
+}
+
 const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const conversations = useConversations();
   const agent = useAgent();
-  const [messages, setMessages] = useState<UIMessage[]>([]);
+  const [messageState, setMessageState] = useState<MessageState>({ messages: [], error: null });
   const [confirmRequest, setConfirmRequest] = useState<ConfirmRequest | null>(null);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [messagesError, setMessagesError] = useState<string | null>(null);
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
   const prevActiveIdRef = useRef<string | null>(null);
   const prevTokenResetIdRef = useRef<string | null>(null);
@@ -43,35 +48,32 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
    * 版本号并未变化，历史会直接盖掉乐观消息。
    */
   const messageOwnersRef = useRef(new Map<string, string>());
-  /** 最新值 ref：addMessage 回调不闭包过期的 activeId */
-  const activeIdRef = useRef<string | null>(null);
-  activeIdRef.current = conversations.activeId;
-  /** 最近一次渲染的消息快照：异步回调里读取当前消息用 */
-  const messagesRef = useRef<UIMessage[]>([]);
-  messagesRef.current = messages;
   const conversationStatuses: Record<string, AgentStatus> = agent.runningConversationId
     ? { [agent.runningConversationId]: agent.status }
     : {};
 
-  const addMessage = useCallback((msg: UIMessage, conversationId?: string) => {
-    const owner = conversationId ?? activeIdRef.current;
-    // 归属一旦登记就不再改写：流式更新会重复提交同一条消息，
-    // 若每次重写，owner 会随“当前查看的会话”漂移
-    if (owner && !messageOwnersRef.current.has(msg.id)) {
-      messageOwnersRef.current.set(msg.id, owner);
-    }
-    // 只展示当前会话的消息：Agent 在别的会话产出的消息不应串台
-    if (owner && owner !== activeIdRef.current) return;
-    setMessages((prev) => {
-      const idx = prev.findIndex((m) => m.id === msg.id);
-      if (idx >= 0) {
-        const next = [...prev];
-        next[idx] = msg;
-        return next;
+  const addMessage = useCallback(
+    (msg: UIMessage, conversationId?: string) => {
+      const owner = conversationId ?? conversations.activeId;
+      // 归属一旦登记就不再改写：流式更新会重复提交同一条消息，
+      // 若每次重写，owner 会随“当前查看的会话”漂移
+      if (owner && !messageOwnersRef.current.has(msg.id)) {
+        messageOwnersRef.current.set(msg.id, owner);
       }
-      return [...prev, msg];
-    });
-  }, []);
+      // 只展示当前会话的消息：Agent 在别的会话产出的消息不应串台
+      if (owner && owner !== conversations.activeId) return;
+      setMessageState((prev) => {
+        const idx = prev.messages.findIndex((m) => m.id === msg.id);
+        if (idx >= 0) {
+          const next = [...prev.messages];
+          next[idx] = msg;
+          return { ...prev, messages: next };
+        }
+        return { ...prev, messages: [...prev.messages, msg] };
+      });
+    },
+    [conversations.activeId],
+  );
 
   agent.setCallbacks({
     onMessage: (msg, conversationId) => {
@@ -104,6 +106,18 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [agent],
   );
 
+  // 认领未归属的消息：添加时没有活跃会话的消息，归入当前会话，
+  // 避免它在下一次切换时继续冒充本会话的消息、并顶掉新会话的历史
+  useEffect(() => {
+    const activeId = conversations.activeId;
+    if (!activeId) return;
+    for (const msg of messageState.messages) {
+      if (!messageOwnersRef.current.has(msg.id)) {
+        messageOwnersRef.current.set(msg.id, activeId);
+      }
+    }
+  }, [messageState.messages, conversations.activeId]);
+
   // 加载会话历史消息
   useEffect(() => {
     const activeId = conversations.activeId;
@@ -111,31 +125,21 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     prevActiveIdRef.current = activeId;
 
     if (!activeId) {
-      setMessages([]);
+      setMessageState({ messages: [], error: null });
       setMessagesLoading(false);
-      setMessagesError(null);
       return;
     }
 
     let cancelled = false;
     setMessagesLoading(true);
-    setMessagesError(null);
+    setMessageState((prev) => ({ ...prev, error: null }));
 
-    /**
-     * 把当前展示的消息分成「属于本会话的」与「其他会话的残留」。
-     * 未登记归属的消息（添加时没有活跃会话）归入正在载入的会话，
-     * 并当场认领归属，避免它在下一次切换时继续冒充本会话的消息。
-     */
+    /** 当前展示的消息里，属于本会话的那些（未登记归属的也算） */
     const partitionByOwner = (current: UIMessage[]) => {
       const kept: UIMessage[] = [];
       for (const msg of current) {
         const owner = messageOwnersRef.current.get(msg.id);
-        if (owner === undefined) {
-          messageOwnersRef.current.set(msg.id, activeId);
-          kept.push(msg);
-        } else if (owner === activeId) {
-          kept.push(msg);
-        }
+        if (owner === undefined || owner === activeId) kept.push(msg);
       }
       return kept;
     };
@@ -147,22 +151,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const history = conv ? storedMessagesToUIMessages(conv.messages) : [];
         // 历史消息归属于本会话，后续切走时才能正确丢弃
         for (const msg of history) messageOwnersRef.current.set(msg.id, activeId);
-        setMessages((currentMessages) => {
-          const kept = partitionByOwner(currentMessages);
+        setMessageState((prev) => {
+          const kept = partitionByOwner(prev.messages);
           // 已有本会话的消息（乐观消息还没落库）→ 保留，不被历史覆盖
-          if (kept.length > 0) return kept;
-          return history;
+          return kept.length > 0 ? { ...prev, messages: kept } : { ...prev, messages: history };
         });
       } catch (e) {
         if (cancelled) return;
-        const kept = partitionByOwner(messagesRef.current);
-        if (kept.length > 0) {
+        const errorMessage = (e as Error).message;
+        setMessageState((prev) => {
+          const kept = partitionByOwner(prev.messages);
           // 本会话已有新消息：保留它们，不让加载错误打断当前会话
-          setMessages(kept);
-        } else {
-          setMessagesError((e as Error).message);
-          setMessages([]);
-        }
+          return kept.length > 0 ? { ...prev, messages: kept } : { messages: [], error: errorMessage };
+        });
       } finally {
         if (!cancelled) setMessagesLoading(false);
       }
@@ -178,10 +179,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       value={{
         conversations,
         agent,
-        messages,
+        messages: messageState.messages,
         addMessage,
         messagesLoading,
-        messagesError,
+        messagesError: messageState.error,
         tokenUsage,
         confirmRequest,
         resolveConfirm,

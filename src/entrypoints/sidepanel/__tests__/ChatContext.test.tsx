@@ -402,7 +402,10 @@ describe('ChatContext message loading', () => {
       expect(screen.getByTestId('active-id').textContent).toBe('conv-A');
     });
     // conv-A's get is deferred, so messages should still be loading
-    expect(screen.getByTestId('messages-loading').textContent).toBe('true');
+    // （effect 在渲染提交后才跑，必须等它落地，不能同步断言）
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-loading').textContent).toBe('true');
+    });
 
     // Rapidly switch to conv-B before conv-A finishes loading
     await user.click(screen.getByTestId('select-conv-b'));
