@@ -72,17 +72,22 @@ jobs:
       - name: Verify pinned agentic-action still declares the inputs we rely on
         run: |
           set -euo pipefail
-          ref="$(grep -oE 'devcxl/agentic-action/pr-review@[0-9a-f]{40}' .github/workflows/pr-review.yml | head -1 | cut -d@ -f2)"
+          ref="$(grep -oE 'devcxl/agentic-action/pr-review@[0-9a-f]{40}' .github/workflows/pr-review.yml | head -1 | cut -d@ -f2 || true)"
           if [ -z "$ref" ]; then
             echo "::error::未找到固定到 commit SHA 的 agentic-action 引用"
             exit 1
           fi
           echo "pinned ref: $ref"
           base="https://raw.githubusercontent.com/devcxl/agentic-action/$ref"
-          # 拉取失败是网络问题而不是契约漂移：告警跳过，不阻断所有 PR；
-          # 拉到内容后再做断言，漂移仍然硬失败
+          # 拉取失败分两类：HTTP 错误（含 404，上游删了文件）= 契约破坏，硬失败；
+          # 网络故障 = 告警跳过。护栏是漂移检测器，不是网络探测器。
           if ! curl -fsSL --retry 2 "$base/pr-review/action.yml" -o /tmp/pr-review-action.yml; then
-            echo "::warning::无法拉取上游 action.yml，本次跳过契约校验"
+            code=$?
+            if [ "$code" -eq 22 ]; then
+              echo "::error::上游 $ref 已不提供 pr-review/action.yml，契约校验失败"
+              exit 1
+            fi
+            echo "::warning::网络原因无法拉取上游 action.yml，本次跳过契约校验"
             exit 0
           fi
           for input in base_sha tools exclude_tools; do
@@ -96,13 +101,14 @@ jobs:
             echo "::error::上游 action.yml 的结构已变（找不到 tools 输入），契约校验失败"
             exit 1
           fi
-          default_tools="$(awk '/^  tools:/{inblock=1; next} inblock && /^    default:/{sub(/^    default:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print; exit} inblock && /^  [a-z_]+:/{exit}' /tmp/pr-review-action.yml || true)"
+          default_tools="$(awk '/^[[:space:]]*tools:/{inblock=1; next} inblock && /^[[:space:]]+default:/{sub(/^[[:space:]]*default:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print; exit} inblock && /^  [a-z_]+:/{exit}' /tmp/pr-review-action.yml || true)"
           if [ -z "$default_tools" ]; then
             echo "::error::无法解析 action 的默认工具集，契约校验失败"
             exit 1
           fi
           echo "action default tools: $default_tools"
-          if echo "$default_tools" | grep -qE '(^|,)(bash|powershell)(,|$)'; then
+          # 去空白后再匹配，避免 "read, bash" 这类带空白的绕过
+          if echo "$default_tools" | tr -d '[:space:]' | grep -qE '(^|,)(bash|powershell)(,|$)'; then
             echo "::error::action 默认工具集包含可执行工具，白名单失效时将开放命令执行"
             exit 1
           fi
@@ -110,14 +116,20 @@ jobs:
       - name: Verify our own tool allowlist stays read-only
         run: |
           set -euo pipefail
-          # 本仓库实际生效的白名单才是安全边界：它不能包含可执行工具
-          our_tools="$(awk '/^          tools:/{gsub(/["'\'']/, ""); sub(/^          tools:[[:space:]]*/, ""); print; exit}' .github/workflows/pr-review.yml || true)"
+          # 本仓库实际生效的白名单才是安全边界：它不能包含可执行工具。
+          # 只认 with 块里的 tools:（exclude_tools 是另一个键），并要求唯一匹配。
+          matches="$(grep -cE '^[[:space:]]+tools:[[:space:]]*' .github/workflows/pr-review.yml || true)"
+          if [ "$matches" != "1" ]; then
+            echo "::error::期望恰好一处 tools: 白名单声明，实际 $matches 处"
+            exit 1
+          fi
+          our_tools="$(grep -E '^[[:space:]]+tools:[[:space:]]*' .github/workflows/pr-review.yml | head -1 | sed -E 's/^[[:space:]]*tools:[[:space:]]*//' | tr -d "'\"")"
           if [ -z "$our_tools" ]; then
             echo "::error::无法解析 pr-review.yml 中传入的 tools 白名单"
             exit 1
           fi
           echo "workflow tools allowlist: $our_tools"
-          if echo "$our_tools" | grep -qE '(^|,)(bash|powershell|sh|shell)(,|$)'; then
+          if echo "$our_tools" | tr -d '[:space:]' | grep -qE '(^|,)(bash|powershell|sh|shell|exec)(,|$)'; then
             echo "::error::传入的 tools 白名单包含可执行工具，审查 Agent 将获得命令执行能力"
             exit 1
           fi
