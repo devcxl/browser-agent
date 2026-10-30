@@ -81,12 +81,14 @@ jobs:
           base="https://raw.githubusercontent.com/devcxl/agentic-action/$ref"
           # 拉取失败分两类：HTTP 错误（含 404，上游删了文件）= 契约破坏，硬失败；
           # 网络故障 = 告警跳过。护栏是漂移检测器，不是网络探测器。
-          if ! curl -fsSL --retry 2 "$base/pr-review/action.yml" -o /tmp/pr-review-action.yml; then
-            code=$?
-            if [ "$code" -eq 22 ]; then
-              echo "::error::上游 $ref 已不提供 pr-review/action.yml，契约校验失败"
-              exit 1
-            fi
+          # 注意：不能用 `if ! curl; then code=$?`，`!` 会把退出码取反成 0。
+          code=0
+          curl -fsSL --retry 2 "$base/pr-review/action.yml" -o /tmp/pr-review-action.yml || code=$?
+          if [ "$code" -eq 22 ]; then
+            echo "::error::上游 $ref 已不提供 pr-review/action.yml，契约校验失败"
+            exit 1
+          fi
+          if [ "$code" -ne 0 ]; then
             echo "::warning::网络原因无法拉取上游 action.yml，本次跳过契约校验"
             exit 0
           fi
@@ -139,10 +141,16 @@ jobs:
           set -euo pipefail
           ref="$(grep -oE 'devcxl/agentic-action/pr-review@[0-9a-f]{40}' .github/workflows/pr-review.yml | head -1 | cut -d@ -f2)"
           base="https://raw.githubusercontent.com/devcxl/agentic-action/$ref"
-          if ! curl -fsSL --retry 2 "$base/packages/core/src/capability/policy.ts" -o /tmp/policy.ts \
-            || ! curl -fsSL --retry 2 "$base/dist/review-pr.js" -o /tmp/review-pr.js \
-            || ! curl -fsSL --retry 2 "$base/packages/adapters/src/git.ts" -o /tmp/git.ts; then
-            echo "::warning::无法拉取上游源码，本次跳过安全语义校验"
+          code=0
+          curl -fsSL --retry 2 "$base/packages/core/src/capability/policy.ts" -o /tmp/policy.ts || code=$?
+          curl -fsSL --retry 2 "$base/dist/review-pr.js" -o /tmp/review-pr.js || code=$?
+          curl -fsSL --retry 2 "$base/packages/adapters/src/git.ts" -o /tmp/git.ts || code=$?
+          if [ "$code" -eq 22 ]; then
+            echo "::error::上游 $ref 的实现文件已缺失，契约校验失败"
+            exit 1
+          fi
+          if [ "$code" -ne 0 ]; then
+            echo "::warning::网络原因无法拉取上游源码，本次跳过安全语义校验"
             exit 0
           fi
           # 断言 Action 仍然（1）恒定关闭 MCP 与项目配置信任、（2）不把 INPUT_* 与
