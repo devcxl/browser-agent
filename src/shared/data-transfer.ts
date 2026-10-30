@@ -87,7 +87,9 @@ async function restoreLocalSecrets(settings: Record<string, unknown>): Promise<v
   const store = ConfigStore.getInstance();
   const providers = settings.providers as ProviderConfig[] | undefined;
   if (Array.isArray(providers)) {
-    const localById = new Map((await store.get('providers')).map((p) => [p.id, p]));
+    // ConfigStore.get 的返回类型由调用方指定（key 不携带类型信息），这里必须显式给泛型
+    const localProviders = await store.get<ProviderConfig[]>('providers');
+    const localById = new Map(localProviders.map((p) => [p.id, p]));
     settings.providers = providers.map((provider) => {
       const local = localById.get(provider.id);
       if (!local) return provider;
@@ -100,7 +102,8 @@ async function restoreLocalSecrets(settings: Record<string, unknown>): Promise<v
   }
   const jevSettings = settings.jevSettings as JevSettings | undefined;
   if (jevSettings && !jevSettings.apiKey) {
-    settings.jevSettings = { ...jevSettings, apiKey: (await store.get('jevSettings')).apiKey };
+    const localJevSettings = await store.get<JevSettings>('jevSettings');
+    settings.jevSettings = { ...jevSettings, apiKey: localJevSettings.apiKey };
   }
 }
 
