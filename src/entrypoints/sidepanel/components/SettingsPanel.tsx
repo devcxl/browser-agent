@@ -12,6 +12,8 @@ import { cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
 import { EXPERT_API_DOMAINS } from '@/shared/types';
 import { DEFAULT_ACCENT_COLOR, normalizeAccentColor } from '@/shared/accent-palette';
+import { exportFullSnapshot, importFullSnapshot } from '@/shared/data-transfer';
+import type { ImportResult } from '@/shared/data-transfer';
 import { applyTheme } from '../theme';
 import { ProviderWizard } from './ProviderWizard';
 import {
@@ -89,6 +91,7 @@ export function SettingsPanel({
   agentSettings,
   expertMode,
   onSaveProviders,
+  onSaveAgentSettings,
   onSaveExpertMode,
   onTestConnection,
   onClose,
@@ -100,7 +103,7 @@ export function SettingsPanel({
   const [systemPromptSaveStatus, setSystemPromptSaveStatus] = useState<'saved' | null>(null);
   // 数据 tab：导入状态
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
   const [jevSettings, setJevSettings] = useState<JevSettings>({ enabled: false, apiKey: '' });
