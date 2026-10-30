@@ -64,6 +64,35 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  action-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify pinned agentic-action still declares the inputs we rely on
+        run: |
+          set -euo pipefail
+          ref="$(grep -oE 'devcxl/agentic-action/pr-review@[0-9a-f]{40}' .github/workflows/pr-review.yml | head -1 | cut -d@ -f2)"
+          if [ -z "$ref" ]; then
+            echo "::error::未找到固定到 commit SHA 的 agentic-action 引用"
+            exit 1
+          fi
+          echo "pinned ref: $ref"
+          curl -fsSL "https://raw.githubusercontent.com/devcxl/agentic-action/$ref/pr-review/action.yml" -o /tmp/pr-review-action.yml
+          for input in base_sha tools exclude_tools; do
+            if ! grep -qE "^  ${input}:" /tmp/pr-review-action.yml; then
+              echo "::error::固定的 action 不再声明 input '$input'，需重新核对 docs/agents/pr-review.md 的 Tool isolation 一节"
+              exit 1
+            fi
+          done
+          # 默认工具集不得包含可执行工具，否则白名单失效时 Agent 将获得命令执行能力
+          default_tools="$(grep -A3 '^  tools:' /tmp/pr-review-action.yml | grep -E '^\s+default:' | head -1 | tr -d "'\" " | sed 's/^default://')"
+          echo "action default tools: ${default_tools:-<none>}"
+          if echo "$default_tools" | grep -qE '(^|,)(bash|powershell)(,|$)'; then
+            echo "::error::action 默认工具集包含可执行工具，白名单失效时将开放命令执行"
+            exit 1
+          fi
+
   ci:
     needs: [lint, test]
     if: ${{ always() && !cancelled() }}

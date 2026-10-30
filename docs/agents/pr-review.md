@@ -111,18 +111,30 @@ action's own shell check also fails closed. If you widen `tools`, re-check both.
 The agent's tool surface is not only the allowlist:
 
 - The action registers one extension tool of its own (`submit_review`, the structured findings
-  contract) — that is the only tool outside the allowlist.
+  contract) — that is the only tool outside the allowlist, and it is registered through a
+  separate `-e` flag, so the allowlist does not remove it.
 - MCP servers are off: the action always passes `--no-mcp` unless explicitly enabled, so MCP
   tools are not a way around the allowlist.
 - Project-local configuration is ignored: the action passes `--no-approve` and
   `defaultProjectTrust: never`, so a PR cannot smuggle in its own agent config or extensions.
+
+### What the agent process can actually see
+
+The agent's environment is **built from scratch**, not inherited: the action starts from a fixed
+base set plus an allowlist, skips every `INPUT_*` variable, and only injects `GH_TOKEN` when a
+shell tool is enabled. So neither `INPUT_GITHUB_TOKEN` (the write-scoped token GitHub exposes to
+the step) nor `INPUT_API_KEY` reaches the agent. The provider key (`HALF_CABBAGE_API_KEY`) *is*
+deliberately present — the agent needs it to call the model.
+
+**Treat `tools` as frozen.** Widening it to include a shell would hand the agent, in one step: the
+write-scoped `GITHUB_TOKEN`, the provider API key, and command execution over untrusted PR content.
+Any change to `tools` needs a security review, not just a CI run.
 
 ## Action inputs used
 
 Verified against the pinned commit `c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`
 (`pr-review/action.yml`, `packages/core/src/capability/policy.ts`,
 `packages/adapters/src/git.ts`):
-
 | Input | Value here | Effect |
 | --- | --- | --- |
 | `base_sha` | resolved above | Left end of the diff; the action still computes the merge-base itself |
@@ -134,7 +146,12 @@ Verified against the pinned commit `c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`
 | `fail_on` | `none` (default) | Severity at which the gate fails the job |
 
 Inputs the action does not declare are ignored by GitHub with a warning, so a typo here would
-degrade silently rather than fail loudly — the table above is the local record of what was checked.
+degrade silently rather than fail loudly. The `action-contract` job in `.github/workflows/ci.yml`
+guards against that: it extracts the pinned commit from `pr-review.yml`, fetches that commit's
+`pr-review/action.yml`, and fails if `base_sha` / `tools` / `exclude_tools` are no longer declared
+or if the action's default tool set ever grows a shell tool. It runs on every PR, so a Dependabot
+bump of the pinned SHA cannot silently change the contract — the bump has to pass the check
+first, and the contract re-check happens in the same PR that moves the SHA.
 
 ## Known limits
 
@@ -144,10 +161,11 @@ degrade silently rather than fail loudly — the table above is the local record
   with the `security-audit` action instead.
 - The action is referenced as `devcxl/agentic-action/pr-review@<commit>`, pinned to the commit
   behind the `v1.0.0` tag (`c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`, with the version kept in a
-  trailing comment so Dependabot can bump it). It runs an LLM pipeline with a write-scoped token
-  in the job and now also carries this repo's tool allowlist, so a moving tag could widen that
-  boundary — pinning removes the risk. Its internal `setup-node`/`upload-artifact` versions are
-  the action's own concern, not this repo's.
+  trailing comment so Dependabot can bump it). Pinning removes the risk of a **moved tag**, but not
+  the risk of an **input-contract change** in a newer version: Dependabot bumps the SHA
+  automatically, and the guardrail is the `action-contract` CI job described above — it fails the
+  bump if the inputs or the default tool set changed shape. Its internal
+  `setup-node`/`upload-artifact` versions are the action's own concern, not this repo's.
 - **Only this third-party action is SHA-pinned.** `actions/checkout@v7` still uses a movable tag,
   matching the rest of this repo's workflows; first-party GitHub actions are a different trust
   domain from a third-party action that runs an LLM with a write token.
