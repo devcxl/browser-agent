@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -40,7 +40,7 @@ vi.mock('@/conversation', () => ({
 
 const mockAgent = vi.hoisted(() => {
   const callbacks: {
-    onMessage?: (msg: unknown) => void;
+    onMessage?: (msg: unknown, conversationId: string) => void;
     onConfirm?: (req: unknown) => void;
     onTokenUsage?: (usage: { prompt: number; completion: number }) => void;
     onConversationTitle?: (conversationId: string, title: string) => void;
@@ -424,6 +424,73 @@ describe('ChatContext message loading', () => {
     // Messages must NOT have been overwritten by conv-A's stale data
     expect(screen.getByTestId('messages-count').textContent).toBe('1');
     expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
+  });
+
+  it('切换会话后，Agent 在原会话产出的消息不会串到新会话', async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+
+    mockConversationManager.list.mockResolvedValue([
+      { id: 'conv-A', title: 'Conv A', titleGenerated: true, updatedAt: now + 200, createdAt: now, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-B', title: 'Conv B', titleGenerated: true, updatedAt: now + 100, createdAt: now - 100, messages: [], sensitiveDataGranted: false },
+    ]);
+    mockConversationManager.get.mockImplementation((id: string) => {
+      if (id === 'conv-A') return new Promise(() => {});
+      return Promise.resolve({
+        id: 'conv-B', title: 'Conv B', titleGenerated: true, createdAt: now, updatedAt: now,
+        messages: [], sensitiveDataGranted: false,
+      });
+    });
+    mockConfigStore.get.mockResolvedValue(undefined);
+
+    function CrossTalkInspector() {
+      const chat = useChat();
+      return (
+        <div>
+          <div data-testid="messages-content">{chat.messages.map((m) => m.content).join('|')}</div>
+          <div data-testid="active-id">{chat.conversations.activeId ?? '(none)'}</div>
+          <button type="button" data-testid="select-conv-b" onClick={() => chat.conversations.select('conv-B')}>
+            Select B
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <CrossTalkInspector />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('active-id').textContent).toBe('conv-A');
+    });
+
+    // Agent 在 conv-A 产出一条消息（此时界面也在 conv-A）
+    act(() => {
+      mockAgent.callbacks.onMessage?.(
+        { id: 'a-msg', role: 'user', content: 'from conv-A', timestamp: Date.now() },
+        'conv-A',
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('from conv-A');
+    });
+
+    // 切到 conv-B 后，Agent 仍在 conv-A 产出的消息不得出现在 conv-B
+    await user.click(screen.getByTestId('select-conv-b'));
+    await waitFor(() => {
+      expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
+    });
+    act(() => {
+      mockAgent.callbacks.onMessage?.(
+        { id: 'a-msg-2', role: 'assistant', content: 'still conv-A', timestamp: Date.now() },
+        'conv-A',
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('');
+    });
   });
 
   it('切换会话时丢弃上一个会话的残留消息', async () => {

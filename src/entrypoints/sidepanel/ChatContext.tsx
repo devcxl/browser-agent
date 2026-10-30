@@ -55,7 +55,13 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const addMessage = useCallback((msg: UIMessage, conversationId?: string) => {
     const owner = conversationId ?? activeIdRef.current;
-    if (owner) messageOwnersRef.current.set(msg.id, owner);
+    // 归属一旦登记就不再改写：流式更新会重复提交同一条消息，
+    // 若每次重写，owner 会随“当前查看的会话”漂移
+    if (owner && !messageOwnersRef.current.has(msg.id)) {
+      messageOwnersRef.current.set(msg.id, owner);
+    }
+    // 只展示当前会话的消息：Agent 在别的会话产出的消息不应串台
+    if (owner && owner !== activeIdRef.current) return;
     setMessages((prev) => {
       const idx = prev.findIndex((m) => m.id === msg.id);
       if (idx >= 0) {
@@ -68,7 +74,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   agent.setCallbacks({
-    onMessage: addMessage,
+    onMessage: (msg, conversationId) => {
+      // 归属用 Agent 运行所在的会话，而不是用户当前查看的会话
+      addMessage(msg, conversationId);
+    },
     onConfirm: (req) => {
       setConfirmRequest(req);
     },
@@ -114,13 +123,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
     /**
      * 把当前展示的消息分成「属于本会话的」与「其他会话的残留」。
-     * 未登记归属的消息（添加时没有活跃会话）视为属于本会话。
+     * 未登记归属的消息（添加时没有活跃会话）归入正在载入的会话，
+     * 并当场认领归属，避免它在下一次切换时继续冒充本会话的消息。
      */
     const partitionByOwner = (current: UIMessage[]) => {
       const kept: UIMessage[] = [];
       for (const msg of current) {
         const owner = messageOwnersRef.current.get(msg.id);
-        if (owner === undefined || owner === activeId) kept.push(msg);
+        if (owner === undefined) {
+          messageOwnersRef.current.set(msg.id, activeId);
+          kept.push(msg);
+        } else if (owner === activeId) {
+          kept.push(msg);
+        }
       }
       return kept;
     };
