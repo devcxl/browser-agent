@@ -67,12 +67,20 @@ jobs:
       - name: Resolve base SHA
         id: base
         if: github.event_name == 'workflow_dispatch'
+        # 不在 PR 工作区里跑：避免带 token 的步骤与被审代码同处一个目录
+        working-directory: ${{ runner.temp }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
         run: |
           set -euo pipefail
-          read -r base_ref sha <<< "$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName,baseRefOid --jq '.baseRefName + " " + .baseRefOid')"
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::pr_number must be a positive integer, got '$PR_NUMBER'"
+            exit 1
+          fi
+          # 独立赋值：gh 失败时 set -e 直接中止，保留 gh 自身的报错
+          info="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName,baseRefOid --jq '.baseRefName + " " + .baseRefOid')"
+          read -r base_ref sha <<< "$info"
           if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]] || [[ -z "$base_ref" ]]; then
             echo "::error::failed to resolve base branch/baseRefOid for PR #$PR_NUMBER"
             exit 1
@@ -84,6 +92,7 @@ jobs:
       - name: Run Pi PR Review
         # 固定到 v1.0.0 对应的 commit：工具白名单是本仓库的安全边界，不能被
         # 上游移动 tag 悄悄改写；后续版本由 Dependabot 提升该 SHA。
+        # v1.0.0
         uses: devcxl/agentic-action/pr-review@c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085
         with:
           provider: 'half-cabbage'

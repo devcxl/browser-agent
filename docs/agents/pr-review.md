@@ -70,9 +70,11 @@ The action diffs against `git merge-base <base> <head>`, so it needs the base co
 - **`workflow_dispatch` events**: the payload has no `pull_request`, so a short `Resolve base SHA`
   step runs `gh pr view <n> --json baseRefName,baseRefOid` and passes the SHA via the `base_sha`
   input. The step validates the SHA (`^[0-9a-f]{40}$`) and fails loudly if `gh` fails. If the base
-  branch moved after checkout, the resolved commit may not be in the local object database — the
-  action fetches it with its own credentials in that case, so this workflow does not fetch again
-  (checkout runs with `persist-credentials: false`).
+  branch moved after checkout, the resolved commit may not be in the local object database. The
+  action covers that case itself: `packages/adapters/src/git.ts` (`resolveBaseSha`) verifies the
+  object with `git rev-parse --verify` and, if missing, fetches it using its own credentials
+  (`git fetch --no-tags origin <sha>`). This workflow therefore does not fetch again — checkout
+  runs with `persist-credentials: false`, so a local fetch would have no credentials to use.
 
 `gh` needs `GH_TOKEN` (Actions does not export `secrets.GITHUB_TOKEN` into the environment by
 itself). Without it the action falls back to its own `gh pr view` call and fails with an
@@ -82,9 +84,12 @@ infrastructure error (exit code `30`) that is easy to misdiagnose.
 
 `GITHUB_TOKEN` lives for the **whole job**, not per step — a separate step does not isolate it.
 What the separate step does achieve is keeping the token out of the `env` of the review step,
-which can run for up to 90 minutes. The review step still receives the same token through the
-action's `github_token` input, because publishing the review comment needs `pull-requests: write`.
-If that exposure matters, the lever is the workflow's `permissions` block, not the step split.
+which can run for up to 90 minutes, and out of the PR working directory (the step runs in
+`runner.temp`). The review step still receives the same token through the action's `github_token`
+input — GitHub exposes `with:` inputs to the step as `INPUT_*` environment variables, and the
+action reads `INPUT_GITHUB_TOKEN` — because publishing the review comment needs
+`pull-requests: write`. If that exposure matters, the lever is the workflow's `permissions`
+block, not the step split.
 
 ## Tool isolation
 
@@ -94,6 +99,15 @@ with no `bash`/`powershell` in it the agent cannot execute commands, and the act
 `CapabilityPolicy` only injects `GH_TOKEN` into the agent's child process when a shell tool is
 enabled. `exclude_tools: 'bash,powershell'` is explicit redundancy; because it denies both, the
 action's own shell check also fails closed. If you widen `tools`, re-check both.
+
+The agent's tool surface is not only the allowlist:
+
+- The action registers one extension tool of its own (`submit_review`, the structured findings
+  contract) — that is the only tool outside the allowlist.
+- MCP servers are off: the action always passes `--no-mcp` unless explicitly enabled, so MCP
+  tools are not a way around the allowlist.
+- Project-local configuration is ignored: the action passes `--no-approve` and
+  `defaultProjectTrust: never`, so a PR cannot smuggle in its own agent config or extensions.
 
 ## Action inputs used
 
