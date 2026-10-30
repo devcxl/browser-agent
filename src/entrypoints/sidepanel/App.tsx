@@ -17,6 +17,7 @@ import { applyTheme } from './theme';
 import type { AgentSettings, ExpertModeSettings } from './types';
 import type { ProviderConfig, ReasoningEffort } from '@/shared/types';
 import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
+import type { UserPreferences } from '@/shared/types/storage';
 import { WIDGET_MESSAGE_SOURCE, type CloseRequestMessage } from '@/shared/widget-protocol';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { riseIn, staggerContainer } from './motion';
@@ -121,14 +122,14 @@ function ChatLayout() {
       setSelectedProviderId(firstComplete?.id ?? '');
       setSelectedModelId(firstModelId);
       setReasoningEffort(firstComplete?.models?.[firstModelId]?.defaultReasoningEffort);
-      const saved = await store.get('agentSettings');
+      const saved = await store.get<AgentSettings>('agentSettings');
       setAgentSettings({
         maxToolRounds: saved.maxToolRounds,
         contextWindowTokens: saved.contextWindowTokens ?? 128000,
         systemPrompt: saved.systemPrompt || DEFAULT_SYSTEM_PROMPT,
       });
-      setExpertMode(await store.get('expertModeSettings'));
-      const prefs = await store.get('preferences');
+      setExpertMode(await store.get<ExpertModeSettings>('expertModeSettings'));
+      const prefs = await store.get<UserPreferences>('preferences');
       applyTheme(prefs.theme ?? 'system', prefs.accentColor);
     })();
   }, [replaceProviders]);

@@ -364,7 +364,8 @@ describe('useAgent', () => {
           toolName: 'tabs_close',
           params: { tabId: 1 },
           affectedObjects: [{ type: 'tab', id: '1', title: 'Test', url: 'https://test.com', reason: '关闭标签页' }],
-          warnings: '关闭标签页可能导致未保存数据丢失',
+          reason: '关闭标签页可能导致未保存数据丢失',
+          riskLevel: 'high',
         });
         if (decision === 'deny') {
           return { finalMessage: '用户取消', toolCalls: [] };
@@ -418,7 +419,8 @@ describe('useAgent', () => {
           toolName: 'tabs_close',
           params: { tabId: 1 },
           affectedObjects: [],
-          warnings: '',
+          reason: '',
+          riskLevel: 'high',
         });
         if (decision === 'deny') {
           return { finalMessage: '用户取消', toolCalls: [] };

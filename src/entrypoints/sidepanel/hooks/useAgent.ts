@@ -1,5 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
-import type { AgentStatus, UIMessage, ToolCallDisplay, ConfirmRequest, TokenUsage } from '../types';
+import type {
+  AgentSettings,
+  AgentStatus,
+  UIMessage,
+  ToolCallDisplay,
+  ConfirmRequest,
+  TokenUsage,
+} from '../types';
 import type {
   ExpertModeSettings,
   JevSettings,
@@ -129,6 +136,24 @@ function recordToDisplay(record: ToolCallRecord): ToolCallDisplay {
   };
 }
 
+/**
+ * 构造工具气泡。
+ *
+ * 工具的执行状态属于 `toolCallDisplay.status`（取值含 running/success/error/unknown），
+ * 而 `UIMessage.status` 只描述文本气泡的生命周期（streaming/complete/error）。
+ * 两者混用会让类型靠不住，也会让气泡渲染拿错字段。
+ */
+function createToolMessage(record: ToolCallRecord, display: ToolCallDisplay): UIMessage {
+  return {
+    id: uid(),
+    role: 'tool',
+    content: record.toolName,
+    toolCallDisplay: display,
+    timestamp: Date.now(),
+    status: 'complete',
+  };
+}
+
 export function useAgent() {
   const [status, setStatus] = useState<AgentStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -177,7 +202,7 @@ export function useAgent() {
         setStatus('streaming');
 
         const { ToolLoopAdapter, registry, guardrail, convManager, LlmClient } = await getDeps();
-        const savedAgentSettings = await ConfigStore.getInstance().get('agentSettings');
+        const savedAgentSettings = await ConfigStore.getInstance().get<AgentSettings>('agentSettings');
         const savedJevSettings = await ConfigStore.getInstance().get<JevSettings>('jevSettings');
         const savedExpertModeSettings = await ConfigStore.getInstance().get<ExpertModeSettings>('expertModeSettings');
         const agentConfig: AgentConfig = {
@@ -222,7 +247,9 @@ export function useAgent() {
                 toolName: request.toolName,
                 params: request.params,
                 affectedObjects: request.affectedObjects ?? [],
-                warnings: request.warnings ? [request.warnings] : [],
+                // 护栏只给出单个拒因（reason），UI 侧是列表：包装成一项；
+                // 没有拒因时留空数组，不伪造提示
+                warnings: request.reason ? [request.reason] : [],
               });
             });
           },
@@ -276,15 +303,10 @@ export function useAgent() {
                 cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined }, conversationId);
               }
               const display = recordToDisplay(record);
-              displayedToolCallIds.add(record.toolCallId);
-              cbRef.current.onMessage?.({
-                id: uid(),
-                role: 'tool',
-                content: record.toolName,
-                toolCallDisplay: display,
-                timestamp: Date.now(),
-                status: display.status,
-              }, conversationId);
+              // toolCallId 可选：缺 id 时不登记（否则多条无 id 的调用会互相顶掉，
+              // 后置的兼容循环把它们全判为“已展示”而漏掉）
+              if (record.toolCallId) displayedToolCallIds.add(record.toolCallId);
+              cbRef.current.onMessage?.(createToolMessage(record, display), conversationId);
               // 重置 assistant 消息准备接收下一轮文本
               assistantMsg.id = uid();
               assistantMsg.content = '';
@@ -298,16 +320,9 @@ export function useAgent() {
 
         // 正常路径会在 onStepFinish 中实时展示；兼容不触发回调的 runtime/test adapter。
         for (const record of output.toolCalls) {
-          if (displayedToolCallIds.has(record.toolCallId)) continue;
+          if (record.toolCallId && displayedToolCallIds.has(record.toolCallId)) continue;
           const display = recordToDisplay(record);
-          cbRef.current.onMessage?.({
-            id: uid(),
-            role: 'tool',
-            content: record.toolName,
-            toolCallDisplay: display,
-            timestamp: Date.now(),
-            status: display.status,
-          }, conversationId);
+          cbRef.current.onMessage?.(createToolMessage(record, display), conversationId);
         }
 
         // 仅终结最后的文本气泡
