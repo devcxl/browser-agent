@@ -62,11 +62,140 @@ gh secret set HALF_CABBAGE_API_KEY --repo devcxl/browser-agent
 gh secret set TYPESAFE_API_KEY --repo devcxl/browser-agent
 ```
 
+## Base SHA resolution
+
+The action diffs against `git merge-base <base> <head>`, so it needs the base commit SHA:
+
+- **`pull_request` events**: read straight from the event payload (`github.event.pull_request.base.sha`).
+- **`workflow_dispatch` events**: the payload has no `pull_request`, so the `resolve-base` job runs
+  `gh pr view <n> --json baseRefName,baseRefOid` and passes the SHA to the review job via
+  `base_sha`. The step validates the SHA (`^[0-9a-f]{40}$`) and fails loudly if `gh` fails. That
+  job runs in `runner.temp` with **read-only** permissions; the write-scoped token only exists in
+  the `review` job, which needs it to publish the comment.
+
+`gh` needs `GH_TOKEN` (Actions does not export `secrets.GITHUB_TOKEN` into the environment by
+itself). Without it the action falls back to its own `gh pr view` call and fails with an
+infrastructure error (exit code `30`) that is easy to misdiagnose.
+
+### Token scoping, stated precisely
+
+`GITHUB_TOKEN` lives for the **whole job**, not per step. The workflow therefore splits the work
+into two jobs with different permission sets:
+
+| Job | Permissions | Why |
+| --- | --- | --- |
+| `resolve-base` | `contents: read`, `pull-requests: read` | Only needs to read the PR's base branch |
+| `review` | `contents: read`, `issues: read`, `pull-requests: write` | Needs to publish the review comment |
+
+The review step receives the write-scoped token through the action's `github_token` input —
+GitHub exposes `with:` inputs to the step as `INPUT_*` environment variables, and the action
+reads `INPUT_GITHUB_TOKEN` — because publishing the review comment needs `pull-requests: write`.
+If that exposure matters further, the lever is the `permissions` block, not the step split.
+
+The base SHA resolved by `resolve-base` may not be in the local object database when the base
+branch moved after checkout. The action covers that case itself: in the pinned commit,
+`packages/adapters/src/git.ts` (`resolveBaseSha`) verifies the object with `git rev-parse
+--verify` and, if missing, fetches it with its own credentials (`git fetch --no-tags origin
+<sha>`). This workflow therefore does not fetch again — checkout runs with
+`persist-credentials: false`, so a local fetch would have no credentials to use.
+
+## Tool isolation
+
+The review agent gets an explicit allowlist (`tools: 'read,grep,find,ls'`), which the action
+passes to the Pi CLI as `--tools`. That allowlist — not the deny-list — is the security boundary:
+with no `bash`/`powershell` in it the agent cannot execute commands, and the action's
+`CapabilityPolicy` only injects `GH_TOKEN` into the agent's child process when a shell tool is
+enabled. `exclude_tools: 'bash,powershell'` is explicit redundancy; because it denies both, the
+action's own shell check also fails closed. If you widen `tools`, re-check both.
+
+The agent's tool surface is not only the allowlist:
+
+- The action registers one extension tool of its own (`submit_review`, the structured findings
+  contract) — that is the only tool outside the allowlist, and it is registered through a
+  separate `-e` flag, so the allowlist does not remove it.
+- MCP servers are off: the action always passes `--no-mcp` unless explicitly enabled, so MCP
+  tools are not a way around the allowlist.
+- Project-local configuration is ignored: the action passes `--no-approve` and
+  `defaultProjectTrust: never`, so a PR cannot smuggle in its own agent config or extensions.
+
+### What the agent process can actually see
+
+The agent's environment is **built from scratch**, not inherited: the action starts from a fixed
+base set plus an allowlist, skips every `INPUT_*` variable, and only injects `GH_TOKEN` when a
+shell tool is enabled. So neither `INPUT_GITHUB_TOKEN` (the write-scoped token GitHub exposes to
+the step) nor `INPUT_API_KEY` reaches the agent. The provider key (`HALF_CABBAGE_API_KEY`) *is*
+deliberately present — the agent needs it to call the model.
+
+**Treat `tools` as frozen.** Widening it to include a shell would hand the agent, in one step: the
+write-scoped `GITHUB_TOKEN`, the provider API key, and command execution over untrusted PR content.
+Any change to `tools` needs a security review, not just a CI run.
+
+## Action inputs used
+
+Verified against the pinned commit `c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`
+(`pr-review/action.yml`, `packages/core/src/capability/policy.ts`,
+`packages/adapters/src/git.ts`):
+| Input | Value here | Effect |
+| --- | --- | --- |
+| `base_sha` | resolved above | Left end of the diff; the action still computes the merge-base itself |
+| `tools` / `exclude_tools` | `read,grep,find,ls` / `bash,powershell` | Agent tool surface (`--tools` / `--exclude-tools`) |
+| `context_files` | `AGENTS.md CONTEXT.md` | Prepended to the prompt with `@`; missing files are ignored |
+| `triage_config` | `.github/triage.yml` | Issue-classification vocabulary for Issue linkage |
+| `link_issues` | `true` | Reads the linked Issue to route review focus; needs `TYPESAFE_API_KEY` |
+| `exclude` | build output + vendored dirs | Glob patterns kept out of the review |
+| `fail_on` | `none` (default) | Severity at which the gate fails the job |
+
+Inputs the action does not declare are ignored by GitHub with a warning, so a typo here would
+degrade silently rather than fail loudly. The `action-contract` job in `.github/workflows/ci.yml`
+guards against that, in two parts:
+
+1. **Input contract** — it extracts the pinned commit from `pr-review.yml`, fetches that commit's
+   `pr-review/action.yml`, and fails if `base_sha` / `tools` / `exclude_tools` are no longer
+   declared or if the action's default tool set ever grows a shell tool (fail-closed: an
+   unparseable default is an error, not a pass).
+2. **Our own allowlist** — it reads the `tools` value this workflow passes and fails if it ever
+   contains an executable tool. The allowlist we pass is the actual boundary, so it is checked
+   directly, not only upstream.
+3. **Safety semantics** — it fetches the pinned commit's
+   `packages/core/src/capability/policy.ts`, the built `dist/review-pr.js`, and
+   `packages/adapters/src/git.ts`, and asserts the invariants this repo relies on are still
+   there: `--no-mcp`, `--no-approve`, the `INPUT_*` skip, the `GITHUB_TOKEN`/`GH_TOKEN` skip,
+   the `isShellEnabledInPolicy` gate, and the authenticated `fetch` fallback that pulls a
+   missing base SHA. Source *and* bundle are asserted: the source is the file upstream
+   maintains, the bundle is what actually runs.
+
+This is a **text-level** check: it proves those specific strings are still present, not that the
+upstream code behaves as it did. It is a drift tripwire, not a proof of behaviour — the human
+review of a bump is still the real check.
+
+Both run on every PR, so a Dependabot bump of the pinned SHA cannot silently change the
+contract — the bump has to pass the checks first, in the same PR that moves the SHA. The
+`action-contract` job is also wired into the `ci` summary job, so it cannot be skipped.
+
+If the upstream files cannot be fetched (network outage, rate limit), the job **warns and skips**
+rather than failing: it detects contract drift, it is not a network canary. A contract that is
+fetched but violates the assertions still fails hard.
+
+**What this guardrail is not.** It detects *upstream drift* in the pinned commit. It does not
+protect against a PR that swaps the pinned SHA for a hostile action — that action would simply
+declare the same inputs. Protection against that comes from human review of workflow changes:
+enable branch protection that requires an approving review for changes under `.github/workflows/`.
+
 ## Known limits
 
 - **Fork PRs get a read-only `GITHUB_TOKEN`**, so the review comment cannot be published there.
   Internal PRs (including Dependabot's) are unaffected.
 - **Vendored third-party code is excluded** (`src/content/floating-widget/grokbot/**`); review it
   with the `security-audit` action instead.
-- The action itself is pinned to `devcxl/agentic-action@v1.0.0`; its internal
+- The action is referenced as `devcxl/agentic-action/pr-review@<commit>`, pinned to the commit
+  behind the `v1.0.0` tag (`c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`, with the version kept in a
+  trailing comment so Dependabot can bump it). Pinning removes the risk of a **moved tag**, but not
+  the risk of an **input-contract change** in a newer version: Dependabot bumps the SHA
+  automatically, and the guardrail is the `action-contract` CI job described above — it fails the
+  bump if the inputs or the default tool set changed shape. Its internal
   `setup-node`/`upload-artifact` versions are the action's own concern, not this repo's.
+- **Only this third-party action is SHA-pinned.** `actions/checkout@v7` still uses a movable tag,
+  matching the rest of this repo's workflows; first-party GitHub actions are a different trust
+  domain from a third-party action that runs an LLM with a write token.
+- **The inline shell in `resolve-base` has no static analysis** (no `actionlint`/`shellcheck` in
+  CI yet). Worth adding as a separate CI change, not here.
