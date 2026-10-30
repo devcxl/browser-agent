@@ -62,7 +62,7 @@ npm run typecheck
 | 类别 | 技术 |
 |------|------|
 | 框架 | [WXT](https://wxt.dev) — Next-gen Web Extension Framework |
-| UI | React 18 + TypeScript |
+| UI | React 19 + TypeScript |
 | 样式 | TailwindCSS v4 |
 | 构建 | Vite |
 | 测试 | Vitest + Playwright + Testing Library |

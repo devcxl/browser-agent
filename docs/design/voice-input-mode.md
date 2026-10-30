@@ -7,7 +7,7 @@
 
 | 层级 | 技术选型 | 理由 |
 |------|---------|------|
-| 前端 | React 18 + TypeScript + Tailwind CSS v4 | 复用现有技术栈 |
+| 前端 | React 19 + TypeScript + Tailwind CSS v4 | 复用现有技术栈 |
 | 音频采集 | 浏览器原生 MediaRecorder API | 零依赖，Chrome 47+/Firefox 88+ 均支持 |
 | STT 请求 | fetch + multipart/form-data | 复用现有 LlmClient 的 headers/超时模式 |
 | 状态管理 | React hooks (useRef + useState) | 单组件内状态，无需全局状态 |

@@ -224,6 +224,29 @@ describe('useAgent', () => {
     expect(assistantCalls[assistantCalls.length - 1][0].status).toBe('complete');
   });
 
+  it('onMessage 回调带上报消息所属的会话（归属不能依赖“当前查看的会话”）', async () => {
+    const { result } = renderHook(() => useAgent());
+    const onMessage = vi.fn();
+
+    result.current.setCallbacks({ onMessage });
+
+    await act(async () => {
+      await result.current.run('conv-42', '测试消息', {
+        id: 'test',
+        name: 'Test',
+        endpoint: 'https://api.test.com',
+        apiKey: 'key',
+        model: 'gpt-4o',
+        isLocalTrusted: false,
+      }, 'gpt-4o');
+    });
+
+    expect(onMessage.mock.calls.length).toBeGreaterThanOrEqual(2);
+    for (const call of onMessage.mock.calls) {
+      expect(call[1]).toBe('conv-42');
+    }
+  });
+
   it('首轮完成后异步生成标题并通知 UI', async () => {
     mockGenerateTitle.mockResolvedValue('测试会话标题');
     const { result } = renderHook(() => useAgent());

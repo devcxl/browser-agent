@@ -20,7 +20,7 @@ import { collectBrowserEnv } from '@/shared/browser-env';
 import type { ISkillStore } from '@/shared/types/skill';
 
 interface AgentCallbacks {
-  onMessage?: (msg: UIMessage) => void;
+  onMessage?: (msg: UIMessage, conversationId: string) => void;
   onConfirm?: (req: ConfirmRequest) => void;
   onTokenUsage?: (usage: TokenUsage) => void;
   onConversationTitle?: (conversationId: string, title: string) => void;
@@ -162,7 +162,7 @@ export function useAgent() {
         timestamp: Date.now(),
         status: 'complete',
       };
-      cbRef.current.onMessage?.(userMsg);
+      cbRef.current.onMessage?.(userMsg, conversationId);
 
       const assistantMsg: UIMessage = {
         id: uid(),
@@ -171,7 +171,7 @@ export function useAgent() {
         timestamp: Date.now(),
         status: 'streaming',
       };
-      cbRef.current.onMessage?.({ ...assistantMsg });
+      cbRef.current.onMessage?.({ ...assistantMsg }, conversationId);
 
       try {
         setStatus('streaming');
@@ -234,6 +234,7 @@ export function useAgent() {
         const output = await adapter.run({
           conversationId,
           userMessage,
+          userMessageId: userMsg.id,
           providerConfig,
           model,
           modelConfig,
@@ -251,7 +252,7 @@ export function useAgent() {
               setStatus((current) => (current === 'streaming' || current === 'idle' ? current : 'streaming'));
               // 工具调用后开启新的文本气泡
               if (assistantMsg.status === 'complete') {
-                cbRef.current.onMessage?.({ ...assistantMsg });
+                cbRef.current.onMessage?.({ ...assistantMsg }, conversationId);
                 assistantMsg.id = uid();
                 assistantMsg.content = '';
                 assistantMsg.reasoningContent = undefined;
@@ -260,19 +261,19 @@ export function useAgent() {
                 assistantMsg.timestamp = Date.now();
               }
               assistantMsg.content += chunk;
-              cbRef.current.onMessage?.({ ...assistantMsg });
+              cbRef.current.onMessage?.({ ...assistantMsg }, conversationId);
             },
             onReasoningChunk: (chunk: string) => {
               const existing = assistantMsg.reasoningContent ?? '';
               assistantMsg.reasoningContent = existing + chunk;
-              cbRef.current.onMessage?.({ ...assistantMsg });
+              cbRef.current.onMessage?.({ ...assistantMsg }, conversationId);
             },
             onToolCall: (record: ToolCallRecord) => {
               // 工具即将执行：进入 running（外部映射为 working），直到下一段文本恢复输出
               setStatus('running');
               // 当前 assistant 消息如有内容则先终结，保证思考/文本/工具按时间顺序分格
               if (assistantMsg.content || assistantMsg.reasoningContent) {
-                cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined });
+                cbRef.current.onMessage?.({ ...assistantMsg, status: 'complete', toolCallDisplay: undefined }, conversationId);
               }
               const display = recordToDisplay(record);
               displayedToolCallIds.add(record.toolCallId);
@@ -283,7 +284,7 @@ export function useAgent() {
                 toolCallDisplay: display,
                 timestamp: Date.now(),
                 status: display.status,
-              });
+              }, conversationId);
               // 重置 assistant 消息准备接收下一轮文本
               assistantMsg.id = uid();
               assistantMsg.content = '';
@@ -306,14 +307,14 @@ export function useAgent() {
             toolCallDisplay: display,
             timestamp: Date.now(),
             status: display.status,
-          });
+          }, conversationId);
         }
 
         // 仅终结最后的文本气泡
         if (assistantMsg.content || assistantMsg.reasoningContent || !output.toolCalls.length) {
           assistantMsg.content = assistantMsg.content || output.finalMessage;
           assistantMsg.status = 'complete';
-          cbRef.current.onMessage?.({ ...assistantMsg });
+          cbRef.current.onMessage?.({ ...assistantMsg }, conversationId);
         }
         if (output.tokenUsage) {
           cbRef.current.onTokenUsage?.(output.tokenUsage);
@@ -326,7 +327,7 @@ export function useAgent() {
         if ((err as Error).name === 'AbortError') {
           assistantMsg.content += '\n\n*操作已中止*';
           assistantMsg.status = 'complete';
-          cbRef.current.onMessage?.({ ...assistantMsg });
+          cbRef.current.onMessage?.({ ...assistantMsg }, conversationId);
           setRunningConversationId(null);
           setLastRunOutcome('abort');
           setStatus('idle');
@@ -334,7 +335,7 @@ export function useAgent() {
         }
         assistantMsg.status = 'error';
         assistantMsg.content = `错误: ${(err as Error).message}`;
-        cbRef.current.onMessage?.({ ...assistantMsg });
+        cbRef.current.onMessage?.({ ...assistantMsg }, conversationId);
         setError((err as Error).message);
         setRunningConversationId(null);
         setLastRunOutcome('error');
