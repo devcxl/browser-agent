@@ -9,6 +9,7 @@
 #   - 审查 Agent 只拿到只读工具（read/grep/find/ls），工作区配置不被信任
 #   - 结论以 <!-- pi-review:begin --> 标记幂等更新在 PR 上，不刷屏
 #   - 默认只评论不拦截（fail_on: none）；需要硬门禁时用 workflow_dispatch 指定级别
+#   - 拆成两个 job：解析 base SHA 的 job 只要只读权限，写权限只留给发布回评的 job
 #
 # 依赖的仓库级 Secrets（缺失时 Action 会优雅跳过，退出码 0）：
 #   HALF_CABBAGE_BASE_URL / HALF_CABBAGE_API_KEY / TYPESAFE_API_KEY
@@ -40,16 +41,56 @@ concurrency:
   group: pr-review-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  issues: read
-  pull-requests: write
-
 jobs:
+  # 手动触发时事件载荷里没有 pull_request.base.sha，Action 会退回用
+  # `gh pr view` 解析 base SHA，而 gh 在 Actions 里必须显式拿 token。
+  # 该步骤只需要只读权限，因此单独放在一个 job 里。
+  resolve-base:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      base_sha: ${{ steps.base.outputs.sha }}
+    steps:
+      - name: Resolve base SHA
+        id: base
+        # 不在 PR 工作区里跑：避免带 token 的步骤与被审代码同处一个目录
+        working-directory: ${{ runner.temp }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::pr_number must be a positive integer"
+            exit 1
+          fi
+          # 独立赋值：gh 失败时 set -e 直接中止，保留 gh 自身的报错
+          info="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName,baseRefOid --jq '.baseRefName + " " + .baseRefOid')"
+          read -r base_ref sha <<< "$info"
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]] || [[ -z "$base_ref" ]]; then
+            echo "::error::failed to resolve base branch/baseRefOid"
+            exit 1
+          fi
+          # base 分支可能在 checkout 之后前移；对象缺失时 Action 会用自己的
+          # 带凭据 fetch 回退补拉，这里不重复 fetch（checkout 未落盘凭据）。
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
   review:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    needs: [resolve-base]
+    # resolve-base 在 pull_request 事件下被跳过，此时 base SHA 来自事件载荷
+    if: >-
+      !cancelled() && needs.resolve-base.result != 'failure' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: write
     steps:
       # merge-base 需要完整历史；不落盘凭据，避免审查 Agent 触达 git 凭证
       - name: Checkout PR head (full history, no persisted credentials)
@@ -59,47 +100,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # 手动触发时事件载荷里没有 pull_request.base.sha，Action 会退回用
-      # `gh pr view` 解析 base SHA，而 gh 在 Actions 里必须显式拿 token。
-      # token 的生命周期是整个 job（不是单个步骤），因此这里的隔离价值在于：
-      # 不把它放进最长 90 分钟的审查步骤的 env。审查步骤仍会通过 github_token
-      # 输入拿到同一个 token（发布回评评论必需），详见 docs/agents/pr-review.md。
-      - name: Resolve base SHA
-        id: base
-        if: github.event_name == 'workflow_dispatch'
-        # 不在 PR 工作区里跑：避免带 token 的步骤与被审代码同处一个目录
-        working-directory: ${{ runner.temp }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ inputs.pr_number }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "::error::pr_number must be a positive integer, got '$PR_NUMBER'"
-            exit 1
-          fi
-          # 独立赋值：gh 失败时 set -e 直接中止，保留 gh 自身的报错
-          info="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName,baseRefOid --jq '.baseRefName + " " + .baseRefOid')"
-          read -r base_ref sha <<< "$info"
-          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]] || [[ -z "$base_ref" ]]; then
-            echo "::error::failed to resolve base branch/baseRefOid for PR #$PR_NUMBER"
-            exit 1
-          fi
-          # base 分支可能在 checkout 之后前移；对象缺失时 Action 会用自己的
-          # 带凭据 fetch 回退补拉，这里不重复 fetch（checkout 未落盘凭据）。
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-
       - name: Run Pi PR Review
         # 固定到 v1.0.0 对应的 commit：工具白名单是本仓库的安全边界，不能被
         # 上游移动 tag 悄悄改写；后续版本由 Dependabot 提升该 SHA。
-        # v1.0.0
-        uses: devcxl/agentic-action/pr-review@c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085
+        uses: devcxl/agentic-action/pr-review@c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085 # v1.0.0
         with:
           provider: 'half-cabbage'
           model: 'minimax-m3'
           thinking: 'high'
           pr_number: ${{ github.event.pull_request.number || inputs.pr_number }}
-          base_sha: ${{ steps.base.outputs.sha || github.event.pull_request.base.sha }}
+          base_sha: ${{ needs.resolve-base.outputs.base_sha || github.event.pull_request.base.sha }}
           max_chunks: ${{ inputs.max_chunks || '0' }}
           # 关联 Issue 决定审查侧重点与思考档位；未配置 TYPESAFE_API_KEY 时自动跳过
           link_issues: 'true'

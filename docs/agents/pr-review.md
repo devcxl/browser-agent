@@ -67,14 +67,11 @@ gh secret set TYPESAFE_API_KEY --repo devcxl/browser-agent
 The action diffs against `git merge-base <base> <head>`, so it needs the base commit SHA:
 
 - **`pull_request` events**: read straight from the event payload (`github.event.pull_request.base.sha`).
-- **`workflow_dispatch` events**: the payload has no `pull_request`, so a short `Resolve base SHA`
-  step runs `gh pr view <n> --json baseRefName,baseRefOid` and passes the SHA via the `base_sha`
-  input. The step validates the SHA (`^[0-9a-f]{40}$`) and fails loudly if `gh` fails. If the base
-  branch moved after checkout, the resolved commit may not be in the local object database. The
-  action covers that case itself: `packages/adapters/src/git.ts` (`resolveBaseSha`) verifies the
-  object with `git rev-parse --verify` and, if missing, fetches it using its own credentials
-  (`git fetch --no-tags origin <sha>`). This workflow therefore does not fetch again — checkout
-  runs with `persist-credentials: false`, so a local fetch would have no credentials to use.
+- **`workflow_dispatch` events**: the payload has no `pull_request`, so a dedicated
+  `resolve-base` job runs `gh pr view <n> --json baseRefName,baseRefOid` and passes the SHA to the
+  review job via `base_sha`. The step validates the SHA (`^[0-9a-f]{40}$`) and fails loudly if
+  `gh` fails. That job runs in `runner.temp` with **read-only** permissions; the write-scoped
+  token only exists in the `review` job, which needs it to publish the comment.
 
 `gh` needs `GH_TOKEN` (Actions does not export `secrets.GITHUB_TOKEN` into the environment by
 itself). Without it the action falls back to its own `gh pr view` call and fails with an
@@ -82,14 +79,25 @@ infrastructure error (exit code `30`) that is easy to misdiagnose.
 
 ### Token scoping, stated precisely
 
-`GITHUB_TOKEN` lives for the **whole job**, not per step — a separate step does not isolate it.
-What the separate step does achieve is keeping the token out of the `env` of the review step,
-which can run for up to 90 minutes, and out of the PR working directory (the step runs in
-`runner.temp`). The review step still receives the same token through the action's `github_token`
-input — GitHub exposes `with:` inputs to the step as `INPUT_*` environment variables, and the
-action reads `INPUT_GITHUB_TOKEN` — because publishing the review comment needs
-`pull-requests: write`. If that exposure matters, the lever is the workflow's `permissions`
-block, not the step split.
+`GITHUB_TOKEN` lives for the **whole job**, not per step. The workflow therefore splits the work
+into two jobs with different permission sets:
+
+| Job | Permissions | Why |
+| --- | --- | --- |
+| `resolve-base` | `contents: read`, `pull-requests: read` | Only needs to read the PR's base branch |
+| `review` | `contents: read`, `issues: read`, `pull-requests: write` | Needs to publish the review comment |
+
+The review step receives the write-scoped token through the action's `github_token` input —
+GitHub exposes `with:` inputs to the step as `INPUT_*` environment variables, and the action
+reads `INPUT_GITHUB_TOKEN` — because publishing the review comment needs `pull-requests: write`.
+If that exposure matters further, the lever is the `permissions` block, not the step split.
+
+The base SHA resolved by `resolve-base` may not be in the local object database when the base
+branch moved after checkout. The action covers that case itself: in the pinned commit,
+`packages/adapters/src/git.ts` (`resolveBaseSha`) verifies the object with `git rev-parse
+--verify` and, if missing, fetches it with its own credentials (`git fetch --no-tags origin
+<sha>`). This workflow therefore does not fetch again — checkout runs with
+`persist-credentials: false`, so a local fetch would have no credentials to use.
 
 ## Tool isolation
 
@@ -111,7 +119,9 @@ The agent's tool surface is not only the allowlist:
 
 ## Action inputs used
 
-Verified against `devcxl/agentic-action/pr-review@v1.0.0` (`pr-review/action.yml`):
+Verified against the pinned commit `c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`
+(`pr-review/action.yml`, `packages/core/src/capability/policy.ts`,
+`packages/adapters/src/git.ts`):
 
 | Input | Value here | Effect |
 | --- | --- | --- |
@@ -133,8 +143,13 @@ degrade silently rather than fail loudly — the table above is the local record
 - **Vendored third-party code is excluded** (`src/content/floating-widget/grokbot/**`); review it
   with the `security-audit` action instead.
 - The action is referenced as `devcxl/agentic-action/pr-review@<commit>`, pinned to the commit
-  behind the `v1.0.0` tag (`c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`). It runs an LLM pipeline
-  with a write-scoped token in the job and now also carries this repo's tool allowlist, so a moving
-  tag could widen that boundary — pinning removes the risk. Dependabot bumps the SHA when a newer
-  release appears. Its internal `setup-node`/`upload-artifact` versions are the action's own
-  concern, not this repo's.
+  behind the `v1.0.0` tag (`c36590a8ab4a8d4c8612de1f45c8f1cd6ed2b085`, with the version kept in a
+  trailing comment so Dependabot can bump it). It runs an LLM pipeline with a write-scoped token
+  in the job and now also carries this repo's tool allowlist, so a moving tag could widen that
+  boundary — pinning removes the risk. Its internal `setup-node`/`upload-artifact` versions are
+  the action's own concern, not this repo's.
+- **Only this third-party action is SHA-pinned.** `actions/checkout@v7` still uses a movable tag,
+  matching the rest of this repo's workflows; first-party GitHub actions are a different trust
+  domain from a third-party action that runs an LLM with a write token.
+- **The inline shell in `resolve-base` has no static analysis** (no `actionlint`/`shellcheck` in
+  CI yet). Worth adding as a separate CI change, not here.
