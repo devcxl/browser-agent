@@ -62,6 +62,28 @@ gh secret set HALF_CABBAGE_API_KEY --repo devcxl/browser-agent
 gh secret set TYPESAFE_API_KEY --repo devcxl/browser-agent
 ```
 
+## Base SHA resolution
+
+The action diffs against `git merge-base <base> <head>`, so it needs the base commit SHA:
+
+- **`pull_request` events**: read straight from the event payload (`github.event.pull_request.base.sha`).
+- **`workflow_dispatch` events**: the payload has no `pull_request`, so a short `Resolve base SHA`
+  step runs `gh pr view <n> --json baseRefOid` and passes the result via the `base_sha` input.
+
+That step is deliberately separate from the review step: `gh` needs `GH_TOKEN` (Actions does not
+export `secrets.GITHUB_TOKEN` into the environment by itself), and a write-scoped token should not
+sit in the environment of a step that can run for up to 90 minutes. Without it the action falls
+back to its own `gh pr view` call and fails with an infrastructure error (exit code `30`) that is
+easy to misdiagnose.
+
+## Tool isolation
+
+The review agent gets an explicit allowlist (`tools: 'read,grep,find,ls'`). That allowlist — not
+the deny-list — is the security boundary: with no `bash`/`powershell` in it the agent cannot
+execute commands, and the action's `CapabilityPolicy` only injects `GH_TOKEN` into the agent's
+child process when a shell tool is enabled. `exclude_tools: 'bash'` is belt-and-braces; if you
+widen `tools`, re-check it.
+
 ## Known limits
 
 - **Fork PRs get a read-only `GITHUB_TOKEN`**, so the review comment cannot be published there.
@@ -70,3 +92,6 @@ gh secret set TYPESAFE_API_KEY --repo devcxl/browser-agent
   with the `security-audit` action instead.
 - The action itself is pinned to `devcxl/agentic-action@v1.0.0`; its internal
   `setup-node`/`upload-artifact` versions are the action's own concern, not this repo's.
+- **Third-party action is referenced by tag, not commit SHA.** Since it runs an LLM pipeline with
+  a write-scoped token in the job, pinning `devcxl/agentic-action/pr-review@<sha>` is the stronger
+  supply-chain posture; it costs a manual bump whenever the action is updated.

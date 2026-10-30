@@ -59,6 +59,18 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # 手动触发时事件载荷里没有 pull_request.base.sha，Action 会退回用
+      # `gh pr view` 解析 base SHA，而 gh 在 Actions 里必须显式拿 token。
+      # 解析放在这个短步骤里：写权限 token 随步骤结束即失效，不会进入最长
+      # 90 分钟的审查步骤环境。
+      - name: Resolve base SHA
+        id: base
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: echo "sha=$(gh pr view "$PR_NUMBER" --json baseRefOid --jq .baseRefOid)" >> "$GITHUB_OUTPUT"
+
       - name: Run Pi PR Review
         uses: devcxl/agentic-action/pr-review@v1.0.0
         with:
@@ -66,6 +78,7 @@ jobs:
           model: 'minimax-m3'
           thinking: 'high'
           pr_number: ${{ github.event.pull_request.number || inputs.pr_number }}
+          base_sha: ${{ steps.base.outputs.sha || github.event.pull_request.base.sha }}
           max_chunks: ${{ inputs.max_chunks || '0' }}
           # 关联 Issue 决定审查侧重点与思考档位；未配置 TYPESAFE_API_KEY 时自动跳过
           link_issues: 'true'
@@ -73,7 +86,9 @@ jobs:
           triage_config: '.github/triage.yml'
           # 把仓库约定喂给审查 Agent，让结论对齐本项目的术语与决策记录
           context_files: 'AGENTS.md CONTEXT.md'
-          # 只读工具白名单：不给 bash，Agent 无法在 Runner 上执行任何命令
+          # 工具白名单（与 Action 默认值一致，显式固定以防上游默认值漂移）。
+          # 安全边界是这份白名单：不含 bash/powershell，Agent 即无法执行命令；
+          # exclude_tools 只是额外保险，放宽 tools 时必须同步复核。
           tools: 'read,grep,find,ls'
           exclude_tools: 'bash'
           # 排除构建产物与 vendored 第三方代码（后者由 security-audit 单独审计）
@@ -84,8 +99,3 @@ jobs:
         env:
           HALF_CABBAGE_BASE_URL: ${{ secrets.HALF_CABBAGE_BASE_URL }}
           HALF_CABBAGE_API_KEY: ${{ secrets.HALF_CABBAGE_API_KEY }}
-          # 手动触发时事件载荷里没有 pull_request.base.sha，Action 会退回
-          # `gh pr view` 解析 base SHA，而 gh 在 Actions 里必须显式拿 token。
-          # 该 token 只进入 Action 自身的 node 进程；CapabilityPolicy 不会把它
-          # 传给审查 Agent（除非开放 bash 工具，这里已显式禁用）。
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
