@@ -9,7 +9,7 @@
 
 | 层级 | 技术选型 | 理由 |
 |------|---------|------|
-| 前端 UI | React 18 + TypeScript 5 + TailwindCSS 4 | 复用项目现有技术栈，与 sidepanel 保持一致 |
+| 前端 UI | React 19 + TypeScript 5 + TailwindCSS 4 | 复用项目现有技术栈，与 sidepanel 保持一致 |
 | 存储 | `chrome.storage.local` + 项目现有 `ConfigStore` 封装 | 已封装好单例模式、类型安全、变更监听；不引入新依赖 |
 | 数据模型 | TypeScript interface `Skill` | 纯前端无后端，类型定义即数据模型 |
 | Skill 注册 | `ToolRegistry` 注册 `skill` 伪 tool | 复用现有 tool 注册/发现机制，LLM 通过 function calling 触发 |

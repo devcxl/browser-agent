@@ -62,7 +62,7 @@ npm run typecheck
 | Category | Technology |
 |----------|-----------|
 | Framework | [WXT](https://wxt.dev) — Next-gen Web Extension Framework |
-| UI | React 18 + TypeScript |
+| UI | React 19 + TypeScript |
 | Styling | TailwindCSS v4 |
 | Build | Vite |
 | Testing | Vitest + Playwright + Testing Library |

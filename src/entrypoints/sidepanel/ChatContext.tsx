@@ -13,7 +13,7 @@ interface ChatContextValue {
   conversations: ReturnType<typeof useConversations>;
   agent: ReturnType<typeof useAgent>;
   messages: UIMessage[];
-  addMessage: (msg: UIMessage) => void;
+  addMessage: (msg: UIMessage, conversationId?: string) => void;
   messagesLoading: boolean;
   messagesError: string | null;
   tokenUsage: TokenUsage;
@@ -34,13 +34,28 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
   const prevActiveIdRef = useRef<string | null>(null);
   const prevTokenResetIdRef = useRef<string | null>(null);
-  const messageVersionRef = useRef(0);
+  /**
+   * 消息归属：message id → 会话 id。
+   *
+   * 载入历史时需要区分「属于本会话的乐观消息」（还没落库，历史里没有）与
+   * 「上一个会话的残留」。靠「载入期间是否有新消息」判断不够：React 19 下
+   * 乐观消息可能先于载入 effect 到达（会话刚创建就发消息的场景），那时
+   * 版本号并未变化，历史会直接盖掉乐观消息。
+   */
+  const messageOwnersRef = useRef(new Map<string, string>());
+  /** 最新值 ref：addMessage 回调不闭包过期的 activeId */
+  const activeIdRef = useRef<string | null>(null);
+  activeIdRef.current = conversations.activeId;
+  /** 最近一次渲染的消息快照：异步回调里读取当前消息用 */
+  const messagesRef = useRef<UIMessage[]>([]);
+  messagesRef.current = messages;
   const conversationStatuses: Record<string, AgentStatus> = agent.runningConversationId
     ? { [agent.runningConversationId]: agent.status }
     : {};
 
-  const addMessage = useCallback((msg: UIMessage) => {
-    messageVersionRef.current += 1;
+  const addMessage = useCallback((msg: UIMessage, conversationId?: string) => {
+    const owner = conversationId ?? activeIdRef.current;
+    if (owner) messageOwnersRef.current.set(msg.id, owner);
     setMessages((prev) => {
       const idx = prev.findIndex((m) => m.id === msg.id);
       if (idx >= 0) {
@@ -87,7 +102,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     prevActiveIdRef.current = activeId;
 
     if (!activeId) {
-      messageVersionRef.current += 1;
       setMessages([]);
       setMessagesLoading(false);
       setMessagesError(null);
@@ -95,28 +109,42 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
 
     let cancelled = false;
-    const messageVersionAtLoadStart = messageVersionRef.current;
     setMessagesLoading(true);
     setMessagesError(null);
+
+    /**
+     * 把当前展示的消息分成「属于本会话的」与「其他会话的残留」。
+     * 未登记归属的消息（添加时没有活跃会话）视为属于本会话。
+     */
+    const partitionByOwner = (current: UIMessage[]) => {
+      const kept: UIMessage[] = [];
+      for (const msg of current) {
+        const owner = messageOwnersRef.current.get(msg.id);
+        if (owner === undefined || owner === activeId) kept.push(msg);
+      }
+      return kept;
+    };
 
     (async () => {
       try {
         const conv = await manager.get(activeId);
         if (cancelled) return;
-        if (conv) {
-          setMessages((currentMessages) => (
-            messageVersionRef.current === messageVersionAtLoadStart
-              ? storedMessagesToUIMessages(conv.messages)
-              : currentMessages
-          ));
-        } else {
-          setMessages((currentMessages) => (
-            messageVersionRef.current === messageVersionAtLoadStart ? [] : currentMessages
-          ));
-        }
+        const history = conv ? storedMessagesToUIMessages(conv.messages) : [];
+        // 历史消息归属于本会话，后续切走时才能正确丢弃
+        for (const msg of history) messageOwnersRef.current.set(msg.id, activeId);
+        setMessages((currentMessages) => {
+          const kept = partitionByOwner(currentMessages);
+          // 已有本会话的消息（乐观消息还没落库）→ 保留，不被历史覆盖
+          if (kept.length > 0) return kept;
+          return history;
+        });
       } catch (e) {
         if (cancelled) return;
-        if (messageVersionRef.current === messageVersionAtLoadStart) {
+        const kept = partitionByOwner(messagesRef.current);
+        if (kept.length > 0) {
+          // 本会话已有新消息：保留它们，不让加载错误打断当前会话
+          setMessages(kept);
+        } else {
           setMessagesError((e as Error).message);
           setMessages([]);
         }

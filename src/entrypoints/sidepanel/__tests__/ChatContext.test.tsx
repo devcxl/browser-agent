@@ -426,6 +426,70 @@ describe('ChatContext message loading', () => {
     expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
   });
 
+  it('切换会话时丢弃上一个会话的残留消息', async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+
+    mockConversationManager.list.mockResolvedValue([
+      { id: 'conv-A', title: 'Conv A', titleGenerated: true, updatedAt: now + 200, createdAt: now, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-B', title: 'Conv B', titleGenerated: true, updatedAt: now + 100, createdAt: now - 100, messages: [], sensitiveDataGranted: false },
+    ]);
+    // conv-A 的载入挂起，conv-B 立即返回一条历史
+    mockConversationManager.get.mockImplementation((id: string) => {
+      if (id === 'conv-A') return new Promise(() => {});
+      return Promise.resolve({
+        id: 'conv-B', title: 'Conv B', titleGenerated: true, createdAt: now, updatedAt: now,
+        messages: [{ id: 'b1', role: 'user' as const, content: 'from conv-B', timestamp: now }],
+        sensitiveDataGranted: false,
+      });
+    });
+    mockConfigStore.get.mockResolvedValue(undefined);
+
+    function OwnershipInspector() {
+      const chat = useChat();
+      return (
+        <div>
+          <div data-testid="messages-content">{chat.messages.map((m) => m.content).join('|')}</div>
+          <div data-testid="active-id">{chat.conversations.activeId ?? '(none)'}</div>
+          <button
+            type="button"
+            data-testid="add-message"
+            onClick={() => chat.addMessage({ id: 'a-msg', role: 'user', content: 'from conv-A', timestamp: Date.now() })}
+          >
+            Add
+          </button>
+          <button type="button" data-testid="select-conv-b" onClick={() => chat.conversations.select('conv-B')}>
+            Select B
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <OwnershipInspector />
+      </ChatProvider>,
+    );
+
+    // 自动选中最近的 conv-A（其载入挂起）
+    await waitFor(() => {
+      expect(screen.getByTestId('active-id').textContent).toBe('conv-A');
+    });
+    await user.click(screen.getByTestId('add-message'));
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('from conv-A');
+    });
+
+    // 切到 conv-B：conv-A 的残留消息必须被丢弃，只剩 conv-B 的历史
+    await user.click(screen.getByTestId('select-conv-b'));
+    await waitFor(() => {
+      expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('from conv-B');
+    });
+  });
+
   it('切换 activeId 后 tokenUsage 重置为 {0,0}（会话切换无残留旧值）', async () => {
     const now = Date.now();
     mockConversationManager.list.mockResolvedValue([
