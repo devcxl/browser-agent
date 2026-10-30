@@ -153,12 +153,23 @@ guards against that, in two parts:
    `pr-review/action.yml`, and fails if `base_sha` / `tools` / `exclude_tools` are no longer
    declared or if the action's default tool set ever grows a shell tool (fail-closed: an
    unparseable default is an error, not a pass).
-2. **Safety semantics** — it fetches the pinned commit's `dist/review-pr.js` and asserts the
-   invariants this repo relies on are still there: `--no-mcp`, `--no-approve`, the `INPUT_*`
-   skip, the `GITHUB_TOKEN`/`GH_TOKEN` skip, and the `isShellEnabledInPolicy` gate.
+2. **Our own allowlist** — it reads the `tools` value this workflow passes and fails if it ever
+   contains an executable tool. The allowlist we pass is the actual boundary, so it is checked
+   directly, not only upstream.
+3. **Safety semantics** — it fetches the pinned commit's
+   `packages/core/src/capability/policy.ts` and asserts the invariants this repo relies on are
+   still there: `--no-mcp`, `--no-approve`, the `INPUT_*` skip, the `GITHUB_TOKEN`/`GH_TOKEN`
+   skip, and the `isShellEnabledInPolicy` gate. The source file is asserted rather than the
+   built bundle: it is the file upstream maintains, so it is the stable thing to match on.
 
 Both run on every PR, so a Dependabot bump of the pinned SHA cannot silently change the
-contract — the bump has to pass the checks first, in the same PR that moves the SHA.
+contract — the bump has to pass the checks first, in the same PR that moves the SHA. The
+`action-contract` job is also wired into the `ci` summary job, so it cannot be skipped.
+
+**What this guardrail is not.** It detects *upstream drift* in the pinned commit. It does not
+protect against a PR that swaps the pinned SHA for a hostile action — that action would simply
+declare the same inputs. Protection against that comes from human review of workflow changes:
+enable branch protection that requires an approving review for changes under `.github/workflows/`.
 
 ## Known limits
 

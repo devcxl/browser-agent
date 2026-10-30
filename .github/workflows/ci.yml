@@ -86,8 +86,8 @@ jobs:
               exit 1
             fi
           done
-          # 默认工具集不得包含可执行工具，否则白名单失效时 Agent 将获得命令执行能力
-          default_tools="$(grep -A3 '^  tools:' /tmp/pr-review-action.yml | grep -E '^[[:space:]]+default:' | head -1 | tr -d "'\" " | sed 's/^default://')"
+          # 取 tools 输入自己的 default 行（只在该输入块内取，避免抓到下一个输入的 default）
+          default_tools="$(awk '/^  tools:/{inblock=1; next} inblock && /^    default:/{sub(/^    default:[[:space:]]*/, ""); gsub(/["'\'']/, ""); print; exit} inblock && /^  [a-z_]+:/{exit}' /tmp/pr-review-action.yml || true)"
           if [ -z "$default_tools" ]; then
             echo "::error::无法解析 action 的默认工具集，契约校验失败"
             exit 1
@@ -98,15 +98,30 @@ jobs:
             exit 1
           fi
 
+      - name: Verify our own tool allowlist stays read-only
+        run: |
+          set -euo pipefail
+          # 本仓库实际生效的白名单才是安全边界：它不能包含可执行工具
+          our_tools="$(awk '/^          tools:/{gsub(/["'\'']/, ""); sub(/^          tools:[[:space:]]*/, ""); print; exit}' .github/workflows/pr-review.yml || true)"
+          if [ -z "$our_tools" ]; then
+            echo "::error::无法解析 pr-review.yml 中传入的 tools 白名单"
+            exit 1
+          fi
+          echo "workflow tools allowlist: $our_tools"
+          if echo "$our_tools" | grep -qE '(^|,)(bash|powershell|sh|shell)(,|$)'; then
+            echo "::error::传入的 tools 白名单包含可执行工具，审查 Agent 将获得命令执行能力"
+            exit 1
+          fi
+
       - name: Verify pinned agentic-action still keeps the safety semantics we rely on
         run: |
           set -euo pipefail
           ref="$(grep -oE 'devcxl/agentic-action/pr-review@[0-9a-f]{40}' .github/workflows/pr-review.yml | head -1 | cut -d@ -f2)"
-          curl -fsSL "https://raw.githubusercontent.com/devcxl/agentic-action/$ref/dist/review-pr.js" -o /tmp/review-pr.js
+          curl -fsSL "https://raw.githubusercontent.com/devcxl/agentic-action/$ref/packages/core/src/capability/policy.ts" -o /tmp/policy.ts
           # 断言 Action 仍然（1）恒定关闭 MCP 与项目配置信任、（2）不把 INPUT_* 与
           # GitHub token 透传给 Agent 子进程、（3）用 shell 判定控制 token 注入
-          for guard in '--no-mcp' '--no-approve' 'startsWith("INPUT_")' 'key === "GITHUB_TOKEN" || key === "GH_TOKEN") continue' 'isShellEnabledInPolicy'; do
-            if ! grep -qF -- "$guard" /tmp/review-pr.js; then
+          for guard in '"--no-mcp"' '"--no-approve"' 'startsWith("INPUT_")' 'key === "GITHUB_TOKEN" || key === "GH_TOKEN") continue' 'isShellEnabledInPolicy'; do
+            if ! grep -qF -- "$guard" /tmp/policy.ts; then
               echo "::error::固定的 action 不再包含安全护栏 '$guard'，需重新核对 docs/agents/pr-review.md 的 Tool isolation 一节"
               exit 1
             fi
@@ -114,7 +129,7 @@ jobs:
           echo "safety semantics verified"
 
   ci:
-    needs: [lint, test]
+    needs: [lint, test, action-contract]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -123,4 +138,6 @@ jobs:
         env:
           LINT_RESULT: ${{ needs.lint.result }}
           TEST_RESULT: ${{ needs.test.result }}
-        run: test "$LINT_RESULT" = success && test "$TEST_RESULT" = success
+          CONTRACT_RESULT: ${{ needs.action-contract.result }}
+        run: |
+          test "$LINT_RESULT" = success && test "$TEST_RESULT" = success && test "$CONTRACT_RESULT" = success
