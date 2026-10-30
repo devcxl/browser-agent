@@ -429,6 +429,64 @@ describe('ChatContext message loading', () => {
     expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
   });
 
+  it('载入完成时历史与尚未落库的新消息合并展示', async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+
+    mockConversationManager.list.mockResolvedValue([
+      { id: 'conv-A', title: 'Conv A', titleGenerated: true, updatedAt: now, createdAt: now, messages: [], sensitiveDataGranted: false },
+    ]);
+    // 载入挂起：等用户的消息先到
+    let resolveConv!: (value: unknown) => void;
+    mockConversationManager.get.mockImplementation(
+      () => new Promise((resolve) => { resolveConv = resolve; }),
+    );
+    mockConfigStore.get.mockResolvedValue(undefined);
+
+    function MergeInspector() {
+      const chat = useChat();
+      return (
+        <div>
+          <div data-testid="messages-content">{chat.messages.map((m) => m.content).join('|')}</div>
+          <div data-testid="messages-loading">{String(chat.messagesLoading)}</div>
+          <button
+            type="button"
+            data-testid="add-message"
+            onClick={() => chat.addMessage({ id: 'new-msg', role: 'user', content: 'new message', timestamp: Date.now() })}
+          >
+            Add
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <MergeInspector />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-loading').textContent).toBe('true');
+    });
+    // 载入尚未完成，用户就发了消息
+    await user.click(screen.getByTestId('add-message'));
+
+    resolveConv!({
+      id: 'conv-A', title: 'Conv A', titleGenerated: true, createdAt: now, updatedAt: now,
+      messages: [
+        { id: 'h1', role: 'user' as const, content: 'history 1', timestamp: now },
+        { id: 'h2', role: 'assistant' as const, content: 'history 2', timestamp: now + 1 },
+      ],
+      sensitiveDataGranted: false,
+    });
+
+    // 历史与新消息都在（历史在前）
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('history 1|history 2|new message');
+    });
+  });
+
   it('切换会话后，Agent 在原会话产出的消息不会串到新会话', async () => {
     const user = userEvent.setup();
     const now = Date.now();

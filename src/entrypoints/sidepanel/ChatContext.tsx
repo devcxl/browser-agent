@@ -144,15 +144,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const conv = await manager.get(activeId);
         if (cancelled) return;
         const history = conv ? storedMessagesToUIMessages(conv.messages) : [];
+        const historyIds = new Set(history.map((m) => m.id));
         setMessageState((prev) => {
           const kept = partitionByOwner(prev.entries);
-          // 已有本会话的消息（乐观消息还没落库）→ 保留，不被历史覆盖
-          if (kept.length > 0) return prev;
-          // 否则用历史替换本会话的条目（其他会话的条目留着但不展示）
-          const others = prev.entries.filter((e) => e.owner !== activeId);
+          // 历史与内存消息合并：历史在前（更早），尚未落库的消息在后。
+          // 同 id 只留历史版本——它已是落库后的最终形态。
+          const fresh = kept
+            .filter((e) => !historyIds.has(e.msg.id))
+            .map((e) => ({ ...e, owner: activeId }));
+          const others = prev.entries.filter((e) => e.owner !== activeId && e.owner !== null);
           return {
             ...prev,
-            entries: [...others, ...history.map((msg) => ({ msg, owner: activeId }))],
+            entries: [
+              ...others,
+              ...history.map((msg) => ({ msg, owner: activeId })),
+              ...fresh,
+            ],
           };
         });
       } catch (e) {
@@ -160,12 +167,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         const errorMessage = (e as Error).message;
         setMessageState((prev) => {
           const kept = partitionByOwner(prev.entries);
-          // 本会话已有新消息：保留它们，不让加载错误打断当前会话
-          if (kept.length > 0) return prev;
-          return {
-            entries: prev.entries.filter((e) => e.owner !== activeId),
-            error: errorMessage,
-          };
+          const others = prev.entries.filter((e) => e.owner !== activeId && e.owner !== null);
+          if (kept.length > 0) {
+            // 本会话已有新消息：保留它们，不让加载错误打断当前会话
+            return {
+              ...prev,
+              entries: [...others, ...kept.map((e) => ({ ...e, owner: activeId }))],
+            };
+          }
+          return { entries: others, error: errorMessage };
         });
       } finally {
         if (!cancelled) setMessagesLoading(false);

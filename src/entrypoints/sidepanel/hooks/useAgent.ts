@@ -234,6 +234,7 @@ export function useAgent() {
         const output = await adapter.run({
           conversationId,
           userMessage,
+          userMessageId: userMsg.id,
           providerConfig,
           model,
           modelConfig,

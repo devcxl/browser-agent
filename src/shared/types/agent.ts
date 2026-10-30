@@ -28,6 +28,13 @@ export interface AgentRunCallbacks {
 export interface AgentRunInput {
   conversationId: string;
   userMessage: string;
+  /**
+   * 本轮用户消息的 id（UI 侧生成）。
+   *
+   * 落库时复用它，UI 的乐观消息与库里的记录才是同一条消息：
+   * 否则同一条用户消息会有两个 id，历史与内存消息无法按 id 去重。
+   */
+  userMessageId?: string;
   providerConfig: ProviderConfig;
   /** 模型 ID（如 "gpt-4o", "deepseek/deepseek-chat"） */
   model: string;

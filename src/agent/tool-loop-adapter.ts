@@ -141,7 +141,7 @@ export class ToolLoopAdapter implements IAgentRuntime {
     const persistenceTasks: Promise<void>[] = [];
     // 本次输入的唯一身份：用于重建历史时排除「已落库的本轮输入」，
     // 而不是按文本比较（相同文本的上一条用户消息必须保留）。
-    const currentUserMessageId = crypto.randomUUID();
+    const currentUserMessageId = input.userMessageId ?? crypto.randomUUID();
     // 步骤落库串行链：onStepFinish 可能连续触发且不等待返回的 Promise，
     // 必须保证前一步整批写完再写下一步，否则时间戳与步骤顺序会交错。
     let persistenceChain: Promise<void> = Promise.resolve();
