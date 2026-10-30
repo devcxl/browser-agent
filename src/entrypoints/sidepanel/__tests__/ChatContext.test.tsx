@@ -81,8 +81,8 @@ function ContextInspector() {
 function QuickMessageStarter() {
   const chat = useChat();
   const sendQuickMessage = async () => {
-    await chat.conversations.create();
-    chat.addMessage({ id: 'quick-message', role: 'user', content: 'Quick action', timestamp: Date.now() });
+    const conversationId = await chat.conversations.create();
+    chat.addMessage({ id: 'quick-message', role: 'user', content: 'Quick action', timestamp: Date.now() }, conversationId);
   };
   return <button type="button" data-testid="quick-message" onClick={sendQuickMessage}>Send</button>;
 }
@@ -136,7 +136,7 @@ describe('ChatContext message loading', () => {
         role: 'user',
         content: 'status update',
         timestamp: Date.now(),
-      });
+      }, chat.conversations.activeId ?? 'conv-A');
 
       return (
         <div>
@@ -452,7 +452,7 @@ describe('ChatContext message loading', () => {
           <button
             type="button"
             data-testid="add-message"
-            onClick={() => chat.addMessage({ id: 'new-msg', role: 'user', content: 'new message', timestamp: Date.now() })}
+            onClick={() => chat.addMessage({ id: 'new-msg', role: 'user', content: 'new message', timestamp: Date.now() }, chat.conversations.activeId ?? 'conv-A')}
           >
             Add
           </button>
@@ -485,6 +485,174 @@ describe('ChatContext message loading', () => {
     await waitFor(() => {
       expect(screen.getByTestId('messages-content').textContent).toBe('history 1|history 2|new message');
     });
+  });
+
+  it('切走再切回不会把同一条回复渲染两次', async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+
+    const convAFirst = {
+      id: 'conv-A', title: 'Conv A', titleGenerated: true, createdAt: now, updatedAt: now,
+      messages: [{ id: 'h1', role: 'user' as const, content: 'question', timestamp: now }],
+      sensitiveDataGranted: false,
+    };
+    // 第二次读到的历史里，助手回复已落库（id 与 UI 侧不同）
+    const convALater = {
+      ...convAFirst,
+      messages: [
+        ...convAFirst.messages,
+        { id: 'h2', role: 'assistant' as const, content: 'reply', timestamp: now + 1 },
+      ],
+    };
+    const convB = {
+      id: 'conv-B', title: 'Conv B', titleGenerated: true, createdAt: now, updatedAt: now,
+      messages: [], sensitiveDataGranted: false,
+    };
+
+    mockConversationManager.list.mockResolvedValue([
+      { id: 'conv-A', title: 'Conv A', titleGenerated: true, updatedAt: now + 200, createdAt: now, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-B', title: 'Conv B', titleGenerated: true, updatedAt: now + 100, createdAt: now - 100, messages: [], sensitiveDataGranted: false },
+    ]);
+    let convACalls = 0;
+    mockConversationManager.get.mockImplementation((id: string) => {
+      if (id === 'conv-B') return Promise.resolve(convB);
+      convACalls += 1;
+      return Promise.resolve(convACalls === 1 ? convAFirst : convALater);
+    });
+    mockConfigStore.get.mockResolvedValue(undefined);
+
+    function DupInspector() {
+      const chat = useChat();
+      return (
+        <div>
+          <div data-testid="messages-content">{chat.messages.map((m) => m.content).join('|')}</div>
+          <div data-testid="active-id">{chat.conversations.activeId ?? '(none)'}</div>
+          <button type="button" data-testid="select-conv-b" onClick={() => chat.conversations.select('conv-B')}>
+            Select B
+          </button>
+          <button type="button" data-testid="select-conv-a" onClick={() => chat.conversations.select('conv-A')}>
+            Select A
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <DupInspector />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('question');
+    });
+
+    // Agent 在 conv-A 流式产出一条回复（UI 侧 id）
+    act(() => {
+      mockAgent.callbacks.onMessage?.(
+        { id: 'ui-2', role: 'assistant', content: 'reply', timestamp: Date.now() },
+        'conv-A',
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('question|reply');
+    });
+
+    // 切走再切回：回复不得出现两次
+    await user.click(screen.getByTestId('select-conv-b'));
+    await waitFor(() => {
+      expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
+    });
+    await user.click(screen.getByTestId('select-conv-a'));
+    await waitFor(() => {
+      expect(screen.getByTestId('active-id').textContent).toBe('conv-A');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('question|reply');
+    });
+  });
+
+  it('运行中的会话切走再切回不重载，也不重复', async () => {
+    const user = userEvent.setup();
+    const now = Date.now();
+
+    mockConversationManager.list.mockResolvedValue([
+      { id: 'conv-A', title: 'Conv A', titleGenerated: true, updatedAt: now + 200, createdAt: now, messages: [], sensitiveDataGranted: false },
+      { id: 'conv-B', title: 'Conv B', titleGenerated: true, updatedAt: now + 100, createdAt: now - 100, messages: [], sensitiveDataGranted: false },
+    ]);
+    // conv-A 的历史里已经有归消息（运行中又写了一遍），重载就会重复
+    mockConversationManager.get.mockImplementation((id: string) => Promise.resolve({
+      id, title: id, titleGenerated: true, createdAt: now, updatedAt: now,
+      messages: id === 'conv-A'
+        ? [
+          { id: 'q1', role: 'user' as const, content: 'question', timestamp: now },
+          { id: 'stored-reply', role: 'assistant' as const, content: 'reply', timestamp: now + 1 },
+        ]
+        : [],
+      sensitiveDataGranted: false,
+    }));
+    mockConfigStore.get.mockResolvedValue(undefined);
+    mockAgent.runningConversationId = null;
+    mockAgent.status = 'idle';
+
+    function RunningInspector() {
+      const chat = useChat();
+      return (
+        <div>
+          <div data-testid="messages-content">{chat.messages.map((m) => m.content).join('|')}</div>
+          <div data-testid="active-id">{chat.conversations.activeId ?? '(none)'}</div>
+          <div data-testid="loads">{String(mockConversationManager.get.mock.calls.length)}</div>
+          <button type="button" data-testid="select-conv-b" onClick={() => chat.conversations.select('conv-B')}>
+            Select B
+          </button>
+          <button type="button" data-testid="select-conv-a" onClick={() => chat.conversations.select('conv-A')}>
+            Select A
+          </button>
+        </div>
+      );
+    }
+
+    render(
+      <ChatProvider>
+        <RunningInspector />
+      </ChatProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('question|reply');
+    });
+
+    // 在 conv-A 里发新消息，并处于运行中
+    act(() => {
+      mockAgent.runningConversationId = 'conv-A';
+      mockAgent.status = 'streaming';
+      mockAgent.callbacks.onMessage?.(
+        { id: 'q2', role: 'user', content: 'follow up', timestamp: Date.now() },
+        'conv-A',
+      );
+      mockAgent.callbacks.onMessage?.(
+        { id: 'ui-reply-2', role: 'assistant', content: 'answer', timestamp: Date.now(), status: 'streaming' },
+        'conv-A',
+      );
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('messages-content').textContent).toBe('question|reply|follow up|answer');
+    });
+    const loadsBefore = mockConversationManager.get.mock.calls.length;
+
+    // 切走再切回：运行中的会话由内存持有，不得重载（否则正在输出的气泡会多一份）
+    await user.click(screen.getByTestId('select-conv-b'));
+    await waitFor(() => {
+      expect(screen.getByTestId('active-id').textContent).toBe('conv-B');
+    });
+    await user.click(screen.getByTestId('select-conv-a'));
+    await waitFor(() => {
+      expect(screen.getByTestId('active-id').textContent).toBe('conv-A');
+    });
+
+    expect(screen.getByTestId('messages-content').textContent).toBe('question|reply|follow up|answer');
+    // 只有切到 conv-B 那一次新载入，回到 conv-A 没有重载
+    expect(mockConversationManager.get.mock.calls.length).toBe(loadsBefore + 1);
   });
 
   it('切换会话后，Agent 在原会话产出的消息不会串到新会话', async () => {
@@ -582,7 +750,7 @@ describe('ChatContext message loading', () => {
           <button
             type="button"
             data-testid="add-message"
-            onClick={() => chat.addMessage({ id: 'a-msg', role: 'user', content: 'from conv-A', timestamp: Date.now() })}
+            onClick={() => chat.addMessage({ id: 'a-msg', role: 'user', content: 'from conv-A', timestamp: Date.now() }, chat.conversations.activeId ?? 'conv-A')}
           >
             Add
           </button>

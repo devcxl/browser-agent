@@ -13,7 +13,8 @@ interface ChatContextValue {
   conversations: ReturnType<typeof useConversations>;
   agent: ReturnType<typeof useAgent>;
   messages: UIMessage[];
-  addMessage: (msg: UIMessage, conversationId?: string) => void;
+  /** 添加一条消息；`conversationId` 必填——归属不能靠“当前查看的会话”反推 */
+  addMessage: (msg: UIMessage, conversationId: string) => void;
   messagesLoading: boolean;
   messagesError: string | null;
   tokenUsage: TokenUsage;
@@ -25,8 +26,7 @@ interface ChatContextValue {
 /** 一条消息及其归属会话 */
 interface OwnedMessage {
   msg: UIMessage;
-  /** 所属会话；null = 添加时没有活跃会话，待认领 */
-  owner: string | null;
+  owner: string;
 }
 
 /** 消息与加载错误放在一起：载入结果的判定必须基于同一份最新状态 */
@@ -46,24 +46,22 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [tokenUsage, setTokenUsage] = useState<TokenUsage>({ prompt: 0, completion: 0 });
   const prevActiveIdRef = useRef<string | null>(null);
   const prevTokenResetIdRef = useRef<string | null>(null);
+  const activeId = conversations.activeId;
+  const runningConversationId = agent.runningConversationId;
   const conversationStatuses: Record<string, AgentStatus> = agent.runningConversationId
     ? { [agent.runningConversationId]: agent.status }
     : {};
 
-  const addMessage = useCallback((msg: UIMessage, conversationId?: string) => {
+  const addMessage = useCallback((msg: UIMessage, conversationId: string) => {
     setMessageState((prev) => {
       const idx = prev.entries.findIndex((e) => e.msg.id === msg.id);
-      if (idx >= 0) {
-        // 已有条目：只更新消息内容，归属保持首次登记的结果
-        // （流式更新会重复提交同一条消息，每次重写会让归属漂移）
-        const next = [...prev.entries];
-        next[idx] = { ...next[idx]!, msg };
-        return { ...prev, entries: next };
-      }
-      // 归属只用 Agent 运行所在的会话；没有会话 id 时先记为未归属，
-      // 由认领 effect 归入当前会话——不拿“当前查看的会话”去猜，
-      // 否则切会话的那一帧会把消息判到别的会话名下
-      return { ...prev, entries: [...prev.entries, { msg, owner: conversationId ?? null }] };
+      // 新消息：归属就取 Agent 运行所在的会话
+      if (idx < 0) return { ...prev, entries: [...prev.entries, { msg, owner: conversationId }] };
+      // 同一条消息的流式更新：只换内容，不重算归属（否则归属会随查看会话漂移）
+      return {
+        ...prev,
+        entries: prev.entries.map((e, i) => (i === idx ? { ...e, msg } : e)),
+      };
     });
   }, []);
 
@@ -98,84 +96,81 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [agent],
   );
 
-  /** 只展示当前会话的消息：别的会话的条目（含上一个会话的残留）不展示 */
+  /** 只展示当前会话的消息：切走时别的会话的条目不会挂在新会话下 */
   const messages = useMemo(
-    () =>
-      messageState.entries
-        .filter((e) => e.owner === null || e.owner === conversations.activeId)
-        .map((e) => e.msg),
-    [messageState.entries, conversations.activeId],
+    () => messageState.entries.filter((e) => e.owner === activeId).map((e) => e.msg),
+    [messageState.entries, activeId],
   );
 
-  // 认领未归属的消息：添加时没有会话 id 的消息归入当前会话，
-  // 避免它在下一次切换时继续冒充本会话的消息、并顶掉新会话的历史
+  // 内存里只保留「当前会话 + 运行中会话」的消息，其余以数据库为准。
+  // 侧边栏是长期存活页面：留着副本会让流式更新的每次拷贝随累计历史增长；
+  // 而且助手/工具气泡落库后 id 会变，旧副本与历史无法按 id 去重，
+  // 只能靠离开时丢弃来避免「切走再切回就出现两份回复」。
   useEffect(() => {
-    const activeId = conversations.activeId;
-    if (!activeId) return;
-    if (!messageState.entries.some((e) => e.owner === null)) return;
-    setMessageState((prev) => ({
-      ...prev,
-      entries: prev.entries.map((e) => (e.owner === null ? { ...e, owner: activeId } : e)),
-    }));
-  }, [messageState.entries, conversations.activeId]);
+    setMessageState((prev) => {
+      const kept = prev.entries.filter(
+        (e) => e.owner === activeId || e.owner === runningConversationId,
+      );
+      return kept.length === prev.entries.length ? prev : { ...prev, entries: kept };
+    });
+  }, [activeId, runningConversationId]);
 
   // 加载会话历史消息
   useEffect(() => {
-    const activeId = conversations.activeId;
-    if (activeId === prevActiveIdRef.current) return;
-    prevActiveIdRef.current = activeId;
+    const active = conversations.activeId;
+    if (active === prevActiveIdRef.current) return;
+    prevActiveIdRef.current = active;
 
-    if (!activeId) {
+    if (!active) {
       setMessageState({ entries: [], error: null });
       setMessagesLoading(false);
       return;
     }
 
-    let cancelled = false;
+    // 运行中的会话由内存持有（上面的清理会保留它）：重载历史会把正在输出的气泡复制一份
+    if (active === runningConversationId) {
+      setMessagesLoading(false);
+      return;
+    }
+
     setMessagesLoading(true);
     setMessageState((prev) => ({ ...prev, error: null }));
-
-    /** 当前条目里，属于本会话的那些（未归属的也算） */
-    const partitionByOwner = (current: OwnedMessage[]) =>
-      current.filter((e) => e.owner === null || e.owner === activeId);
+    const running = runningConversationId;
+    let cancelled = false;
 
     (async () => {
       try {
-        const conv = await manager.get(activeId);
+        const conv = await manager.get(active);
         if (cancelled) return;
         const history = conv ? storedMessagesToUIMessages(conv.messages) : [];
         const historyIds = new Set(history.map((m) => m.id));
         setMessageState((prev) => {
-          const kept = partitionByOwner(prev.entries);
-          // 历史与内存消息合并：历史在前（更早），尚未落库的消息在后。
-          // 同 id 只留历史版本——它已是落库后的最终形态。
-          const fresh = kept
-            .filter((e) => !historyIds.has(e.msg.id))
-            .map((e) => ({ ...e, owner: activeId }));
-          const others = prev.entries.filter((e) => e.owner !== activeId && e.owner !== null);
+          // 载入期间到达、且不可能已在历史里的消息接在后面：
+          // 否则新建会话的第一条消息会被空历史顶掉。
+          // - 用户消息：落库后 id 不变（UI 生成、Agent 复用），在历史里就能按 id 去掉
+          // - 还在输出的助手/工具气泡：落库后 id 会变，只能靠状态判定“尚未落库”
+          const live = prev.entries.filter(
+            (e) => e.owner === active
+              && !historyIds.has(e.msg.id)
+              && (e.msg.role === 'user' || e.msg.status === 'streaming' || e.msg.status === 'running'),
+          );
+          const runningEntries = prev.entries.filter((e) => e.owner === running);
           return {
-            ...prev,
             entries: [
-              ...others,
-              ...history.map((msg) => ({ msg, owner: activeId })),
-              ...fresh,
+              ...runningEntries,
+              ...history.map((msg) => ({ msg, owner: active })),
+              ...live,
             ],
+            error: null,
           };
         });
       } catch (e) {
         if (cancelled) return;
         const errorMessage = (e as Error).message;
         setMessageState((prev) => {
-          const kept = partitionByOwner(prev.entries);
-          const others = prev.entries.filter((e) => e.owner !== activeId && e.owner !== null);
-          if (kept.length > 0) {
-            // 本会话已有新消息：保留它们，不让加载错误打断当前会话
-            return {
-              ...prev,
-              entries: [...others, ...kept.map((e) => ({ ...e, owner: activeId }))],
-            };
-          }
-          return { entries: others, error: errorMessage };
+          // 当前会话已有新消息：保留它们，不让加载错误打断正在进行的对话
+          if (prev.entries.some((e) => e.owner === active)) return prev;
+          return { entries: prev.entries, error: errorMessage };
         });
       } finally {
         if (!cancelled) setMessagesLoading(false);
@@ -185,7 +180,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [conversations.activeId]);
+  }, [conversations.activeId, runningConversationId]);
 
   return (
     <ChatContext.Provider
