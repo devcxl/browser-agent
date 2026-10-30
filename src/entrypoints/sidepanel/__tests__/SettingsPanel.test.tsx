@@ -57,6 +57,9 @@ beforeEach(() => {
     i18n: createI18nMock(),
   });
   ConfigStore.resetInstance();
+  // 数据导入导出的 mock 会留下调用记录与 mockResolvedValue，逐条清除以免跨用例泄漏
+  vi.mocked(exportFullSnapshot).mockClear();
+  vi.mocked(importFullSnapshot).mockReset();
 });
 
 afterEach(() => {
@@ -105,6 +108,7 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof SettingsPanel>
     agentSettings: {
       maxToolRounds: 10,
       contextWindowTokens: 128000,
+      systemPrompt: DEFAULT_SYSTEM_PROMPT,
     },
     expertMode: { enabled: false, switches: {} },
     onSaveProviders: vi.fn(),
@@ -181,8 +185,15 @@ describe('SettingsPanel', () => {
     renderWithI18n(<SettingsPanel {...props} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+
+    // 先改成别的值，再复位：断言 textarea 真的回到默认值（受控输入 + 回写路径）
+    const input = screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '临时提示词' } });
+    expect(input.value).toBe('临时提示词');
+
     await userEvent.click(screen.getByTestId('agent-system-prompt-reset'));
 
+    expect(input.value).toBe(DEFAULT_SYSTEM_PROMPT);
     expect(props.onSaveAgentSettings).toHaveBeenCalledTimes(1);
     expect(props.onSaveAgentSettings).toHaveBeenCalledWith(
       expect.objectContaining({ systemPrompt: DEFAULT_SYSTEM_PROMPT }),
@@ -224,6 +235,24 @@ describe('SettingsPanel', () => {
     });
     expect(screen.getByRole('status').textContent).toContain('5 条消息');
     expect(screen.getByRole('status').textContent).toContain('2 项配置');
+  });
+
+  it('导入失败时展示错误而不是结果', async () => {
+    vi.mocked(importFullSnapshot).mockRejectedValue(new Error('快照格式非法'));
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['{bad json'], 'broken.json', { type: 'application/json' });
+    await act(async () => {
+      fireEvent.change(fileInput, { target: { files: [file] } });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('import-error').textContent).toContain('快照格式非法');
+    });
+    // 失败路径不得留下成功结果
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('数据 tab 可进入并展示导出与导入入口', async () => {
