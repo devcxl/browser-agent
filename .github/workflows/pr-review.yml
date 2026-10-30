@@ -61,15 +61,26 @@ jobs:
 
       # 手动触发时事件载荷里没有 pull_request.base.sha，Action 会退回用
       # `gh pr view` 解析 base SHA，而 gh 在 Actions 里必须显式拿 token。
-      # 解析放在这个短步骤里：写权限 token 随步骤结束即失效，不会进入最长
-      # 90 分钟的审查步骤环境。
+      # token 的生命周期是整个 job（不是单个步骤），因此这里的隔离价值在于：
+      # 不把它放进最长 90 分钟的审查步骤的 env。审查步骤仍会通过 github_token
+      # 输入拿到同一个 token（发布回评评论必需），详见 docs/agents/pr-review.md。
       - name: Resolve base SHA
         id: base
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ inputs.pr_number }}
-        run: echo "sha=$(gh pr view "$PR_NUMBER" --json baseRefOid --jq .baseRefOid)" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          base_ref="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefName --jq .baseRefName)"
+          sha="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json baseRefOid --jq .baseRefOid)"
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]] || [[ -z "$base_ref" ]]; then
+            echo "::error::failed to resolve base branch/baseRefOid for PR #$PR_NUMBER"
+            exit 1
+          fi
+          # base 分支可能在 checkout 之后前移，先把它拉进本地对象库
+          git fetch --quiet origin "+refs/heads/$base_ref:refs/remotes/origin/$base_ref"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Run Pi PR Review
         uses: devcxl/agentic-action/pr-review@v1.0.0
@@ -87,10 +98,11 @@ jobs:
           # 把仓库约定喂给审查 Agent，让结论对齐本项目的术语与决策记录
           context_files: 'AGENTS.md CONTEXT.md'
           # 工具白名单（与 Action 默认值一致，显式固定以防上游默认值漂移）。
-          # 安全边界是这份白名单：不含 bash/powershell，Agent 即无法执行命令；
-          # exclude_tools 只是额外保险，放宽 tools 时必须同步复核。
+          # 安全边界是这份白名单：Action 会把它作为 --tools 传给 Pi CLI，
+          # 不含 bash/powershell 即无法执行命令；exclude_tools 是显式冗余保险
+          # （同时拒绝 bash 与 powershell 时，Action 自身也判定 shell 关闭）。
           tools: 'read,grep,find,ls'
-          exclude_tools: 'bash'
+          exclude_tools: 'bash,powershell'
           # 排除构建产物与 vendored 第三方代码（后者由 security-audit 单独审计）
           exclude: '**/dist/**,**/coverage/**,**/.wxt/**,**/test-results/**,**/src/content/floating-widget/grokbot/**'
           fail_on: ${{ inputs.fail_on || 'none' }}
