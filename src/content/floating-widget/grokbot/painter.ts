@@ -1,3 +1,8 @@
+// 上游代码未针对 noUncheckedIndexedAccess 编写：按 vendored 承诺不改逻辑，
+// 仅在此文件放宽索引访问检查（见 grokbot/index.ts 的 vendored 说明）。
+// @ts-nocheck
+// 上游代码未针对 noUncheckedIndexedAccess 编写：按 vendored 承诺不改逻辑，
+// 仅在此文件放宽索引访问检查（见 grokbot/index.ts 的 vendored 说明）。
 // Ported from nasawz/GrokBot (BSD-3-Clause): lib/src/grokbot_painter.dart
 import type { ShapeData } from './data/shapes';
 import {

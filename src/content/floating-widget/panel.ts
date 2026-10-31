@@ -9,6 +9,7 @@
  */
 
 import { translate } from '@/shared/i18n';
+import { extensionUrl } from '@/shared/extension-url';
 import { PANEL_WIDTH_DEFAULT, clampPanelWidth } from '@/shared/panel-width';
 import type { WidgetStatusReason } from '@/shared/types';
 import { WIDGET_MESSAGE_SOURCE } from '@/shared/widget-protocol';
@@ -165,7 +166,7 @@ export class ChatPanel {
 
   private createIframe(): void {
     const iframe = document.createElement('iframe');
-    iframe.src = browser.runtime.getURL('sidepanel.html') + '?embedded=1';
+    iframe.src = extensionUrl('sidepanel.html') + '?embedded=1';
     iframe.setAttribute('title', translate('widget.panelTitle'));
     iframe.setAttribute('allow', 'clipboard-read; clipboard-write');
     // 沙箱：允许脚本、表单，不允许顶层导航和弹窗
