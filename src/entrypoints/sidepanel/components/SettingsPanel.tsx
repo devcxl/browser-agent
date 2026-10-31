@@ -12,6 +12,8 @@ import { cn } from '../utils';
 import { useI18n } from '../i18n/useI18n';
 import { EXPERT_API_DOMAINS } from '@/shared/types';
 import { DEFAULT_ACCENT_COLOR, normalizeAccentColor } from '@/shared/accent-palette';
+import { exportFullSnapshot, importFullSnapshot } from '@/shared/data-transfer';
+import type { ImportResult } from '@/shared/data-transfer';
 import { applyTheme } from '../theme';
 import { ProviderWizard } from './ProviderWizard';
 import {
@@ -89,6 +91,7 @@ export function SettingsPanel({
   agentSettings,
   expertMode,
   onSaveProviders,
+  onSaveAgentSettings,
   onSaveExpertMode,
   onTestConnection,
   onClose,
@@ -100,7 +103,9 @@ export function SettingsPanel({
   const [systemPromptSaveStatus, setSystemPromptSaveStatus] = useState<'saved' | null>(null);
   // 数据 tab：导入状态
   const [importing, setImporting] = useState(false);
-  const [importResult, setImportResult] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  // 导出与导入各自一份错误：复用同一个状态会让导出失败被渲染成「导入失败」
+  const [exportError, setExportError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
   const [jevSettings, setJevSettings] = useState<JevSettings>({ enabled: false, apiKey: '' });
@@ -108,6 +113,24 @@ export function SettingsPanel({
   const [jevSaveStatus, setJevSaveStatus] = useState<'saved' | 'error' | null>(null);
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
   const [openSelectId, setOpenSelectId] = useState<string | null>(null);
+
+  // 面板每次「打开」都从已保存的 agentSettings 重建草稿：
+  // SettingsPanel 常驻挂载、仅用 open 控制显隐，如果只在首次挂载初始化，
+  // 用户编辑后关掉再打开会看到未保存的旧草稿。
+  //
+  // 只依赖 open（不依赖 agentSettings.systemPrompt）：保存本身会更新
+  // agentSettings，若把 systemPrompt 也放进依赖，保存后立刻重跑 effect 会把
+  // 刚设好的「已保存」提示清掉，用户永远看不到保存成功。
+  const wasOpenRef = useRef(open);
+  useEffect(() => {
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!justOpened) return;
+    setSystemPromptInput(agentSettings.systemPrompt);
+    setSystemPromptSaveStatus(null);
+    // agentSettings.systemPrompt 故意不进依赖，见上面的说明
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Provider
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null | undefined>(undefined);
@@ -203,10 +226,12 @@ export function SettingsPanel({
 
   const handleExportAll = async () => {
     try {
+      setExportError(null);
       await exportFullSnapshot();
-      setImportError(null);
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : '导出失败');
+      // 非 Error 拒绝（字符串/对象）也要有反馈：空 message 会被当作「没有错误」而静默
+      const detail = err instanceof Error ? err.message : String(err ?? '');
+      setExportError(detail || 'unknown');
     }
   };
 
@@ -577,7 +602,9 @@ export function SettingsPanel({
                   {t('settings.agent.systemPromptReset')}
                 </button>
                 {systemPromptSaveStatus === 'saved' && (
-                  <span role="status" className="text-xs text-success">{t('settings.agent.systemPromptSaved')}</span>
+                  <span role="status" data-testid="agent-system-prompt-saved" className="text-xs text-success">
+                    {t('settings.agent.systemPromptSaved')}
+                  </span>
                 )}
               </div>
 
@@ -871,6 +898,11 @@ export function SettingsPanel({
                 >
                   {t('data_exportAll')}
                 </button>
+                {exportError && (
+                  <p role="alert" data-testid="export-error" className="text-xs text-danger">
+                    {t('data_exportFailed')}: {exportError}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-xl border border-hairline p-4 space-y-3">
@@ -884,6 +916,7 @@ export function SettingsPanel({
                   <input
                     type="file"
                     accept="application/json,.json"
+                    data-testid="import-file-input"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];

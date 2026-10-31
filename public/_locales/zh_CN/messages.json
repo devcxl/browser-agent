@@ -827,6 +827,9 @@
   "data_importing": {
     "message": "导入中…"
   },
+  "data_exportFailed": {
+    "message": "导出失败"
+  },
   "data_importDone": {
     "message": "已导入 {c} 个会话、{m} 条消息与 {k} 项配置"
   },

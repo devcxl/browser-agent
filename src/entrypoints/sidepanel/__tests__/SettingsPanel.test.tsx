@@ -6,6 +6,8 @@ import { SettingsPanel } from '../components/SettingsPanel';
 import type { ProviderConfig } from '@/shared/types';
 import type { ConnectionTestResult } from '@/provider/connection-test';
 import { ConfigStore } from '@/shared/storage';
+import { DEFAULT_SYSTEM_PROMPT } from '@/shared/types/storage';
+import { exportFullSnapshot, importFullSnapshot } from '@/shared/data-transfer';
 import { createI18nMock } from '@/test/i18n-mock';
 
 // Mock browser.storage（ConfigStore 依赖）
@@ -55,6 +57,9 @@ beforeEach(() => {
     i18n: createI18nMock(),
   });
   ConfigStore.resetInstance();
+  // 数据导入导出的 mock 会留下调用记录与 mockResolvedValue，逐条清除以免跨用例泄漏
+  vi.mocked(exportFullSnapshot).mockClear();
+  vi.mocked(importFullSnapshot).mockReset();
 });
 
 afterEach(() => {
@@ -64,6 +69,11 @@ afterEach(() => {
 // Mock stores used internally by SettingsPanel (skills tab)
 vi.mock('@/shared/github-skill-fetcher', () => ({
   fetchSkillsFromGitHub: vi.fn().mockResolvedValue([]),
+}));
+// 数据导入导出走真实实现会碰 IndexedDB / 下载链接，这里只验证调用接线
+vi.mock('@/shared/data-transfer', () => ({
+  exportFullSnapshot: vi.fn().mockResolvedValue(undefined),
+  importFullSnapshot: vi.fn(),
 }));
 vi.mock('@/shared/storage', async () => {
   const actual = await vi.importActual('@/shared/storage');
@@ -98,6 +108,7 @@ function makeProps(overrides: Partial<React.ComponentProps<typeof SettingsPanel>
     agentSettings: {
       maxToolRounds: 10,
       contextWindowTokens: 128000,
+      systemPrompt: DEFAULT_SYSTEM_PROMPT,
     },
     expertMode: { enabled: false, switches: {} },
     onSaveProviders: vi.fn(),
@@ -151,6 +162,165 @@ describe('SettingsPanel', () => {
 
     await userEvent.click(themeSelect);
     expect(screen.getByRole('listbox', { name: '主题' })).toBeTruthy();
+  });
+
+  it('保存系统提示词会调用 onSaveAgentSettings（曾因漏解构 props 而抛 ReferenceError）', async () => {
+    const props = makeProps();
+    renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+
+    const input = screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '自定义提示词' } });
+    await userEvent.click(screen.getByTestId('agent-system-prompt-save'));
+
+    expect(props.onSaveAgentSettings).toHaveBeenCalledTimes(1);
+    expect(props.onSaveAgentSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ systemPrompt: '自定义提示词' }),
+    );
+  });
+
+  it('恢复默认系统提示词会写回默认值', async () => {
+    const props = makeProps();
+    renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+
+    // 先改成别的值，再复位：断言 textarea 真的回到默认值（受控输入 + 回写路径）
+    const input = screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '临时提示词' } });
+    expect(input.value).toBe('临时提示词');
+
+    await userEvent.click(screen.getByTestId('agent-system-prompt-reset'));
+
+    expect(input.value).toBe(DEFAULT_SYSTEM_PROMPT);
+    expect(props.onSaveAgentSettings).toHaveBeenCalledTimes(1);
+    expect(props.onSaveAgentSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ systemPrompt: DEFAULT_SYSTEM_PROMPT }),
+    );
+  });
+
+  it('导出全部数据会调用 exportFullSnapshot（曾因漏 import 而抛 ReferenceError）', async () => {
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+    await userEvent.click(screen.getByTestId('export-all-button'));
+
+    await waitFor(() => {
+      expect(exportFullSnapshot).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('导入快照会调用 importFullSnapshot 并按其返回值渲染结果（曾把 ImportResult 塞进 string state）', async () => {
+    vi.mocked(importFullSnapshot).mockResolvedValue({
+      conversations: 2,
+      messages: 5,
+      settingsKeys: ['theme', 'accentColor'],
+    });
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+    const fileInput = screen.getByTestId('import-file-input') as HTMLInputElement;
+    const file = new File(['{}'], 'snapshot.json', { type: 'application/json' });
+    await act(async () => {
+      fireEvent.change(fileInput, { target: { files: [file] } });
+    });
+
+    await waitFor(() => {
+      expect(importFullSnapshot).toHaveBeenCalledTimes(1);
+    });
+    // 结果对象按 { conversations, messages, settingsKeys } 渲染，而不是 "[object Object]"
+    const result = screen.getByTestId('import-result').textContent ?? '';
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain('2');
+    expect(result).toContain('5');
+  });
+
+  it('导出失败展示在导出区块（不得误报为导入失败）', async () => {
+    vi.mocked(exportFullSnapshot).mockRejectedValue(new Error('下载被拦截'));
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+    await userEvent.click(screen.getByTestId('export-all-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('export-error').textContent).toContain('下载被拦截');
+    });
+    // 导入区块不应出现任何错误
+    expect(screen.queryByTestId('import-error')).toBeNull();
+  });
+
+  it('保存后「已保存」提示保持可见（父组件更新 agentSettings 不得清掉它）', async () => {
+    const props = makeProps();
+    const { rerender } = renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+    const input = screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '新的提示词' } });
+    await userEvent.click(screen.getByTestId('agent-system-prompt-save'));
+
+    expect(screen.getByTestId('agent-system-prompt-saved')).toBeTruthy();
+
+    // 父组件收到 onSaveAgentSettings 后回传新的 agentSettings（真实 App.tsx 的行为）
+    rerender(
+      <SettingsPanel
+        {...props}
+        agentSettings={{ ...props.agentSettings, systemPrompt: '新的提示词' }}
+      />,
+    );
+
+    // 提示仍在，草稿也不被回退
+    expect(screen.getByTestId('agent-system-prompt-saved')).toBeTruthy();
+    expect((screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement).value)
+      .toBe('新的提示词');
+  });
+
+  it('导出以非 Error 值拒绝时也有错误反馈（不得静默）', async () => {
+    vi.mocked(exportFullSnapshot).mockRejectedValue('boom');
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+    await userEvent.click(screen.getByTestId('export-all-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('export-error').textContent).toContain('boom');
+    });
+  });
+
+  it('关闭后重新打开会丢弃未保存的草稿，显示已保存值', async () => {
+    const props = makeProps();
+    const { rerender } = renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+    const input = screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '未保存的草稿' } });
+    expect(input.value).toBe('未保存的草稿');
+
+    // 关闭再打开
+    rerender(<SettingsPanel {...props} open={false} />);
+    rerender(<SettingsPanel {...props} open />);
+
+    expect(
+      (screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement).value,
+    ).toBe(DEFAULT_SYSTEM_PROMPT);
+  });
+
+  it('导入失败时展示错误而不是结果', async () => {
+    vi.mocked(importFullSnapshot).mockRejectedValue(new Error('快照格式非法'));
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+    const fileInput = screen.getByTestId('import-file-input') as HTMLInputElement;
+    const file = new File(['{bad json'], 'broken.json', { type: 'application/json' });
+    await act(async () => {
+      fireEvent.change(fileInput, { target: { files: [file] } });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('import-error').textContent).toContain('快照格式非法');
+    });
+    // 失败路径不得留下成功结果
+    expect(screen.queryByRole('status')).toBeNull();
   });
 
   it('数据 tab 可进入并展示导出与导入入口', async () => {

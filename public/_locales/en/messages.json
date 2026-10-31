@@ -827,6 +827,9 @@
   "data_importing": {
     "message": "Importing…"
   },
+  "data_exportFailed": {
+    "message": "Export failed"
+  },
   "data_importDone": {
     "message": "Imported {c} conversations, {m} messages and {k} settings"
   },
