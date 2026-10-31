@@ -34,7 +34,10 @@ function applyVars(template: string, vars?: Record<string, string | number>): st
 export function translate(key: string, vars?: Record<string, string | number>): string {
   let raw = '';
   try {
-    raw = browser.i18n.getMessage(toMessageName(key)) || '';
+    // WXT 的声明把 messageName 收窄成了 messages.json 里实际存在的键字面量，
+    // 而这里的 key 来自运行时拼装，需要显式放开到 string 重载。
+    // 未命中时浏览器本就会返回空串，下面的兜底逻辑不变。
+    raw = browser.i18n.getMessage(toMessageName(key) as never) || '';
   } catch {
     raw = '';
   }

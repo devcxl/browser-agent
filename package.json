@@ -19,7 +19,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "typecheck": "tsc --noEmit",
-    "typecheck:sidepanel": "tsc -p tsconfig.sidepanel.json --noEmit",
+    "pretypecheck": "wxt prepare",
     "build:all": "bash scripts/build-all.sh",
     "verify:manifest": "bash scripts/verify-manifest.sh",
     "check:size": "bash scripts/check-size.sh",
