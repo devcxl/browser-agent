@@ -64,8 +64,6 @@ function createMockDb(): Database {
 function createMockLlm(): ILlmClient {
   return {
     chat: vi.fn(),
-    chatStream: vi.fn(),
-    checkHealth: vi.fn(),
   };
 }
 
@@ -337,7 +335,7 @@ describe('ConversationManager', () => {
         toolCalls: JSON.stringify([
           { id: 'call_9', name: 'getWeather', params: { city: 'SF' }, result: 'Foggy' },
         ]),
-        toolCallId: null,
+        toolCallId: undefined,
         timestamp: 200,
       },
     ]);

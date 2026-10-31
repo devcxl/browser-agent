@@ -155,7 +155,7 @@ const basicInput: AgentRunInput = {
   userMessage: 'Hello',
   providerConfig: createMockProviderConfig(),
   model: 'test-model',
-  browserContext: { tabs: [], windows: [], activeTabId: undefined },
+  browserContext: { currentWindow: { tabs: [] }, allWindows: [], tabGroups: [] },
 };
 
 describe('ToolLoopAdapter', () => {
@@ -307,7 +307,7 @@ describe('ToolLoopAdapter', () => {
     expect(executeMock).toHaveBeenCalledTimes(2);
     expect(third.success).toBe(false);
     expect(third.error).toContain('连续 3 次以完全相同的参数调用');
-    expect((third as Record<string, unknown>).duplicateBlocked).toBe(true);
+    expect((third as unknown as Record<string, unknown>).duplicateBlocked).toBe(true);
 
     // 软拦截期间 stopWhen 不熔断
     const stopConditions = capturedToolLoopAgentOptions?.['stopWhen'] as Array<(
@@ -2263,7 +2263,7 @@ describe('ToolLoopAdapter 工具执行与结果截断', () => {
     tool.preflight = vi.fn().mockResolvedValue({ affectedObjects: [], warnings: [] });
     adapter = new ToolLoopAdapter(registry, mockGuardrail, mockConversationManager, providerConfig, 'test-model');
 
-    const builtTools = adapter.tools;
+    const builtTools = adapter['tools'];
     const execute = builtTools['tabs_query']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
     const result = await execute({ id: '1' });
 
@@ -2286,7 +2286,7 @@ describe('ToolLoopAdapter 工具执行与结果截断', () => {
       'test-model',
     );
 
-    const execute = adapter.tools['tabs_remove']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
+    const execute = adapter['tools']['tabs_remove']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
     const result = await execute({ id: '1' });
     expect(result).toEqual({ success: false, error: '被拒绝' });
     expect(tool.execute).not.toHaveBeenCalled();
@@ -2307,7 +2307,7 @@ describe('ToolLoopAdapter 工具执行与结果截断', () => {
       'test-model',
     );
 
-    const execute = adapter.tools['tabs_query']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
+    const execute = adapter['tools']['tabs_query']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
     const res = await execute({});
     expect(res.success).toBe(true);
     expect(typeof res.data).toBe('string');
@@ -2330,7 +2330,7 @@ describe('ToolLoopAdapter 工具执行与结果截断', () => {
       'test-model',
     );
 
-    const execute = adapter.tools['tabs_query']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
+    const execute = adapter['tools']['tabs_query']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
     const result = await execute({});
     expect(result.success).toBe(true);
     // 未触发任何单字段截断，原样透出
@@ -2352,7 +2352,7 @@ describe('ToolLoopAdapter 工具执行与结果截断', () => {
       'test-model',
     );
 
-    const execute = adapter.tools['tabs_query']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
+    const execute = adapter['tools']['tabs_query']?.execute as (args: Record<string, unknown>) => Promise<ToolResult>;
     const result = await execute({});
     expect(result.success).toBe(false);
     expect((result.error as string).length).toBeLessThan(9_000);

@@ -146,6 +146,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
 
       const [gaze] = gazeUpdates(updateSpy);
       expect(gaze).toBeDefined();
+      if (!gaze) throw new Error('gaze should be defined');
       expect(Math.hypot(gaze.x, gaze.y)).toBeCloseTo(1, 5);
       expect(gaze.x / gaze.y).toBeCloseTo(500 / 300, 5);
       expect(gaze.x).toBeCloseTo(500 / Math.hypot(500, 300), 5);
@@ -181,6 +182,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
       expect(updateSpy).toHaveBeenCalledTimes(1);
       const [gaze] = gazeUpdates(updateSpy);
       expect(gaze).toBeDefined();
+      if (!gaze) throw new Error('gaze should be defined');
       expect(gaze.x).toBeCloseTo(0.64 / Math.SQRT2, 4);
       expect(gaze.y).toBeCloseTo(0.64 / Math.SQRT2, 4);
       expect(gaze.x).toBeCloseTo(gaze.y, 5);
@@ -193,6 +195,8 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
       movePointer(620, 300);
       flushFrame();
       const [gaze] = gazeUpdates(updateSpy);
+      expect(gaze).toBeDefined();
+      if (!gaze) throw new Error('gaze should be defined');
       expect(gaze.x).toBeCloseTo(0.4224, 4);
       expect(gaze.y).toBe(0);
 
@@ -252,9 +256,9 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
       const updates = gazeUpdates(updateSpy);
       expect(updates).toHaveLength(2);
       expect(updates[0]).toEqual({ x: 0, y: 0 });
-      expect(updates[1].x).toBeCloseTo(-500 / Math.hypot(500, 300), 5);
-      expect(updates[1].y).toBeCloseTo(-300 / Math.hypot(500, 300), 5);
-      expect(Math.hypot(updates[1].x, updates[1].y)).toBeCloseTo(1, 5);
+      expect(updates[1]!.x).toBeCloseTo(-500 / Math.hypot(500, 300), 5);
+      expect(updates[1]!.y).toBeCloseTo(-300 / Math.hypot(500, 300), 5);
+      expect(Math.hypot(updates[1]!.x, updates[1]!.y)).toBeCloseTo(1, 5);
     });
   });
 
@@ -267,7 +271,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
     function checkRestingEyes(turn: number, gaze: Vec2 = { x: 0, y: 0 }) {
       const origin: Vec2 = { x: FACE_CENTER, y: FACE_CENTER };
       const radius = 105;
-      const rings = expressionRings[0];
+      const rings = expressionRings[0]!;
       const mappedGaze = mapNormalizedGaze(gaze);
 
       const eyes = rings.map((ring) => {
@@ -283,14 +287,14 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
         });
         let maxDist = 0;
         for (let i = 0; i < ring.length; i += 2) {
-          const vx = proj.center.x + (ring[i] - center.x) * proj.scaleX;
-          const vy = proj.center.y + (ring[i + 1] - center.y) * proj.scaleY;
+          const vx = proj.center.x + (ring[i]! - center.x) * proj.scaleX;
+          const vy = proj.center.y + (ring[i + 1]! - center.y) * proj.scaleY;
           maxDist = Math.max(maxDist, Math.hypot(vx - origin.x, vy - origin.y));
         }
         return { ...proj, maxDist };
       });
 
-      const midX = (eyes[0].center.x + eyes[1].center.x) / 2;
+      const midX = (eyes[0]!.center.x + eyes[1]!.center.x) / 2;
       const allVisible = eyes.every((e) => e.visible);
       const anyClipped = eyes.some((e) => e.maxDist > radius);
 
@@ -334,7 +338,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
         .filter((turn): turn is number => typeof turn === 'number');
 
       expect(turnCalls.length).toBeGreaterThanOrEqual(1);
-      const newTurn = turnCalls[turnCalls.length - 1];
+      const newTurn = turnCalls[turnCalls.length - 1]!;
       const { midX, allVisible, anyClipped } = checkRestingEyes(newTurn);
       expect(midX).toBeGreaterThan(FACE_CENTER);
       expect(allVisible).toBe(true);
@@ -358,7 +362,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
         .filter((turn): turn is number => typeof turn === 'number');
 
       expect(turnCalls.length).toBeGreaterThanOrEqual(1);
-      const newTurn = turnCalls[turnCalls.length - 1];
+      const newTurn = turnCalls[turnCalls.length - 1]!;
       const { midX, allVisible, anyClipped } = checkRestingEyes(newTurn);
       expect(midX).toBeGreaterThan(FACE_CENTER);
       expect(allVisible).toBe(true);
@@ -419,7 +423,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
     const radius = 105;
 
     it('pitch = 0 必须与旧 projectEye 逐位一致（backward compat）', () => {
-      const ring = expressionRings[0][0];
+      const ring = expressionRings[0]![0]!;
       const centroid = ringCentroid(ring);
       const gaze = { x: 0.3, y: 0.5 };
       const baseResult = projectEye({
@@ -460,7 +464,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
     it('真实用户症状回归：idle (expression 0) 在 bottom-center (0, 1) 时双眼中心越过 FACE_CENTER 移至下半球', () => {
       const targetPitch = calculateTargetPitch(1);
       const mappedGaze = mapNormalizedGaze({ x: 0, y: 1 });
-      const rings = expressionRings[0];
+      const rings = expressionRings[0]!;
       const centers = rings.map((ring) => {
         const center = ringCentroid(ring);
         const proj = projectEye({
@@ -475,14 +479,14 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
         });
         return proj.center;
       });
-      const midY = (centers[0].y + centers[1].y) / 2;
+      const midY = (centers[0]!.y + centers[1]!.y) / 2;
       expect(midY).toBeGreaterThan(FACE_CENTER);
     });
 
     it('真实用户症状回归：idle (expression 0) 在右停靠向 bottom-left (gaze.y ≈ 0.4) 视线追踪时，双眼中心仍越过 FACE_CENTER', () => {
       const targetPitch = calculateTargetPitch(0.4);
       const mappedGaze = mapNormalizedGaze({ x: -0.85, y: 0.4 });
-      const rings = expressionRings[0];
+      const rings = expressionRings[0]!;
       const centers = rings.map((ring) => {
         const center = ringCentroid(ring);
         const proj = projectEye({
@@ -497,7 +501,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
         });
         return proj.center;
       });
-      const midY = (centers[0].y + centers[1].y) / 2;
+      const midY = (centers[0]!.y + centers[1]!.y) / 2;
       expect(midY).toBeGreaterThan(FACE_CENTER);
     });
 
@@ -505,7 +509,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
       const targetPitch = calculateTargetPitch(1);
       const mappedGaze = mapNormalizedGaze({ x: 0, y: 1 });
       const safePitch = clampSafePitch({
-        rings: expressionRings[0],
+        rings: expressionRings[0]!,
         origin,
         radius,
         turn: -0.65,
@@ -524,7 +528,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
             const targetPitch = calculateTargetPitch(gy);
             const mappedGaze = mapNormalizedGaze({ x: 0, y: gy });
             const safePitch = clampSafePitch({
-              rings: expressionRings[e],
+              rings: expressionRings[e]!,
               origin,
               radius,
               turn,
@@ -534,7 +538,7 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
             });
 
             // 无论 targetPitch 如何，clamped safePitch 必须保证不超出允许半径范围
-            for (const ring of expressionRings[e]) {
+            for (const ring of expressionRings[e]!) {
               const center = ringCentroid(ring);
               // 计算 pitch=0 时的基准最大距离
               const baseProj = projectEye({
@@ -549,8 +553,8 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
               });
               let baseMax = 0;
               for (let i = 0; i < ring.length; i += 2) {
-                const vx = baseProj.center.x + (ring[i] - center.x) * baseProj.scaleX;
-                const vy = baseProj.center.y + (ring[i + 1] - center.y) * baseProj.scaleY;
+                const vx = baseProj.center.x + (ring[i]! - center.x) * baseProj.scaleX;
+                const vy = baseProj.center.y + (ring[i + 1]! - center.y) * baseProj.scaleY;
                 baseMax = Math.max(baseMax, Math.hypot(vx - origin.x, vy - origin.y));
               }
               const maxAllowed = Math.max(radius, baseMax);
@@ -566,8 +570,8 @@ describe('FloatingWidget 眼睛追踪（gaze）', () => {
                 blinkScale: 1,
               });
               for (let i = 0; i < ring.length; i += 2) {
-                const vx = proj.center.x + (ring[i] - center.x) * proj.scaleX;
-                const vy = proj.center.y + (ring[i + 1] - center.y) * proj.scaleY;
+                const vx = proj.center.x + (ring[i]! - center.x) * proj.scaleX;
+                const vy = proj.center.y + (ring[i + 1]! - center.y) * proj.scaleY;
                 const dist = Math.hypot(vx - origin.x, vy - origin.y);
                 expect(dist).toBeLessThanOrEqual(maxAllowed + 0.1);
               }

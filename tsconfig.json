@@ -18,8 +18,10 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "types": ["chrome", "vitest/globals"]
+    "types": ["chrome", "vitest/globals", "@testing-library/jest-dom/vitest"]
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", ".wxt/types/*.d.ts"],
-  "exclude": ["node_modules", "dist", "src/**/__tests__", "src/content/floating-widget/grokbot"]
+  // vendored 的 grokbot 为第三方代码，不纳入本项目类型检查。
+  // 测试文件（__tests__）自 #253 阶段三起纳入 typecheck。
+  "exclude": ["node_modules", "dist", "src/content/floating-widget/grokbot"]
 }

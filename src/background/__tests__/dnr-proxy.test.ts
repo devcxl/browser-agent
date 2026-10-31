@@ -30,7 +30,7 @@ describe('DnrProxy', () => {
     const adapter = createMockAdapter();
     const proxy = new DnrProxy(adapter);
 
-    const rule = { id: 2, action: { type: 'block' as const }, condition: { urlFilter: '*://y.com/*' } };
+    const rule: chrome.declarativeNetRequest.Rule = { id: 2, action: { type: 'block' as chrome.declarativeNetRequest.RuleActionType }, condition: { urlFilter: '*://y.com/*' } };
     await proxy.addDynamicRules({ rules: [rule] });
 
     expect(adapter.declarativeNetRequest.addDynamicRules).toHaveBeenCalledWith([rule]);

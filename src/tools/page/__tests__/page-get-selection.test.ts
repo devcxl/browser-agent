@@ -27,7 +27,7 @@ describe('page_read_selection tool', () => {
       method: 'page.getSelection',
       params: {},
     });
-    expect(result.data.text).toBe('selected text');
+    expect((result.data as { text: string }).text).toBe('selected text');
   });
 
   it('should not have preflight defined', () => {

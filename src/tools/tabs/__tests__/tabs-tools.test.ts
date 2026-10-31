@@ -231,8 +231,8 @@ describe('tab_set', () => {
 describe('tab_close', () => {
   it('preflight 返回受影响标签页清单，批量时给出警告', async () => {
     const rpc = createMockRpc();
-    vi.mocked(rpc.request).mockImplementation((_method: string, params: Record<string, unknown>) =>
-      Promise.resolve({ id: params.tabId, title: `Tab ${params.tabId}`, url: 'https://example.com' }));
+    vi.mocked(rpc.request).mockImplementation((async (_method: string, params?: Record<string, unknown>) =>
+      Promise.resolve({ id: params?.tabId, title: `Tab ${params?.tabId}`, url: 'https://example.com' })) as typeof rpc.request);
     const tool = getTool('tab_close', rpc);
 
     const preflight = await tool.preflight!({ tabIds: [1, 2, 3, 4, 5, 6] });

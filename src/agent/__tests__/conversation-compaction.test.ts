@@ -30,7 +30,7 @@ describe('conversation compaction', () => {
 
     expect(cutoff).toBe(8);
     expect(messages[cutoff!]?.role).toBe('user');
-    expect(messages.slice(cutoff).filter((message) => message.role === 'user')).toHaveLength(2);
+    expect(messages.slice(cutoff!).filter((message) => message.role === 'user')).toHaveLength(2);
   });
 
   it('摘要输入保留工具名称、参数与执行结果', () => {
@@ -78,7 +78,7 @@ describe('conversation compaction', () => {
     // user 索引依次为 [0,2,4,6,8,10]，保留最近 2 轮 → latestCutoff = 8 (user-4)。
     // cutoff=8 时剩余仅为 2 个短轮次，token 落入预算，命中循环内的 return。
     expect(cutoff).toBe(8);
-    expect(messages.slice(cutoff).filter((message) => message.role === 'user')).toHaveLength(2);
+    expect(messages.slice(cutoff!).filter((message) => message.role === 'user')).toHaveLength(2);
   });
 
   it('无足够 user 轮次可裁时返回 null', () => {
@@ -132,7 +132,7 @@ describe('conversation compaction', () => {
     const cutoff = selectSummaryCutoff(messages, 0, 1, 1);
 
     expect(cutoff).toBe(6);
-    expect(messages.slice(cutoff).filter((m) => m.role === 'user')).toHaveLength(1);
+    expect(messages.slice(cutoff!).filter((m) => m.role === 'user')).toHaveLength(1);
   });
 
   it('预算充足时从最早 user 截止点即可返回', () => {
@@ -214,7 +214,7 @@ describe('conversation compaction', () => {
     const cutoff = selectSummaryCutoff(messages, 0, 100, 2);
 
     expect(cutoff).toBe(4);
-    expect(messages.slice(cutoff).filter((m) => m.role === 'user')).toHaveLength(2);
+    expect(messages.slice(cutoff!).filter((m) => m.role === 'user')).toHaveLength(2);
   });
 
   it('中间 user 轮次满足预算时返回该轮而非 latestCutoff', () => {
@@ -233,6 +233,6 @@ describe('conversation compaction', () => {
     const cutoff = selectSummaryCutoff(messages, 0, 200, 1);
 
     expect(cutoff).toBe(6);
-    expect(messages.slice(cutoff).filter((m) => m.role === 'user')).toHaveLength(2);
+    expect(messages.slice(cutoff!).filter((m) => m.role === 'user')).toHaveLength(2);
   });
 });

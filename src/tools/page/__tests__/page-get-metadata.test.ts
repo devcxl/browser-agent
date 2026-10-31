@@ -27,7 +27,7 @@ describe('page_read_metadata tool', () => {
       method: 'page.getMetadata',
       params: {},
     });
-    expect(result.data.title).toBe('Page Title');
+    expect((result.data as { title: string }).title).toBe('Page Title');
   });
 
   it('should not have preflight defined', () => {

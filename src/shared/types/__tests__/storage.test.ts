@@ -18,11 +18,14 @@ describe('Storage types', () => {
         agentSettings: {
           maxToolRounds: 99,
           contextWindowTokens: 128000,
+          systemPrompt: '',
         },
         expertModeSettings: { enabled: false, switches: {} },
-        preferences: { theme: 'system', sidebarExpanded: true },
+        preferences: { theme: 'system', sidebarExpanded: true, reasoningAutoExpand: false },
         skills: [],
         skillSubscriptions: [],
+        jevSettings: { enabled: false, apiKey: '' },
+        floatingButtonSettings: { enabled: true, position: null, blacklist: [] },
       };
       expect(schema.agentSettings.maxToolRounds).toBe(99);
     });
@@ -33,6 +36,7 @@ describe('Storage types', () => {
       const s: AgentSettings = {
         maxToolRounds: 10,
         contextWindowTokens: 128000,
+        systemPrompt: '',
       };
       expect(s.maxToolRounds).toBe(10);
     });
@@ -47,7 +51,7 @@ describe('Storage types', () => {
 
   describe('UserPreferences', () => {
     it('should accept user preferences', () => {
-      const p: UserPreferences = { theme: 'dark', sidebarExpanded: false };
+      const p: UserPreferences = { theme: 'dark', sidebarExpanded: false, reasoningAutoExpand: false };
       expect(p.theme).toBe('dark');
     });
   });
@@ -98,11 +102,14 @@ describe('Storage types', () => {
           agentSettings: {
             maxToolRounds: 99,
             contextWindowTokens: 128000,
+            systemPrompt: '',
           },
           expertModeSettings: { enabled: false, switches: {} },
-          preferences: { theme: 'system', sidebarExpanded: true },
+          preferences: { theme: 'system', sidebarExpanded: true, reasoningAutoExpand: false },
           skills: [],
           skillSubscriptions: [],
+          jevSettings: { enabled: false, apiKey: '' },
+          floatingButtonSettings: { enabled: true, position: null, blacklist: [] },
         }),
         patch: async () => {},
         onChange: () => () => {},

@@ -149,8 +149,11 @@ async function validateWithAiSdk(messages: ModelMessage[]): Promise<void> {
   const model = new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: 'text', text: 'ok' }],
-      finishReason: 'stop',
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: {
+        inputTokens: { total: 1, noCache: 1, cacheRead: undefined, cacheWrite: undefined },
+        outputTokens: { total: 1, text: 1, reasoning: undefined },
+      },
       warnings: [],
     }),
   });
@@ -180,8 +183,8 @@ function toolResultParts(message: ModelMessage): ToolResultPartShape[] {
   return message.content as ToolResultPartShape[];
 }
 
-function parseToolCalls(raw: string | undefined): StoredMessage['toolCalls'] {
-  return raw ? (JSON.parse(raw) as StoredMessage['toolCalls']) : [];
+function parseToolCalls(raw: string | undefined): NonNullable<StoredMessage['toolCalls']> {
+  return raw ? (JSON.parse(raw) as NonNullable<StoredMessage['toolCalls']>) : [];
 }
 
 describe('ToolLoopAdapter 历史重放（#229）', () => {
@@ -238,7 +241,7 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
       userMessage,
       providerConfig: PROVIDER_CONFIG,
       model: 'test-model',
-      browserContext: { tabs: [], windows: [], activeTabId: undefined },
+      browserContext: { currentWindow: { tabs: [] }, allWindows: [], tabGroups: [] },
     };
   }
 
@@ -300,7 +303,7 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
         && message.toolCallId === failure.toolCallId
         && message.content === JSON.stringify(failure.result));
       const callRow = stored.find((message) => message.role === 'assistant'
-        && parseToolCalls(message.toolCalls).some((call) => call.id === failure.toolCallId));
+        && parseToolCalls(message.toolCalls).some((call) => call!.id === failure.toolCallId));
       expect(toolRow).toBeDefined();
       expect(callRow).toBeDefined();
       // 同一批写入分配严格递增的逻辑时间戳：调用行在前、结果行紧随其后
@@ -495,7 +498,7 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
 
     const storedAfterFirst = await db.getMessagesByConversation(conversationId);
     const callRows = storedAfterFirst.filter((message) => message.role === 'assistant'
-      && parseToolCalls(message.toolCalls).some((call) => call.id === 'missing-live'));
+      && parseToolCalls(message.toolCalls).some((call) => call!.id === 'missing-live'));
     expect(callRows).toHaveLength(1);
     // 调用行仍然落库，但没有对应的假结果行
     expect(storedAfterFirst.filter(
@@ -597,7 +600,7 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
 
     const stored = await db.getMessagesByConversation(conversationId);
     const callRows = stored.filter((message) => message.role === 'assistant'
-      && parseToolCalls(message.toolCalls).some((call) => call.id === 'dup-call'));
+      && parseToolCalls(message.toolCalls).some((call) => call!.id === 'dup-call'));
     const toolRows = stored.filter((message) => message.role === 'tool'
       && message.toolCallId === 'dup-call');
 
@@ -607,7 +610,7 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
     expect(toolRows.every((row) => row.id !== 'dup-call')).toBe(true);
 
     const parentInputById = new Map(callRows.map((row) => {
-      const call = parseToolCalls(row.toolCalls).find((candidate) => candidate.id === 'dup-call');
+      const call = parseToolCalls(row.toolCalls).find((candidate) => candidate!.id === 'dup-call');
       return [row.id, call?.params.id] as const;
     }));
     const expectedResultByInput = new Map<string, ToolResult>([
@@ -699,9 +702,9 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
     expect(toolRowsB[0]!.content).toBe(JSON.stringify(resultB));
 
     const callRowA = storedA.find((message) => message.role === 'assistant'
-      && parseToolCalls(message.toolCalls).some((call) => call.id === 'shared-call'));
+      && parseToolCalls(message.toolCalls).some((call) => call!.id === 'shared-call'));
     const callRowB = storedB.find((message) => message.role === 'assistant'
-      && parseToolCalls(message.toolCalls).some((call) => call.id === 'shared-call'));
+      && parseToolCalls(message.toolCalls).some((call) => call!.id === 'shared-call'));
     expect(toolRowsA[0]!.parentMessageId).toBe(callRowA!.id);
     expect(toolRowsB[0]!.parentMessageId).toBe(callRowB!.id);
 
@@ -1036,7 +1039,8 @@ describe('ToolLoopAdapter 历史重放（#229）', () => {
       await adapter.run(makeInput('后续用户'));
 
       const after = await db.getMessagesByConversation(conversationId);
-      const lastUserIndex = after.findLastIndex((row) => row.role === 'user');
+      // lib 为 es2022，手写 findLastIndex 语义
+      const lastUserIndex = after.reduce<number>((acc, row, i) => (row.role === 'user' ? i : acc), -1);
       const firstStepIndex = after.findIndex((row) => row.role === 'tool');
       expect(lastUserIndex).toBeGreaterThan(firstStepIndex);
       expect(after.at(-1)!.role).toBe('assistant');

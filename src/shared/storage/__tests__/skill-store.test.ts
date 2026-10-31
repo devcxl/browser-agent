@@ -215,7 +215,7 @@ describe('SkillStore', () => {
     const setCall = browserMock.mock.set.mock.calls[0]?.[0] as {
       skills: Skill[];
     };
-    const updated = setCall.skills[0];
+    const updated = setCall.skills[0]!;
     expect(updated.name).toBe('新名称');
     expect(updated.enabled).toBe(true); // 未修改字段保持不变
     expect(updated.id).toBe('s1');
@@ -378,7 +378,7 @@ describe('SkillStore', () => {
     // meta 不应包含 prompt/resources 字段
     const storedMeta = (browserMock.mock.set.mock.calls[0]?.[0] as {
       skills: Skill[];
-    }).skills[0];
+    }).skills[0]!;
     expect(storedMeta.prompt).toBe('');
     expect(storedMeta.resources).toEqual([]);
     expect(storedMeta.name).toBe('测试 Skill');
@@ -635,7 +635,7 @@ describe('SkillStore', () => {
     browserMock.mock.get.mockResolvedValueOnce({ skills: [s1, s2] });
     const enabled = await store.getEnabled();
     expect(enabled).toHaveLength(1);
-    expect(enabled[0].id).toBe('s1');
+    expect(enabled[0]!.id).toBe('s1');
 
     // 5. update s2 启用
     browserMock.mock.get.mockResolvedValueOnce({ skills: [s1, s2] });

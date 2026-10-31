@@ -17,6 +17,11 @@ function createMockAdapter(browserType: 'chrome' | 'firefox'): IBrowserAdapter {
     storage: { local: {} as any },
     clipboard: {} as any,
     addListener: vi.fn() as any,
+    management: {} as any,
+    privacy: {} as any,
+    proxy: {} as any,
+    debugger: {} as any,
+    declarativeNetRequest: {} as any,
   };
 }
 

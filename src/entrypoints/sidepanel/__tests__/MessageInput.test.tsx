@@ -36,7 +36,7 @@ function defaultMock(): UseVoiceInputReturn {
 }
 
 function getLatestMockReturn(): UseVoiceInputReturn & { __onTranscribed: (text: string) => void } {
-  return mockUseVoiceInput.mock.results[mockUseVoiceInput.mock.results.length - 1].value;
+  return mockUseVoiceInput.mock.results[mockUseVoiceInput.mock.results.length - 1]!.value;
 }
 
 const EMPTY_PROVIDERS: ProviderConfig[] = [];
@@ -510,7 +510,7 @@ describe('MessageInput', () => {
 
   it('查看其他会话（otherRunning）时禁用输入并提示稍后发送', () => {
     wrappedRender(
-      <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled otherRunning providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
+      <MessageInput onSend={vi.fn()} onAbort={vi.fn()} disabled isRunning={false} otherRunning providers={[PROVIDER_NO_CONTEXT_LIMIT]} selectedModelId="chat" />,
     );
 
     const input = screen.getByTestId('message-input') as HTMLTextAreaElement;

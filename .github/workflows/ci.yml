@@ -29,7 +29,7 @@ jobs:
 
   # 类型检查独立成 job：lint 不覆盖类型错误，而发版工作流才会撞上，
   # 缺了这道门禁，类型问题会一直潜伏到打 tag 才暴露。
-  # 覆盖面为 src 全量（含 entrypoints / content）；vendored 的 grokbot 见 tsconfig 注释。
+  # 覆盖面为 src 全量（含 entrypoints / content / __tests__）；vendored 的 grokbot 见 tsconfig 注释。
   typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10

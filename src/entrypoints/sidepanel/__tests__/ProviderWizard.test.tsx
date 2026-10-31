@@ -12,7 +12,7 @@ import { createI18nMock } from '@/test/i18n-mock';
 
 function createMockBrowser() {
   const storage: Record<string, unknown> = {};
-  const listeners: Array<(changes: Record<string, browser.storage.StorageChange>) => void> = [];
+  const listeners: Array<(changes: Record<string, chrome.storage.StorageChange>) => void> = [];
 
   const local = {
     get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {

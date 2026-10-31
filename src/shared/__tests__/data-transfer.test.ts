@@ -10,7 +10,7 @@ function conv(overrides: Partial<Conversation> = {}): Conversation {
     createdAt: 0,
     updatedAt: 0,
     messages: [],
-    summary: null,
+    summary: undefined,
     summaryUpToIndex: 0,
     sensitiveDataGranted: false,
     ...overrides,

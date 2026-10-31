@@ -13,7 +13,7 @@ import { createI18nMock } from '@/test/i18n-mock';
 // Mock browser.storage（ConfigStore 依赖）
 function createMockBrowser() {
   const storage: Record<string, unknown> = {};
-  const listeners: Array<(changes: Record<string, browser.storage.StorageChange>) => void> = [];
+  const listeners: Array<(changes: Record<string, chrome.storage.StorageChange>) => void> = [];
 
   const local = {
     get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {
@@ -401,7 +401,7 @@ describe('SettingsPanel', () => {
     await userEvent.click(screen.getByText('删除'));
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onSave.mock.calls[0][0]).toHaveLength(0);
+    expect(onSave.mock.calls[0]![0]).toHaveLength(0);
   });
 
   it('可保存无 API Key 的自定义 OpenAI-compatible Provider 与模型快照', async () => {
@@ -510,7 +510,7 @@ describe('SettingsPanel', () => {
   describe('连通性测试 (Connection Test)', () => {
     it('正确区分 ConnectionTestResult 失败，绝不将 failure 对象误判为通过', async () => {
       const provider = makeProvider({ id: 'p1', name: 'OpenAI Provider' });
-      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockResolvedValue({
+      const onTestConnection = vi.fn<(provider: ProviderConfig) => Promise<ConnectionTestResult>>().mockResolvedValue({
         ok: false,
         reason: 'request-failed',
       });
@@ -541,7 +541,7 @@ describe('SettingsPanel', () => {
 
     it('连通性测试通过时显示成功状态与无障碍 live 属性', async () => {
       const provider = makeProvider({ id: 'p1', name: 'OpenAI Provider' });
-      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockResolvedValue({ ok: true });
+      const onTestConnection = vi.fn<(provider: ProviderConfig) => Promise<ConnectionTestResult>>().mockResolvedValue({ ok: true });
       const props = makeProps({
         providers: [provider],
         onTestConnection,
@@ -610,7 +610,7 @@ describe('SettingsPanel', () => {
       const testPromise = new Promise<ConnectionTestResult>((resolve) => {
         resolveTest = resolve;
       });
-      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
+      const onTestConnection = vi.fn<(provider: ProviderConfig) => Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
       const onSaveProviders = vi.fn();
       const p1 = makeProvider({ id: 'p1', name: 'Provider 1', endpoint: 'https://old.endpoint/v1' });
 
@@ -656,7 +656,7 @@ describe('SettingsPanel', () => {
       const testPromise = new Promise<ConnectionTestResult>((resolve) => {
         resolveTest = resolve;
       });
-      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
+      const onTestConnection = vi.fn<(provider: ProviderConfig) => Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
       const onSaveProviders = vi.fn();
       const p1 = makeProvider({
         id: 'p1',
@@ -716,7 +716,7 @@ describe('SettingsPanel', () => {
         resolveTest = resolve;
       });
       const p1 = makeProvider({ id: 'p1', name: 'Provider 1' });
-      const onTestConnection = vi.fn<[ProviderConfig], Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
+      const onTestConnection = vi.fn<(provider: ProviderConfig) => Promise<ConnectionTestResult>>().mockReturnValue(testPromise);
 
       renderWithI18n(
         <SettingsPanel

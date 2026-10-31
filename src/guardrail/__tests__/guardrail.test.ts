@@ -11,6 +11,7 @@ function createMockRegistry(getTool: (name: string) => ToolDefinition | undefine
     getAllTools: vi.fn(),
     getToolsByCategory: vi.fn(),
     unregisterCategory: vi.fn(),
+    size: 0,
   };
 }
 
