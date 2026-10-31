@@ -220,7 +220,7 @@ describe('SettingsPanel', () => {
     renderWithI18n(<SettingsPanel {...makeProps()} />);
 
     await userEvent.click(screen.getByRole('button', { name: '数据' }));
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const fileInput = screen.getByTestId('import-file-input') as HTMLInputElement;
     const file = new File(['{}'], 'snapshot.json', { type: 'application/json' });
     await act(async () => {
       fireEvent.change(fileInput, { target: { files: [file] } });
@@ -230,11 +230,42 @@ describe('SettingsPanel', () => {
       expect(importFullSnapshot).toHaveBeenCalledTimes(1);
     });
     // 结果对象按 { conversations, messages, settingsKeys } 渲染，而不是 "[object Object]"
+    const result = screen.getByTestId('import-result').textContent ?? '';
+    expect(result).not.toContain('[object Object]');
+    expect(result).toContain('2');
+    expect(result).toContain('5');
+  });
+
+  it('导出失败展示在导出区块（不得误报为导入失败）', async () => {
+    vi.mocked(exportFullSnapshot).mockRejectedValue(new Error('下载被拦截'));
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+    await userEvent.click(screen.getByTestId('export-all-button'));
+
     await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('2 个会话');
+      expect(screen.getByTestId('export-error').textContent).toContain('下载被拦截');
     });
-    expect(screen.getByRole('status').textContent).toContain('5 条消息');
-    expect(screen.getByRole('status').textContent).toContain('2 项配置');
+    // 导入区块不应出现任何错误
+    expect(screen.queryByTestId('import-error')).toBeNull();
+  });
+
+  it('关闭后重新打开会丢弃未保存的草稿，显示已保存值', async () => {
+    const props = makeProps();
+    const { rerender } = renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+    const input = screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '未保存的草稿' } });
+    expect(input.value).toBe('未保存的草稿');
+
+    // 关闭再打开
+    rerender(<SettingsPanel {...props} open={false} />);
+    rerender(<SettingsPanel {...props} open />);
+
+    expect(
+      (screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement).value,
+    ).toBe(DEFAULT_SYSTEM_PROMPT);
   });
 
   it('导入失败时展示错误而不是结果', async () => {
@@ -242,7 +273,7 @@ describe('SettingsPanel', () => {
     renderWithI18n(<SettingsPanel {...makeProps()} />);
 
     await userEvent.click(screen.getByRole('button', { name: '数据' }));
-    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const fileInput = screen.getByTestId('import-file-input') as HTMLInputElement;
     const file = new File(['{bad json'], 'broken.json', { type: 'application/json' });
     await act(async () => {
       fireEvent.change(fileInput, { target: { files: [file] } });

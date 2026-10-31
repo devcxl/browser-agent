@@ -104,6 +104,8 @@ export function SettingsPanel({
   // 数据 tab：导入状态
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  // 导出与导入各自一份错误：复用同一个状态会让导出失败被渲染成「导入失败」
+  const [exportError, setExportError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [theme, setTheme] = useState<UserPreferences['theme']>('system');
   const [jevSettings, setJevSettings] = useState<JevSettings>({ enabled: false, apiKey: '' });
@@ -111,6 +113,15 @@ export function SettingsPanel({
   const [jevSaveStatus, setJevSaveStatus] = useState<'saved' | 'error' | null>(null);
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
   const [openSelectId, setOpenSelectId] = useState<string | null>(null);
+
+  // 面板每次打开都从已保存的 agentSettings 重建草稿：
+  // SettingsPanel 常驻挂载、仅用 open 控制显隐，如果只在首次挂载初始化，
+  // 用户编辑后关掉再打开会看到未保存的旧草稿，导入快照后的新值也不会反映。
+  useEffect(() => {
+    if (!open) return;
+    setSystemPromptInput(agentSettings.systemPrompt);
+    setSystemPromptSaveStatus(null);
+  }, [open, agentSettings.systemPrompt]);
 
   // Provider
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null | undefined>(undefined);
@@ -206,10 +217,10 @@ export function SettingsPanel({
 
   const handleExportAll = async () => {
     try {
+      setExportError(null);
       await exportFullSnapshot();
-      setImportError(null);
     } catch (err) {
-      setImportError(err instanceof Error ? err.message : '导出失败');
+      setExportError(err instanceof Error ? err.message : '');
     }
   };
 
@@ -874,6 +885,11 @@ export function SettingsPanel({
                 >
                   {t('data_exportAll')}
                 </button>
+                {exportError && (
+                  <p role="alert" data-testid="export-error" className="text-xs text-danger">
+                    {t('data_exportFailed')}: {exportError}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-xl border border-hairline p-4 space-y-3">
@@ -887,6 +903,7 @@ export function SettingsPanel({
                   <input
                     type="file"
                     accept="application/json,.json"
+                    data-testid="import-file-input"
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
