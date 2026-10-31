@@ -29,7 +29,11 @@ jobs:
 
   # 类型检查独立成 job：lint 不覆盖类型错误，而发版工作流才会撞上，
   # 缺了这道门禁，类型问题会一直潜伏到打 tag 才暴露。
-  # 覆盖范围以 tsconfig.json 为准（当前排除 src/entrypoints、src/content 与测试目录）。
+  #
+  # 跑两份配置：
+  #   - typecheck          ：主 tsconfig（排除 src/entrypoints、src/content 与测试目录）
+  #   - typecheck:sidepanel：额外覆盖侧边栏，逐步把 src/entrypoints 纳入检查
+  # 剩下的 background / content 尚未清零，清完后可合并回主配置。
   typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -41,6 +45,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run typecheck:sidepanel
 
   test:
     needs: lint

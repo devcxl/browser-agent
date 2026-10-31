@@ -238,7 +238,6 @@ export function ChatSelect({
             id={`${id}-listbox`}
             role="listbox"
             aria-label={label}
-            style={menuStyle}
             className={cn(
               'z-50 overflow-y-auto',
               'bg-surface-card border border-hairline rounded-lg shadow-lg',

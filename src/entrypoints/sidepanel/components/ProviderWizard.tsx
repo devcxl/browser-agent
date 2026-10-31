@@ -327,7 +327,13 @@ export function ProviderWizard({ provider, onSave, onClose, initialStep }: Props
                     <label key={effort} className="inline-flex cursor-pointer items-center gap-1.5">
                       <SettingsCheckbox checked={selectedEfforts.includes(effort)} onChange={(event) => {
                         const next = event.target.checked ? [...selectedEfforts, effort] : selectedEfforts.filter((item) => item !== effort);
-                        updateModel(key, { reasoningEfforts: next, defaultReasoningEffort: next.includes(model.defaultReasoningEffort ?? '') ? model.defaultReasoningEffort : next[0] });
+                        // 当前默认值被取消勾选时，退回剩余选项的首项（可能为空 → 清除默认值）
+                        const currentDefault = model.defaultReasoningEffort;
+                        const keepDefault = currentDefault !== undefined && next.includes(currentDefault);
+                        updateModel(key, {
+                          reasoningEfforts: next,
+                          defaultReasoningEffort: keepDefault ? currentDefault : next[0],
+                        });
                       }} />
                       {t(`settings.agent.reasoningOptions.${effort}`)}
                     </label>
