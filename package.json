@@ -32,7 +32,7 @@
     "@ai-sdk/cohere": "^4.0.23",
     "@ai-sdk/google": "^4.0.106",
     "@ai-sdk/openai": "^4.0.34",
-    "@ai-sdk/openai-compatible": "^3.0.25",
+    "@ai-sdk/openai-compatible": "^3.0.80",
     "@mozilla/readability": "^0.5.0",
     "ai": "^7.0.56",
     "dompurify": "^3.4.13",
