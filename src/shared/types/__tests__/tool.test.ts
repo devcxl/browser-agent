@@ -9,8 +9,8 @@ import type {
   ToolParameterSchema,
   ToolDefinition,
   IToolRegistry,
-  ToolCallRecord,
 } from '../tool';
+import type { ToolCallRecord } from '../agent';
 
 describe('Tool types', () => {
   describe('RiskLevel', () => {

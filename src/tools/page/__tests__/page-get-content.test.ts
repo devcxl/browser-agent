@@ -33,8 +33,8 @@ describe('page_read_content tool', () => {
 
     const preflight = await tool.preflight!({ tabId: 42 });
     expect(preflight.affectedObjects).toHaveLength(1);
-    expect(preflight.affectedObjects[0].type).toBe('page');
-    expect(preflight.affectedObjects[0].id).toBe('42');
+    expect(preflight.affectedObjects[0]!.type).toBe('page');
+    expect(preflight.affectedObjects[0]!.id).toBe('42');
     expect(preflight.warnings).toContain('页面内容可能包含敏感信息');
   });
 
@@ -43,6 +43,6 @@ describe('page_read_content tool', () => {
     const tool = createPageGetContentTool(executeFn);
 
     const preflight = await tool.preflight!({});
-    expect(preflight.affectedObjects[0].id).toBe('current');
+    expect(preflight.affectedObjects[0]!.id).toBe('current');
   });
 });

@@ -44,7 +44,7 @@ describe('ContentBridge (Port mode)', () => {
       params: { selector: 'body' },
     });
 
-    mockPort._messageListeners[0]({
+    mockPort._messageListeners[0]!({
       jsonrpc: '2.0',
       id: 1,
       result: { text: 'page content' },
@@ -59,7 +59,7 @@ describe('ContentBridge (Port mode)', () => {
 
     const promise = bridge.sendToContent(1, 'page.getContent');
 
-    mockPort._messageListeners[0]({
+    mockPort._messageListeners[0]!({
       jsonrpc: '2.0',
       id: 1,
       error: { code: -32603, message: 'Execution failed' },
@@ -72,11 +72,11 @@ describe('ContentBridge (Port mode)', () => {
     const bridge = new ContentBridge();
 
     const p1 = bridge.sendToContent(1, 'page.getContent');
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 1, result: 'ok' });
     await p1;
 
     const p2 = bridge.sendToContent(1, 'page.getMetadata');
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 2, result: 'meta' });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 2, result: 'meta' });
     await p2;
 
     expect(browser.tabs.connect).toHaveBeenCalledTimes(1);
@@ -89,11 +89,11 @@ describe('ContentBridge (Port mode)', () => {
     const bridge = new ContentBridge();
 
     const p1 = bridge.sendToContent(1, 'page.getContent');
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 1, result: 'ok' });
     await p1;
 
     const p2 = bridge.sendToContent(2, 'page.getContent');
-    port2._messageListeners[0]({ jsonrpc: '2.0', id: 2, result: 'ok' });
+    port2._messageListeners[0]!({ jsonrpc: '2.0', id: 2, result: 'ok' });
     await p2;
 
     expect(browser.tabs.connect).toHaveBeenCalledTimes(2);
@@ -112,7 +112,7 @@ describe('ContentBridge (Port mode)', () => {
 
     const promise = bridge.sendToContent(1, 'page.getContent');
 
-    mockPort._disconnectListeners[0]();
+    mockPort._disconnectListeners[0]!();
 
     await expect(promise).rejects.toThrow('disconnected');
   });
@@ -121,7 +121,7 @@ describe('ContentBridge (Port mode)', () => {
     const bridge = new ContentBridge();
 
     const p1 = bridge.sendToContent(1, 'page.getContent');
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 1, result: 'ok' });
     await p1;
 
     bridge.disconnect(1);
@@ -140,7 +140,7 @@ describe('ContentBridge (Port mode)', () => {
     const p1 = bridge.sendToContent(1, 'a');
     const p2 = bridge.sendToContent(2, 'b');
     const p3 = bridge.sendToContent(2, 'c');
-    port2._messageListeners[0]({ jsonrpc: '2.0', id: 3, result: 'done' });
+    port2._messageListeners[0]!({ jsonrpc: '2.0', id: 3, result: 'done' });
     await p3;
 
     bridge.disconnect();
@@ -157,7 +157,7 @@ describe('ContentBridge (Port mode)', () => {
     const p1 = bridge.sendToContent(1, 'page.getContent');
     const p2 = bridge.sendToContent(1, 'page.getContent');
 
-    mockPort._disconnectListeners[0]();
+    mockPort._disconnectListeners[0]!();
 
     await expect(p1).rejects.toThrow('Port disconnected');
     await expect(p2).rejects.toThrow('Port disconnected');
@@ -186,13 +186,13 @@ describe('ContentBridge (Port mode)', () => {
     );
 
     // 标签页 1 的端口断开不应连坐标签页 2
-    port1._disconnectListeners[0]();
+    port1._disconnectListeners[0]!();
 
     await expect(p1).rejects.toThrow('Port disconnected');
     expect(p2Settled).toBe(false);
 
     // 标签页 2 的请求仍然可以正常完成
-    port2._messageListeners[0]({ jsonrpc: '2.0', id: 2, result: { title: 'Tab 2 OK' } });
+    port2._messageListeners[0]!({ jsonrpc: '2.0', id: 2, result: { title: 'Tab 2 OK' } });
     await expect(p2).resolves.toEqual({ title: 'Tab 2 OK' });
   });
 
@@ -206,13 +206,13 @@ describe('ContentBridge (Port mode)', () => {
     // 第一次连接
     const p1 = bridge.sendToContent(1, 'page.getContent');
     expect(browser.tabs.connect).toHaveBeenCalledTimes(1);
-    mockPort._disconnectListeners[0](); // 端口断开 → ports 清掉
+    mockPort._disconnectListeners[0]!(); // 端口断开 → ports 清掉
     await expect(p1).rejects.toThrow();
 
     // 再次请求同一 tab → 重新 connect
     const p2 = bridge.sendToContent(1, 'page.getContent');
     expect(browser.tabs.connect).toHaveBeenCalledTimes(2);
-    port2._messageListeners[0]({ jsonrpc: '2.0', id: 2, result: 'ok' });
+    port2._messageListeners[0]!({ jsonrpc: '2.0', id: 2, result: 'ok' });
     await expect(p2).resolves.toBe('ok');
   });
 
@@ -221,7 +221,7 @@ describe('ContentBridge (Port mode)', () => {
 
     const promise = bridge.sendToContent(1, 'page.method');
 
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1 });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 1 });
 
     await expect(promise).resolves.toBeUndefined();
   });
@@ -232,13 +232,13 @@ describe('ContentBridge (Port mode)', () => {
     const promise = bridge.sendToContent(1, 'page.method');
 
     // 无关消息不会 resolve/reject 当前请求
-    mockPort._messageListeners[0](null);
-    mockPort._messageListeners[0]('string');
-    mockPort._messageListeners[0]({ noId: true });
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 999, result: 'ghost' });
+    mockPort._messageListeners[0]!(null);
+    mockPort._messageListeners[0]!('string');
+    mockPort._messageListeners[0]!({ noId: true });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 999, result: 'ghost' });
 
     // 最终正确响应才 resolve
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'real' });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 1, result: 'real' });
     await expect(promise).resolves.toBe('real');
   });
 
@@ -253,7 +253,7 @@ describe('ContentBridge (Port mode)', () => {
     mockPort.disconnect = vi.fn(() => { throw new Error('port already gone'); });
 
     const p1 = bridge.sendToContent(1, 'page.getContent');
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 1, result: 'ok' });
     await p1;
 
     expect(() => bridge.disconnect(1)).not.toThrow();
@@ -265,7 +265,7 @@ describe('ContentBridge (Port mode)', () => {
     mockPort.disconnect = vi.fn(() => { throw new Error('port already gone'); });
 
     const p1 = bridge.sendToContent(1, 'page.getContent');
-    mockPort._messageListeners[0]({ jsonrpc: '2.0', id: 1, result: 'ok' });
+    mockPort._messageListeners[0]!({ jsonrpc: '2.0', id: 1, result: 'ok' });
     await p1;
 
     expect(() => bridge.disconnect()).not.toThrow();

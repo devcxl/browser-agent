@@ -40,8 +40,11 @@ const storeMock = {
     if (key === 'jevSettings') return { enabled: true, apiKey: 'jev-local-secret' };
     return undefined;
   }),
-  set: vi.fn(async () => undefined),
+  set: vi.fn(async (..._args: unknown[]) => undefined),
 };
+
+/** storeMock.set 的类型友好视图：set 的 mock 实现签名与真实调用签名不一致（vi.fn 泛型推断限制） */
+const setMock = storeMock.set as unknown as { mock: { calls: unknown[][] }; mockClear: () => void };
 
 vi.mock('@/shared/db/database', () => ({
   Database: { getInstance: () => dbMock },
@@ -83,19 +86,19 @@ async function captureExport(): Promise<string> {
 
 describe('全量快照：凭据不落盘、导入保留本机密钥', () => {
   beforeEach(() => {
-    storeMock.get.mockImplementation(async (key: string) => localSettings(key));
-    storeMock.set.mockClear();
+    storeMock.get.mockImplementation((async (key: string) => localSettings(key)) as never);
+    setMock.mockClear();
     dbMock.putConversation.mockClear();
   });
 
   it('导出快照剥离 apiKey 与鉴权类 header', async () => {
-    storeMock.get.mockImplementation(async (key: string) => {
+    storeMock.get.mockImplementation((async (key: string) => {
       if (key === 'providers') {
         return [provider({ extraHeaders: { Authorization: 'Bearer t', 'X-Trace': 'keep' } })];
       }
       if (key === 'jevSettings') return { enabled: true, apiKey: 'jev-secret' };
       return undefined;
-    });
+    }) as never);
 
     const text = await captureExport();
 
@@ -128,20 +131,20 @@ describe('全量快照：凭据不落盘、导入保留本机密钥', () => {
 
     await importFullSnapshot(snapshot);
 
-    const [, providers] = storeMock.set.mock.calls.find(([key]) => key === 'providers') as [
+    const providers = (setMock.mock.calls.find(([key]) => key === 'providers') as unknown as [
       string,
       Array<{ apiKey: string; extraHeaders: Record<string, string> }>,
-    ];
+    ] | undefined)![1];
     expect(providers[0]!.apiKey).toBe('sk-local-secret');
     expect(providers[0]!.extraHeaders).toEqual({
       Authorization: 'Bearer local-token',
       'X-Trace': 'imported',
     });
 
-    const [, jev] = storeMock.set.mock.calls.find(([key]) => key === 'jevSettings') as [
+    const jev = (setMock.mock.calls.find(([key]) => key === 'jevSettings') as unknown as [
       string,
       { apiKey: string },
-    ];
+    ] | undefined)![1];
     expect(jev.apiKey).toBe('jev-local-secret');
   });
 
@@ -156,10 +159,10 @@ describe('全量快照：凭据不落盘、导入保留本机密钥', () => {
 
     await importFullSnapshot(snapshot);
 
-    const [, providers] = storeMock.set.mock.calls.find(([key]) => key === 'providers') as [
+    const providers = (setMock.mock.calls.find(([key]) => key === 'providers') as unknown as [
       string,
       Array<{ apiKey: string }>,
-    ];
+    ] | undefined)![1];
     expect(providers[0]!.apiKey).toBe('sk-in-file');
   });
 });

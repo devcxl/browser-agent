@@ -65,13 +65,13 @@ describe('sanitizeWindow', () => {
   });
 
   it('无 tabs 字段时原样返回', () => {
-    const win = { id: 9, focused: true };
+    const win: { id: number; focused: boolean; tabs?: Record<string, unknown>[] } = { id: 9, focused: true };
     expect(sanitizeWindow(win)).toBe(win);
   });
 
   it('sanitizeWindows 批量裁剪', () => {
     const result = sanitizeWindows([{ tabs: [fullTab] }, { id: 2 }]);
     expect(result).toHaveLength(2);
-    expect(result[0].tabs![0]).not.toHaveProperty('favIconUrl');
+    expect(result[0]!.tabs![0]).not.toHaveProperty('favIconUrl');
   });
 });

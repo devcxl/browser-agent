@@ -583,14 +583,14 @@ describe('ChromeAdapter', () => {
 
   describe('declarativeNetRequest', () => {
     it('getDynamicRules 正确转发', async () => {
-      mockChrome.declarativeNetRequest.getDynamicRules.mockResolvedValue([{ id: 1, action: { type: 'block' }, condition: { urlFilter: 'https://example.com' } }]);
+      mockChrome.declarativeNetRequest.getDynamicRules.mockResolvedValue([{ id: 1, action: { type: 'block' as chrome.declarativeNetRequest.RuleActionType }, condition: { urlFilter: 'https://example.com' } }]);
       const result = await adapter.declarativeNetRequest.getDynamicRules();
       expect(mockChrome.declarativeNetRequest.getDynamicRules).toHaveBeenCalled();
       expect(result).toHaveLength(1);
     });
 
     it('addDynamicRules 通过 updateDynamicRules 添加规则', async () => {
-      const rules = [{ id: 1, action: { type: 'block' }, condition: { urlFilter: 'https://example.com' } }];
+      const rules: chrome.declarativeNetRequest.Rule[] = [{ id: 1, action: { type: 'block' as chrome.declarativeNetRequest.RuleActionType }, condition: { urlFilter: 'https://example.com' } }];
       await adapter.declarativeNetRequest.addDynamicRules(rules);
       expect(mockChrome.declarativeNetRequest.updateDynamicRules).toHaveBeenCalledWith({ addRules: rules, removeRuleIds: [] });
     });

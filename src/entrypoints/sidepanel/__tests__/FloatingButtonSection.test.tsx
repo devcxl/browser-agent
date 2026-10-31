@@ -11,7 +11,7 @@ import { createI18nMock } from '@/test/i18n-mock';
 
 function createMockBrowser() {
   const storage: Record<string, unknown> = {};
-  const listeners: Array<(changes: Record<string, browser.storage.StorageChange>) => void> = [];
+  const listeners: Array<(changes: Record<string, chrome.storage.StorageChange>) => void> = [];
 
   const local = {
     get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {
@@ -24,7 +24,7 @@ function createMockBrowser() {
       return result;
     }),
     set: vi.fn(async (items: Record<string, unknown>) => {
-      const changes: Record<string, browser.storage.StorageChange> = {};
+      const changes: Record<string, chrome.storage.StorageChange> = {};
       for (const [key, value] of Object.entries(items)) {
         changes[key] = { oldValue: storage[key], newValue: value };
       }

@@ -126,7 +126,7 @@ vi.mock('@/shared/storage', () => ({
 }));
 
 import { useAgent } from '../useAgent';
-import type { UIMessage } from '../../types';
+import type { ConfirmRequest, UIMessage } from '../../types';
 
 describe('useAgent', () => {
   beforeEach(() => {
@@ -162,7 +162,7 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
@@ -206,22 +206,22 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
 
     const userCalls = onMessage.mock.calls.filter(
-      (c: [UIMessage]) => c[0].role === 'user',
+      (c: unknown[]) => (c[0] as UIMessage).role === 'user',
     );
     const assistantCalls = onMessage.mock.calls.filter(
-      (c: [UIMessage]) => c[0].role === 'assistant',
+      (c: unknown[]) => (c[0] as UIMessage).role === 'assistant',
     );
 
     expect(userCalls.length).toBeGreaterThanOrEqual(1);
-    expect(userCalls[0][0].content).toBe('测试消息');
+    expect(userCalls[0]![0].content).toBe('测试消息');
     expect(assistantCalls.length).toBeGreaterThanOrEqual(1);
-    expect(assistantCalls[assistantCalls.length - 1][0].status).toBe('complete');
+    expect(assistantCalls[assistantCalls.length - 1]![0].status).toBe('complete');
   });
 
   it('onMessage 回调带上报消息所属的会话（归属不能依赖“当前查看的会话”）', async () => {
@@ -236,7 +236,7 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
@@ -262,7 +262,7 @@ describe('useAgent', () => {
           name: 'Test',
           endpoint: 'https://api.test.com',
           apiKey: 'key',
-          model: 'gpt-4o',
+          models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
           isLocalTrusted: false,
         },
         'gpt-4o',
@@ -285,7 +285,7 @@ describe('useAgent', () => {
       name: 'Test',
       endpoint: 'https://api.test.com',
       apiKey: 'key',
-      model: 'gpt-4o',
+      models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
       isLocalTrusted: false,
     }, 'gpt-4o');
 
@@ -316,7 +316,7 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
@@ -347,7 +347,7 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
@@ -386,7 +386,7 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
@@ -396,10 +396,10 @@ describe('useAgent', () => {
       expect(result.current.status).toBe('waitingConfirmation');
     });
 
-    const confirmReq = onConfirm.mock.calls[0][0];
+    const confirmReq = onConfirm.mock.calls[0]![0] as ConfirmRequest;
     expect(confirmReq.toolName).toBe('tabs_close');
-    expect(confirmReq.affectedObjects[0].type).toBe('tab');
-    expect(confirmReq.warnings[0]).toContain('未保存数据');
+    expect(confirmReq.affectedObjects[0]!.type).toBe('tab');
+    expect(confirmReq.warnings[0]!).toContain('未保存数据');
 
     await act(async () => {
       result.current.resolveConfirm(true);
@@ -441,7 +441,7 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
@@ -480,7 +480,7 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
@@ -518,17 +518,17 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
 
     const toolCalls = onMessage.mock.calls.filter(
-      (c: [UIMessage]) => c[0].role === 'tool',
+      (c: unknown[]) => (c[0] as UIMessage).role === 'tool',
     );
     expect(toolCalls.length).toBeGreaterThanOrEqual(1);
-    expect(toolCalls[0][0].toolCallDisplay).toBeDefined();
-    expect(toolCalls[0][0].toolCallDisplay.name).toBe('tabs_query');
+    expect(toolCalls[0]![0].toolCallDisplay).toBeDefined();
+    expect(toolCalls[0]![0].toolCallDisplay.name).toBe('tabs_query');
 
     expect(onTokenUsage).toHaveBeenCalledWith({ prompt: 50, completion: 30 });
   });
@@ -558,16 +558,16 @@ describe('useAgent', () => {
         name: 'Test',
         endpoint: 'https://api.test.com',
         apiKey: 'key',
-        model: 'gpt-4o',
+        models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
         isLocalTrusted: false,
       }, 'gpt-4o');
     });
 
     const toolMessages = onMessage.mock.calls.filter(
-      (c: [UIMessage]) => c[0].role === 'tool',
+      (c: unknown[]) => (c[0] as UIMessage).role === 'tool',
     );
     expect(toolMessages).toHaveLength(1);
-    expect(toolMessages[0][0].toolCallDisplay).toEqual(expect.objectContaining({
+    expect(toolMessages[0]![0].toolCallDisplay).toEqual(expect.objectContaining({
       name: 'tabs_remove',
       status: 'unknown',
       result: undefined,
@@ -580,7 +580,7 @@ describe('useAgent', () => {
       name: 'Test',
       endpoint: 'https://api.test.com',
       apiKey: 'key',
-      model: 'gpt-4o',
+      models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
       isLocalTrusted: false,
     };
 
@@ -621,7 +621,7 @@ describe('useAgent', () => {
       name: 'Test',
       endpoint: 'https://api.test.com',
       apiKey: 'key',
-      model: 'gpt-4o',
+      models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
       isLocalTrusted: false,
     };
     const record = {
@@ -667,7 +667,7 @@ describe('useAgent', () => {
       name: 'Test',
       endpoint: 'https://api.test.com',
       apiKey: 'key',
-      model: 'gpt-4o',
+      models: { 'gpt-4o': { id: 'gpt-4o', name: 'gpt-4o' } },
       isLocalTrusted: false,
     };
     let releaseRun: () => void = () => {};

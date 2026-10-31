@@ -105,7 +105,7 @@ export function mountWidget(
   try {
     const widget = new FloatingWidget(settings, hostname);
     widget.mount();
-    return { widget, shadow: captured as ShadowRoot };
+    return { widget, shadow: captured as unknown as ShadowRoot };
   } finally {
     Element.prototype.attachShadow = origAttach;
   }

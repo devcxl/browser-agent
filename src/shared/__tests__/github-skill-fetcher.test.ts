@@ -20,7 +20,8 @@ function errorRoute(status: number, statusText: string): () => Response {
 }
 
 function base64Encode(text: string): string {
-  return Buffer.from(text, 'utf-8').toString('base64');
+  // 测试环境的 DOM lib 没有 Buffer 类型，用 btoa 等价实现
+  return btoa(String.fromCharCode(...new TextEncoder().encode(text)));
 }
 
 function mockFetch(routes: Record<string, () => Response>) {
@@ -100,8 +101,9 @@ describe('fetchSkillsFromGitHub', () => {
       'https://api.github.com/repos/o/r/contents/skills': jsonRoute([]),
     });
     await fetchSkillsFromGitHub('https://github.com/o/r');
-    const [, init] = fetchMock.mock.calls[0]!;
-    expect((init?.headers as Record<string, string>).Authorization).toBeUndefined();
+    const call = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit | undefined];
+    const init = call[1];
+    expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBeUndefined();
   });
 
   it('目录请求 403 且无 token 时命中限流分支（错误被目录容错吸收 → []）', async () => {

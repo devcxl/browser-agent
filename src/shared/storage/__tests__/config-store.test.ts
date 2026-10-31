@@ -7,7 +7,7 @@ import { createI18nMock } from '@/test/i18n-mock';
  */
 function mockBrowserStorage() {
   const storage: Record<string, unknown> = {};
-  const listeners: Array<(changes: Record<string, browser.storage.StorageChange>) => void> = [];
+  const listeners: Array<(changes: Record<string, chrome.storage.StorageChange>) => void> = [];
 
   const mock = {
     get: vi.fn(async (keys: string | string[] | Record<string, unknown> | null) => {
@@ -25,7 +25,7 @@ function mockBrowserStorage() {
     }),
     set: vi.fn(async (items: Record<string, unknown>) => {
       Object.assign(storage, items);
-      const changes: Record<string, browser.storage.StorageChange> = {};
+      const changes: Record<string, chrome.storage.StorageChange> = {};
       for (const [key, newValue] of Object.entries(items)) {
         changes[key] = { newValue, oldValue: storage[key] };
       }
@@ -109,9 +109,9 @@ describe('ConfigStore', () => {
   // #6 patch
   it('should call chrome.storage.local.set with partial', async () => {
     const store = ConfigStore.getInstance();
-    await store.patch({ preferences: { theme: 'dark', sidebarExpanded: false } });
+    await store.patch({ preferences: { theme: 'dark', sidebarExpanded: false, reasoningAutoExpand: false } });
     expect(browserMock.mock.set).toHaveBeenCalledWith({
-      preferences: { theme: 'dark', sidebarExpanded: false },
+      preferences: { theme: 'dark', sidebarExpanded: false, reasoningAutoExpand: false },
     });
   });
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+// @ts-expect-error jsdom 未随包发布类型声明，测试里只用到构造器这一小块
 import { JSDOM } from 'jsdom';
 import { convertToMarkdown } from '../markdown-converter';
 

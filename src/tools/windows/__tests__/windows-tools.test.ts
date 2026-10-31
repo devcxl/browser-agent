@@ -36,7 +36,7 @@ describe('window_list', () => {
     const result = await tool.execute({ windowId: 9 });
 
     expect(rpc.request).toHaveBeenCalledWith('windows.get', { windowId: 9, getInfo: undefined });
-    expect((result.data as { tabs: Array<Record<string, unknown>> }).tabs[0].favIconUrl).toBeUndefined();
+    expect((result.data as { tabs: Array<Record<string, unknown>> }).tabs[0]!.favIconUrl).toBeUndefined();
   });
 
   it('未提供 windowId 时列出所有窗口', async () => {

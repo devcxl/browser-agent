@@ -48,7 +48,7 @@ const mockAgent = vi.hoisted(() => {
   return {
     status: 'idle',
     error: null,
-    runningConversationId: null,
+    runningConversationId: null as string | null,
     callbacks,
     setCallbacks: (cb: typeof callbacks) => {
       Object.assign(callbacks, cb);
