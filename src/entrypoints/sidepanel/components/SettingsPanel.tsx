@@ -114,14 +114,23 @@ export function SettingsPanel({
   const [accentColor, setAccentColor] = useState(DEFAULT_ACCENT_COLOR);
   const [openSelectId, setOpenSelectId] = useState<string | null>(null);
 
-  // 面板每次打开都从已保存的 agentSettings 重建草稿：
+  // 面板每次「打开」都从已保存的 agentSettings 重建草稿：
   // SettingsPanel 常驻挂载、仅用 open 控制显隐，如果只在首次挂载初始化，
-  // 用户编辑后关掉再打开会看到未保存的旧草稿，导入快照后的新值也不会反映。
+  // 用户编辑后关掉再打开会看到未保存的旧草稿。
+  //
+  // 只依赖 open（不依赖 agentSettings.systemPrompt）：保存本身会更新
+  // agentSettings，若把 systemPrompt 也放进依赖，保存后立刻重跑 effect 会把
+  // 刚设好的「已保存」提示清掉，用户永远看不到保存成功。
+  const wasOpenRef = useRef(open);
   useEffect(() => {
-    if (!open) return;
+    const justOpened = open && !wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!justOpened) return;
     setSystemPromptInput(agentSettings.systemPrompt);
     setSystemPromptSaveStatus(null);
-  }, [open, agentSettings.systemPrompt]);
+    // agentSettings.systemPrompt 故意不进依赖，见上面的说明
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Provider
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null | undefined>(undefined);
@@ -220,7 +229,9 @@ export function SettingsPanel({
       setExportError(null);
       await exportFullSnapshot();
     } catch (err) {
-      setExportError(err instanceof Error ? err.message : '');
+      // 非 Error 拒绝（字符串/对象）也要有反馈：空 message 会被当作「没有错误」而静默
+      const detail = err instanceof Error ? err.message : String(err ?? '');
+      setExportError(detail || 'unknown');
     }
   };
 
@@ -591,7 +602,9 @@ export function SettingsPanel({
                   {t('settings.agent.systemPromptReset')}
                 </button>
                 {systemPromptSaveStatus === 'saved' && (
-                  <span role="status" className="text-xs text-success">{t('settings.agent.systemPromptSaved')}</span>
+                  <span role="status" data-testid="agent-system-prompt-saved" className="text-xs text-success">
+                    {t('settings.agent.systemPromptSaved')}
+                  </span>
                 )}
               </div>
 

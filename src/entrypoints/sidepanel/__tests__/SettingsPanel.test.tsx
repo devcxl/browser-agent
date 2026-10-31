@@ -250,6 +250,43 @@ describe('SettingsPanel', () => {
     expect(screen.queryByTestId('import-error')).toBeNull();
   });
 
+  it('保存后「已保存」提示保持可见（父组件更新 agentSettings 不得清掉它）', async () => {
+    const props = makeProps();
+    const { rerender } = renderWithI18n(<SettingsPanel {...props} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Agent' }));
+    const input = screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: '新的提示词' } });
+    await userEvent.click(screen.getByTestId('agent-system-prompt-save'));
+
+    expect(screen.getByTestId('agent-system-prompt-saved')).toBeTruthy();
+
+    // 父组件收到 onSaveAgentSettings 后回传新的 agentSettings（真实 App.tsx 的行为）
+    rerender(
+      <SettingsPanel
+        {...props}
+        agentSettings={{ ...props.agentSettings, systemPrompt: '新的提示词' }}
+      />,
+    );
+
+    // 提示仍在，草稿也不被回退
+    expect(screen.getByTestId('agent-system-prompt-saved')).toBeTruthy();
+    expect((screen.getByTestId('agent-system-prompt-input') as HTMLTextAreaElement).value)
+      .toBe('新的提示词');
+  });
+
+  it('导出以非 Error 值拒绝时也有错误反馈（不得静默）', async () => {
+    vi.mocked(exportFullSnapshot).mockRejectedValue('boom');
+    renderWithI18n(<SettingsPanel {...makeProps()} />);
+
+    await userEvent.click(screen.getByRole('button', { name: '数据' }));
+    await userEvent.click(screen.getByTestId('export-all-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('export-error').textContent).toContain('boom');
+    });
+  });
+
   it('关闭后重新打开会丢弃未保存的草稿，显示已保存值', async () => {
     const props = makeProps();
     const { rerender } = renderWithI18n(<SettingsPanel {...props} />);
