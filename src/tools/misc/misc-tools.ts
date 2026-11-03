@@ -92,6 +92,7 @@ export function createStorageReadTool(rpc: IJsonRpcClient): ToolDefinition {
     'providers',           // 含 LLM API Key
     'agentSettings',       // Agent 配置
     'expertModeSettings',  // 安全开关
+    'jevSettings',         // 含 Jev API Key
     'skills',              // 技能定义（含 prompt）
     'skillSubscriptions',  // 技能订阅
     'browser_agent_provider_catalog', // Provider 缓存
@@ -151,6 +152,7 @@ export function createStorageWriteTool(rpc: IJsonRpcClient): ToolDefinition {
     'providers',
     'agentSettings',
     'expertModeSettings',
+    'jevSettings',
     'skills',
     'skillSubscriptions',
     'browser_agent_provider_catalog',
@@ -192,6 +194,7 @@ export function createStorageRemoveTool(rpc: IJsonRpcClient): ToolDefinition {
     'providers',
     'agentSettings',
     'expertModeSettings',
+    'jevSettings',
     'skills',
     'skillSubscriptions',
     'browser_agent_provider_catalog',
