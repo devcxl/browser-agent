@@ -4,7 +4,6 @@ import { MetadataReader } from './metadata-reader';
 import { convertToMarkdown } from './markdown-converter';
 import { simulateClick } from './simulate-click';
 import { scrollPage } from './scroll-page';
-import { evalInPage } from './eval-page';
 import { startFloatingWidget } from './floating-widget/index';
 
 export default defineContentScript({
@@ -41,9 +40,6 @@ export default defineContentScript({
               break;
             case 'page.scroll':
               result = scrollPage(params);
-              break;
-            case 'page.eval':
-              result = await evalInPage(params);
               break;
             case 'clipboard.read':
               result = { text: await navigator.clipboard.readText() };
