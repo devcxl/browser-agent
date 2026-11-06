@@ -35,13 +35,8 @@ export default defineConfig({
     const optional_permissions: string[] = ['management'];
 
     if (!isFirefox) {
-      permissions.push(
-        'declarativeNetRequest',
-      );
-      optional_permissions.push(
-        'clipboardRead', 'clipboardWrite',
-        'debugger',
-      );
+      permissions.push('declarativeNetRequest');
+      optional_permissions.push('clipboardRead', 'clipboardWrite', 'debugger');
     }
 
     const manifest: Record<string, unknown> = {
@@ -98,7 +93,7 @@ export default defineConfig({
         manifest.browser_specific_settings = {
           gecko: {
             id: 'browser-agent@devcxl.cn',
-            strict_min_version: '128.0',
+            strict_min_version: '140.0',
             data_collection_permissions: {
               required: ['none'],
             },
