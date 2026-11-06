@@ -62,7 +62,7 @@ function importedValue(key: string): unknown {
   return call?.[1];
 }
 
-describe('全量快照：providers 不进备份、导入忽略旧备份的 providers', () => {
+describe('全量快照：providers 与 Jev 设置不进备份、导入忽略旧备份中的配置', () => {
   beforeEach(() => {
     storeMock.get.mockImplementation((async (key: string) => {
       if (key === 'providers') {
@@ -86,12 +86,13 @@ describe('全量快照：providers 不进备份、导入忽略旧备份的 provi
     expect(getMock.mock.calls.some(([key]) => key === 'providers')).toBe(false);
   });
 
-  it('导出仍脱敏 Jev apiKey', async () => {
+  it('导出快照完全不包含 Jev 设置，也不读取本机 Jev 设置', async () => {
     const text = await captureExport();
     const snapshot = JSON.parse(text);
 
+    expect(snapshot.settings).not.toHaveProperty('jevSettings');
     expect(text).not.toContain('jev-local-secret');
-    expect(snapshot.settings.jevSettings.apiKey).toBe('');
+    expect(getMock.mock.calls.some(([key]) => key === 'jevSettings')).toBe(false);
   });
 
   it('导入旧备份时忽略 providers，保留本机配置', async () => {
@@ -113,20 +114,23 @@ describe('全量快照：providers 不进备份、导入忽略旧备份的 provi
     expect(result.settingsKeys).not.toContain('providers');
   });
 
-  it('导入时仍按本机配置回填 Jev apiKey', async () => {
+  it('导入旧备份时忽略任意 jevSettings，保留本机 Jev 设置', async () => {
     const snapshot = JSON.stringify({
       format: 'browser-agent-snapshot',
       version: 1,
       exportedAt: 0,
       conversations: [],
-      settings: { jevSettings: { enabled: true, apiKey: '' } },
+      settings: {
+        jevSettings: { enabled: false, apiKey: 'sk-in-file', arbitrary: { nested: true } },
+        agentSettings: { maxToolRounds: 5 },
+      },
     });
 
-    await importFullSnapshot(snapshot);
+    const result = await importFullSnapshot(snapshot);
 
-    expect(importedValue('jevSettings')).toEqual({
-      enabled: true,
-      apiKey: 'jev-local-secret',
-    });
+    expect(setMock.mock.calls.some(([key]) => key === 'jevSettings')).toBe(false);
+    expect(getMock.mock.calls.some(([key]) => key === 'jevSettings')).toBe(false);
+    expect(result.settingsKeys).not.toContain('jevSettings');
+    expect(importedValue('agentSettings')).toEqual({ maxToolRounds: 5 });
   });
 });

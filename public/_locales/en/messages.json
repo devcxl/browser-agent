@@ -546,7 +546,7 @@
     "message": "When enabled, only chat messages not matched by local keywords are sent to TypeSafe for tool-category routing."
   },
   "settings_jev_storageDisclosure": {
-    "message": "The API key is stored in local extension storage, which cannot protect it from access by someone on this device."
+    "message": "The API key is stored in local extension storage, which cannot protect it from access by someone on this device. Jev settings, including the API key and enabled state, are not included in data backups."
   },
   "settings_jev_saved": {
     "message": "Jev API key saved."
@@ -816,13 +816,13 @@
     "message": "Export all data"
   },
   "data_exportAllDesc": {
-    "message": "Download a JSON backup of conversations and settings. Provider configurations and credentials such as API keys are excluded; configure providers again on a new device"
+    "message": "Download a JSON backup of conversations and settings. Provider configurations, Jev settings, and credentials such as API keys are excluded; configure providers and Jev again on a new device"
   },
   "data_import": {
     "message": "Import backup"
   },
   "data_importDesc": {
-    "message": "Restore from a backup file. Conversations merge by ID and settings are overwritten per key. Provider configurations in the backup are ignored; existing providers and credentials on this device are kept"
+    "message": "Restore from a backup file. Conversations merge by ID and settings are overwritten per key. Provider configurations and Jev settings in the backup are ignored; existing providers, Jev settings, and credentials on this device are kept"
   },
   "data_importing": {
     "message": "Importing…"
