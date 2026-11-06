@@ -1,6 +1,6 @@
 # Privacy Policy for Browser Agent
 
-**Last updated: 2026-11-03**
+**Last updated: 2026-11-06**
 
 ## Overview
 
@@ -45,7 +45,7 @@ Jev is **disabled by default**. It is used only after you save your own TypeSafe
 - **What is sent** — only the text of the message being routed, and only when the extension's local keyword rules cannot classify it. Each request also carries a fixed set of tool-category questions, the model name (`jev-1.13.0`), and your TypeSafe API key in the `Authorization` header.
 - **Where it goes** — `https://api.typesafe.ai/v1/systemone` over HTTPS, without cookies and with redirects refused. Requests time out after 5 seconds.
 - **What is not sent** — other messages in the conversation, tab or bookmark data, page content, and tool results are not part of the request. No fallback call is made to your AI provider if Jev fails; routing simply proceeds locally with the full tool set.
-- **Your key** — stored in your browser's local extension storage, which is **not encrypted** and does not protect it from anyone with access to this browser profile. It is removed when you clear the key and is excluded from exported conversation/settings files.
+- **Your key** — stored in your browser's local extension storage, which is **not encrypted** and does not protect it from anyone with access to this browser profile. It is removed when you clear the key. Jev settings — the key and whether Jev is enabled — are local-only and are never included in exported backups. Importing an older backup ignores any Jev settings it contains, so your local key and enabled state remain unchanged.
 
 You are responsible for reviewing TypeSafe's privacy policy, just as for your AI provider.
 
@@ -80,7 +80,7 @@ These permissions are **opt-in** and disabled by default.
 
 ## Data Storage
 
-Conversation history, tool call logs, and session snapshots are stored **locally** in your browser's IndexedDB storage. Settings, including your AI provider and Jev API keys, are stored locally in the extension's browser storage. This data is not encrypted at rest, is not uploaded by the extension except as the conversation context sent to your configured AI provider and, for messages routed through Jev, the message text sent to TypeSafe (see above), and can be cleared by uninstalling the extension.
+Conversation history, tool call logs, and session snapshots are stored **locally** in your browser's IndexedDB storage. Settings, including your AI provider configuration and Jev API key, are stored locally in the extension's browser storage. Provider configurations and Jev settings are local-only and are not included in exported backups. This data is not encrypted at rest, is not uploaded by the extension except as the conversation context sent to your configured AI provider and, for messages routed through Jev, the message text sent to TypeSafe (see above), and can be cleared by uninstalling the extension.
 
 ## Your Choices
 

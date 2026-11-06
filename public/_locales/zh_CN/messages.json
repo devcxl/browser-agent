@@ -546,7 +546,7 @@
     "message": "启用后，只有本地关键词未命中的聊天消息会发送给 TypeSafe 进行工具类别判断。"
   },
   "settings_jev_storageDisclosure": {
-    "message": "API key 保存在扩展本地存储中；本地存储无法保护它免受本机访问者读取。"
+    "message": "API key 保存在扩展本地存储中；本地存储无法保护它免受本机访问者读取。Jev 设置（含 API key 与启用状态）不会写入数据备份。"
   },
   "settings_jev_saved": {
     "message": "Jev API key 已保存。"
@@ -816,13 +816,13 @@
     "message": "导出全部数据"
   },
   "data_exportAllDesc": {
-    "message": "下载会话与配置的 JSON 备份文件。不包含 Provider 配置或 API Key 等凭据；换设备后需重新配置 Provider"
+    "message": "下载会话与配置的 JSON 备份文件。不包含 Provider 配置、Jev 设置或 API Key 等凭据；换设备后需重新配置 Provider 和 Jev"
   },
   "data_import": {
     "message": "导入备份"
   },
   "data_importDesc": {
-    "message": "从备份文件恢复。会话按 ID 合并、配置按键覆盖；备份中的 Provider 配置会被忽略，本机已有的 Provider 和密钥会保留"
+    "message": "从备份文件恢复。会话按 ID 合并、配置按键覆盖；备份中的 Provider 配置与 Jev 设置会被忽略，本机已有的 Provider 配置、Jev 设置和密钥会保留"
   },
   "data_importing": {
     "message": "导入中…"
