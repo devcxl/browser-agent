@@ -8,7 +8,6 @@ import { createPageViewMarkdownTool } from './page-view-markdown';
 import { createPageGetScreenshotTool } from './page-get-screenshot';
 import { createPageSimulateClickTool } from './page-simulate-click';
 import { createPageScrollTool } from './page-scroll';
-import { createPageEvalTool } from './page-eval';
 
 export function createPageTools(
   executeFn: (params: Record<string, unknown>) => Promise<ToolResult>,
@@ -21,7 +20,6 @@ export function createPageTools(
     createPageGetMarkdownTool(executeFn),
     createPageSimulateClickTool(executeFn),
     createPageScrollTool(executeFn),
-    createPageEvalTool(executeFn),
     ...(rpc ? [createPageViewMarkdownTool(rpc), createPageGetScreenshotTool(rpc)] : []),
   ];
 }

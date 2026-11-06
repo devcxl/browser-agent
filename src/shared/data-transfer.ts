@@ -3,11 +3,11 @@
  *
  * - 会话级：Markdown（人类可读）或 JSON（含 toolCalls 完整结构）；
  * - 全量：JSON 快照（IndexedDB 三张表 + ConfigStore 配置），配套导入恢复；
+ *   provider 配置属于本机环境，不进入备份，导入旧备份时也忽略其中的 providers；
  * - 导入策略：会话按 id upsert（同 id 覆盖），配置按键合并（快照里有才写），
  *   不删除现有数据 —— 导入是「补充/恢复」，不是「替换」。
  */
 import type { Conversation, StoredMessage } from './types/conversation';
-import type { ProviderConfig } from './types/llm';
 import type { JevSettings } from './types/storage';
 import type { BrowserAgentDB } from './db/schema';
 
@@ -24,84 +24,38 @@ export interface FullSnapshot {
   exportedAt: number;
   /** IndexedDB conversations + messages（DB 行原样） */
   conversations: Array<DbConversation & { messages: DbMessage[] }>;
-  /** ConfigStore 键值（providers / agentSettings / expertModeSettings / jevSettings / preferences / floatingButtonSettings / skills / skillSubscriptions） */
+  /** ConfigStore 键值（agentSettings / expertModeSettings / jevSettings / preferences / floatingButtonSettings / skills / skillSubscriptions；不含 providers） */
   settings: Record<string, unknown>;
 }
 
-/** 允许导入覆盖的配置键白名单（与导出侧一致） */
+/** 允许导入覆盖的配置键白名单（与导出侧一致，providers 不入备份也不被导入覆盖） */
 const IMPORTABLE_SETTINGS_KEYS: ReadonlySet<string> = new Set([
-  'providers', 'agentSettings', 'expertModeSettings',
-  'jevSettings', 'preferences', 'floatingButtonSettings',
-  'skills', 'skillSubscriptions',
+  'agentSettings',
+  'expertModeSettings',
+  'jevSettings',
+  'preferences',
+  'floatingButtonSettings',
+  'skills',
+  'skillSubscriptions',
 ]);
 
-/** 自定义 header 中属于凭据的名称 */
-const SECRET_HEADER_PATTERN = /authorization|api[-_]?key|token|secret/i;
-
-function redactProvider(provider: ProviderConfig): ProviderConfig {
-  const redacted: ProviderConfig = { ...provider, apiKey: '' };
-  if (provider.extraHeaders) {
-    redacted.extraHeaders = Object.fromEntries(
-      Object.entries(provider.extraHeaders).map(([name, value]) => [
-        name,
-        SECRET_HEADER_PATTERN.test(name) ? '' : value,
-      ]),
-    );
-  }
-  return redacted;
-}
-
 /**
- * 导出前剥离凭据：API Key 与鉴权类 header 一律置空。
+ * 导出前剥离凭据：Jev 的 API Key 置空。
  * 备份文件会落到磁盘或云盘，凭据不应随之离开浏览器。
  */
 function redactSecrets(settings: Record<string, unknown>): Record<string, unknown> {
-  const providers = settings.providers as ProviderConfig[] | undefined;
   const jevSettings = settings.jevSettings as JevSettings | undefined;
   return {
     ...settings,
-    ...(Array.isArray(providers) ? { providers: providers.map(redactProvider) } : {}),
     ...(jevSettings ? { jevSettings: { ...jevSettings, apiKey: '' } } : {}),
   };
 }
 
-/** 合并 header：导入值为空（脱敏所致）时回填本机同名 header 的值 */
-function mergeHeaders(
-  imported: Record<string, string> | undefined,
-  local: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!imported) return local;
-  if (!local) return imported;
-  const merged = { ...imported };
-  for (const [name, value] of Object.entries(imported)) {
-    if (value === '' && local[name]) merged[name] = local[name];
-  }
-  return merged;
-}
-
-/**
- * 备份不含凭据：导入时按 provider id 回填本机已有的 API Key 与鉴权 header，
- * 避免导入备份把已配置的密钥清空。本机同样没有的保持为空，由用户补填。
- */
-async function restoreLocalSecrets(settings: Record<string, unknown>): Promise<void> {
-  const store = ConfigStore.getInstance();
-  const providers = settings.providers as ProviderConfig[] | undefined;
-  if (Array.isArray(providers)) {
-    // ConfigStore.get 的返回类型由调用方指定（key 不携带类型信息），这里必须显式给泛型
-    const localProviders = await store.get<ProviderConfig[]>('providers');
-    const localById = new Map(localProviders.map((p) => [p.id, p]));
-    settings.providers = providers.map((provider) => {
-      const local = localById.get(provider.id);
-      if (!local) return provider;
-      return {
-        ...provider,
-        apiKey: provider.apiKey || local.apiKey,
-        extraHeaders: mergeHeaders(provider.extraHeaders, local.extraHeaders),
-      };
-    });
-  }
+/** 备份不含 Jev 凭据：导入时用本机已配置的 apiKey 回填，避免导入把密钥清空。 */
+async function restoreLocalJevKey(settings: Record<string, unknown>): Promise<void> {
   const jevSettings = settings.jevSettings as JevSettings | undefined;
   if (jevSettings && !jevSettings.apiKey) {
+    const store = ConfigStore.getInstance();
     const localJevSettings = await store.get<JevSettings>('jevSettings');
     settings.jevSettings = { ...jevSettings, apiKey: localJevSettings.apiKey };
   }
@@ -194,7 +148,11 @@ export async function exportConversationJson(conversationId: string, title: stri
     conversation,
     messages,
   };
-  download(`${safeName(title)}-${timestamp()}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  download(
+    `${safeName(title)}-${timestamp()}.json`,
+    JSON.stringify(payload, null, 2),
+    'application/json',
+  );
 }
 
 // ── 全量导出/导入 ────────────────────────────────────────
@@ -214,9 +172,13 @@ export async function exportFullSnapshot(): Promise<void> {
 
   const settings: Record<string, unknown> = {};
   const keys: Array<keyof StorageSchema> = [
-    'providers', 'agentSettings', 'expertModeSettings',
-    'jevSettings', 'preferences', 'floatingButtonSettings',
-    'skills', 'skillSubscriptions',
+    'agentSettings',
+    'expertModeSettings',
+    'jevSettings',
+    'preferences',
+    'floatingButtonSettings',
+    'skills',
+    'skillSubscriptions',
   ];
   for (const key of keys) {
     settings[key] = await store.get(key);
@@ -229,7 +191,11 @@ export async function exportFullSnapshot(): Promise<void> {
     conversations: withMessages,
     settings: redactSecrets(settings),
   };
-  download(`browser-agent-backup-${timestamp()}.json`, JSON.stringify(snapshot, null, 2), 'application/json');
+  download(
+    `browser-agent-backup-${timestamp()}.json`,
+    JSON.stringify(snapshot, null, 2),
+    'application/json',
+  );
 }
 
 /** 导入校验结果 */
@@ -268,7 +234,7 @@ export async function importFullSnapshot(text: string): Promise<ImportResult> {
   }
 
   const settings = { ...snapshot.settings };
-  await restoreLocalSecrets(settings);
+  await restoreLocalJevKey(settings);
 
   const settingsKeys: string[] = [];
   for (const [key, value] of Object.entries(settings)) {

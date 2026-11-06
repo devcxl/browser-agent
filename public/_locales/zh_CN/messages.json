@@ -816,13 +816,13 @@
     "message": "导出全部数据"
   },
   "data_exportAllDesc": {
-    "message": "下载包含全部会话与配置的 JSON 备份文件（不含 API Key 等凭据，导入后需重新填写）"
+    "message": "下载会话与配置的 JSON 备份文件。不包含 Provider 配置或 API Key 等凭据；换设备后需重新配置 Provider"
   },
   "data_import": {
     "message": "导入备份"
   },
   "data_importDesc": {
-    "message": "从备份文件恢复。会话按 ID 合并、配置按键覆盖，不会删除现有数据；本机已配置的密钥会保留"
+    "message": "从备份文件恢复。会话按 ID 合并、配置按键覆盖；备份中的 Provider 配置会被忽略，本机已有的 Provider 和密钥会保留"
   },
   "data_importing": {
     "message": "导入中…"

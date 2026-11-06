@@ -816,13 +816,13 @@
     "message": "Export all data"
   },
   "data_exportAllDesc": {
-    "message": "Download a JSON backup of all conversations and settings. Credentials such as API keys are excluded; re-enter them after importing"
+    "message": "Download a JSON backup of conversations and settings. Provider configurations and credentials such as API keys are excluded; configure providers again on a new device"
   },
   "data_import": {
     "message": "Import backup"
   },
   "data_importDesc": {
-    "message": "Restore from a backup file. Conversations merge by ID, settings are overwritten per key; nothing is deleted, and credentials already configured in this browser are kept"
+    "message": "Restore from a backup file. Conversations merge by ID and settings are overwritten per key. Provider configurations in the backup are ignored; existing providers and credentials on this device are kept"
   },
   "data_importing": {
     "message": "Importing…"

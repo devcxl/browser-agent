@@ -188,6 +188,34 @@ describe('Misc tools', () => {
       });
     });
 
+    it('storage_read execute 拒绝读取 jevSettings（含 API Key）', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_read')!;
+      const result = await tool.execute({ keys: ['jevSettings'] });
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('无法读取以下敏感键');
+      expect(result.error).toContain('jevSettings');
+    });
+
+    it('storage_read execute 混合 jevSettings 与普通键时忽略 jevSettings 并带 warnings', async () => {
+      const rpc = createMockRpc();
+      vi.mocked(rpc.request).mockResolvedValue({ theme: 'dark' });
+
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_read')!;
+      const result = await tool.execute({ keys: ['theme', 'jevSettings'] });
+
+      expect(rpc.request).toHaveBeenCalledWith('storage.local.get', { keys: ['theme'] });
+      expect(result).toEqual({
+        success: true,
+        data: { theme: 'dark' },
+        warnings: ['已忽略敏感键: jevSettings'],
+      });
+    });
+
     it('storage_read execute 过滤 markdown: 前缀敏感键', async () => {
       const rpc = createMockRpc();
       vi.mocked(rpc.request).mockResolvedValue({});
@@ -223,6 +251,18 @@ describe('Misc tools', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('无法修改以下敏感键');
       expect(result.error).toContain('agentSettings');
+    });
+
+    it('storage_write execute 写入 jevSettings 时返回错误', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_write')!;
+      const result = await tool.execute({ items: { jevSettings: { enabled: true, apiKey: 'x' } } });
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('无法修改以下敏感键');
+      expect(result.error).toContain('jevSettings');
     });
 
     it('storage_remove preflight 未指定 keys 时返回清空警告', async () => {
@@ -267,6 +307,28 @@ describe('Misc tools', () => {
 
       expect(rpc.request).not.toHaveBeenCalled();
       expect(result).toEqual({ success: false, error: expect.stringContaining('必须指定') });
+    });
+
+    it('storage_remove execute 传空 keys 时不调用清空接口', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_remove')!;
+      const result = await tool.execute({ keys: [] });
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result).toEqual({ success: false, error: expect.stringContaining('必须指定') });
+    });
+
+    it('storage_remove execute 删除 jevSettings 时返回错误', async () => {
+      const rpc = createMockRpc();
+      const tools = createMiscTools(rpc);
+      const tool = tools.find((t) => t.name === 'storage_remove')!;
+      const result = await tool.execute({ keys: ['theme', 'jevSettings'] });
+
+      expect(rpc.request).not.toHaveBeenCalled();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('无法删除以下敏感键');
+      expect(result.error).toContain('jevSettings');
     });
 
     it('storage_remove execute 删除敏感键时返回错误', async () => {
