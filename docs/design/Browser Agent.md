@@ -20,7 +20,7 @@ Power-user / Developer — 需要高效管理大量标签页和浏览器数据�
 
 | 指标 | 标准 |
 |------|------|
-| 双浏览器支持 | Chrome 121+ / Firefox 128+ 均可安装运行 |
+| 双浏览器支持 | Chrome 121+ / Firefox 140+ 均可安装运行（AMO 要求 data_collection_permissions 需 Firefox 140+） |
 | 工具调用延迟 | 低风险工具 <500ms 端到端（不含 LLM 推理） |
 | 聊天体验 | 多会话支持，消息持久化，刷新不丢数据 |
 | 安全控制 | 高风险操作 100% 经过 preflight + 用户确认 |
