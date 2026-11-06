@@ -132,7 +132,7 @@ export default defineConfig({
         manifest.browser_specific_settings = {
           gecko: {
             id: "browser-agent@example.com", // 生产环境替换为实际 ID
-            strict_min_version: "128.0",
+            strict_min_version: "140.0", // AMO 要求 data_collection_permissions 需 Firefox 140+
           },
         };
 

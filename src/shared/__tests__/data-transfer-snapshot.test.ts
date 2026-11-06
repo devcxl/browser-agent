@@ -27,7 +27,8 @@ vi.mock('@/shared/storage', () => ({
   ConfigStore: { getInstance: () => storeMock },
 }));
 
-const { exportFullSnapshot, importFullSnapshot } = await import('../data-transfer');
+const { exportFullSnapshot, importFullSnapshot, parseSnapshot, SNAPSHOT_SETTINGS_KEYS } =
+  await import('../data-transfer');
 
 function provider(overrides: Record<string, unknown> = {}) {
   return {
@@ -132,5 +133,61 @@ describe('全量快照：providers 与 Jev 设置不进备份、导入忽略旧�
     expect(getMock.mock.calls.some(([key]) => key === 'jevSettings')).toBe(false);
     expect(result.settingsKeys).not.toContain('jevSettings');
     expect(importedValue('agentSettings')).toEqual({ maxToolRounds: 5 });
+  });
+
+  it('settings 缺失（undefined/null）时导入不抛错且 settingsKeys 为空，正常恢复会话', async () => {
+    const rawNoSettings = JSON.stringify({
+      format: 'browser-agent-snapshot',
+      version: 1,
+      exportedAt: 0,
+      conversations: [
+        {
+          id: 'c-test',
+          title: '会话测试',
+          messages: [{ id: 'm-test', role: 'user', content: 'hello' }],
+        },
+      ],
+    });
+
+    const parsed = parseSnapshot(rawNoSettings);
+    expect(parsed.settings).toEqual({});
+
+    const result = await importFullSnapshot(rawNoSettings);
+    expect(result.conversations).toBe(1);
+    expect(result.messages).toBe(1);
+    expect(result.settingsKeys).toEqual([]);
+    expect(dbMock.putConversation).toHaveBeenCalled();
+    expect(dbMock.putMessagesBatch).toHaveBeenCalled();
+
+    // 当 settings 显式为 null 时
+    const rawNullSettings = JSON.stringify({
+      format: 'browser-agent-snapshot',
+      version: 1,
+      exportedAt: 0,
+      conversations: [],
+      settings: null,
+    });
+    const parsedNull = parseSnapshot(rawNullSettings);
+    expect(parsedNull.settings).toEqual({});
+    const resultNull = await importFullSnapshot(rawNullSettings);
+    expect(resultNull.settingsKeys).toEqual([]);
+  });
+
+  it('SNAPSHOT_SETTINGS_KEYS 作为唯一事实来源，导出覆盖全部合法可配置键且不含敏感键', async () => {
+    expect(SNAPSHOT_SETTINGS_KEYS).not.toContain('providers');
+    expect(SNAPSHOT_SETTINGS_KEYS).not.toContain('jevSettings');
+
+    storeMock.get.mockImplementation((async (key: string) => {
+      if ((SNAPSHOT_SETTINGS_KEYS as readonly string[]).includes(key)) {
+        return { mockVal: key };
+      }
+      return undefined;
+    }) as never);
+
+    const text = await captureExport();
+    const snapshot = JSON.parse(text);
+
+    // 导出的 settings 键与 SNAPSHOT_SETTINGS_KEYS 完全一致
+    expect(Object.keys(snapshot.settings).sort()).toEqual([...SNAPSHOT_SETTINGS_KEYS].sort());
   });
 });

@@ -34,7 +34,7 @@ import { BrowserEvent } from './types';
 /**
  * Firefox 浏览器适配器
  * Firefox 使用 `browser.*` 命名空间
- * Firefox 128+ 已支持 tabGroups API（需 manifest 声明 tabGroups 权限）
+ * 最低支持 Firefox 140+；保留对 tabGroups / tabs.group 等 API 的运行时检测仅作为防御性检查
  */
 export class FirefoxAdapter implements IBrowserAdapter {
   readonly browserType = 'firefox' as const;
@@ -68,6 +68,7 @@ export class FirefoxAdapter implements IBrowserAdapter {
     ): Promise<Tab | Tab[]> =>
       this.browser.tabs.move(tabIds, moveProperties),
 
+    // 仅防御性检查（最低支持 140）
     group: (options: {
       tabIds: number | number[];
       groupId?: number;
@@ -79,6 +80,7 @@ export class FirefoxAdapter implements IBrowserAdapter {
       return this.browser.tabs.group(options);
     },
 
+    // 仅防御性检查（最低支持 140）
     ungroup: (tabIds: number | number[]): Promise<void> => {
       if (typeof this.browser.tabs.ungroup !== 'function') {
         return Promise.reject(new Error('tabs.ungroup is not supported in this Firefox version'));
@@ -125,7 +127,7 @@ export class FirefoxAdapter implements IBrowserAdapter {
   };
 
   // ── TabGroups ──────────────────────────────────────
-  // Firefox 128+ 才支持 tabGroups API（需 tabGroups 权限），低版本返回明确错误
+  // 运行时能力检测仅作为防御性检查（最低支持 140+，需 manifest 声明 tabGroups 权限）
 
   tabGroups = {
     query: (queryInfo: TabGroupQueryInfo): Promise<TabGroup[]> => {
