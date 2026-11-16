@@ -27,15 +27,23 @@ export interface FullSnapshot {
   settings: Record<string, unknown>;
 }
 
-/** 允许导入覆盖的配置键白名单（与导出侧一致，providers、jevSettings 不入备份也不被导入覆盖） */
-const IMPORTABLE_SETTINGS_KEYS: ReadonlySet<string> = new Set([
+/**
+ * 允许随快照导出与导入覆盖的配置键列表（唯一事实来源）。
+ * providers 与 jevSettings 属于本机运行环境/密钥，严格禁止入备份或跨机导入。
+ */
+export const SNAPSHOT_SETTINGS_KEYS = [
   'agentSettings',
   'expertModeSettings',
   'preferences',
   'floatingButtonSettings',
   'skills',
   'skillSubscriptions',
-]);
+] as const satisfies ReadonlyArray<keyof StorageSchema>;
+
+export type SnapshotSettingsKey = (typeof SNAPSHOT_SETTINGS_KEYS)[number];
+
+/** 允许导入覆盖的配置键白名单（由 SNAPSHOT_SETTINGS_KEYS 派生） */
+const IMPORTABLE_SETTINGS_KEYS: ReadonlySet<string> = new Set<string>(SNAPSHOT_SETTINGS_KEYS);
 
 /** 触发浏览器下载 */
 function download(filename: string, content: string, mime: string): void {
@@ -147,15 +155,7 @@ export async function exportFullSnapshot(): Promise<void> {
   );
 
   const settings: Record<string, unknown> = {};
-  const keys: Array<keyof StorageSchema> = [
-    'agentSettings',
-    'expertModeSettings',
-    'preferences',
-    'floatingButtonSettings',
-    'skills',
-    'skillSubscriptions',
-  ];
-  for (const key of keys) {
+  for (const key of SNAPSHOT_SETTINGS_KEYS) {
     settings[key] = await store.get(key);
   }
 
@@ -189,6 +189,10 @@ export function parseSnapshot(text: string): FullSnapshot {
   if (!Array.isArray(data.conversations)) {
     throw new Error('备份文件缺少会话数据');
   }
+  // settings 缺失或非普通对象时安全归一化为 {}，使缺失 settings 的旧/残缺备份退化为“仅导入会话”而不是抛类型错误
+  if (!data.settings || typeof data.settings !== 'object' || Array.isArray(data.settings)) {
+    data.settings = {};
+  }
   return data;
 }
 
@@ -209,7 +213,8 @@ export async function importFullSnapshot(text: string): Promise<ImportResult> {
   }
 
   const settingsKeys: string[] = [];
-  for (const [key, value] of Object.entries(snapshot.settings)) {
+  const settingsEntries = Object.entries(snapshot.settings ?? {});
+  for (const [key, value] of settingsEntries) {
     if (value === undefined || !IMPORTABLE_SETTINGS_KEYS.has(key)) continue;
     await store.set(key as keyof StorageSchema, value);
     settingsKeys.push(key);
